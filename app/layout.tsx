@@ -4,6 +4,7 @@ import { Fredoka } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/current-user";
+import { getSiteConfig, getNav } from "@/lib/site";
 
 const pretendard = localFont({
   src: "./fonts/PretendardVariable.woff2",
@@ -19,10 +20,13 @@ const fredoka = Fredoka({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "포동 · 우리 가족 공간",
-  description: "사진, 계획, 캘린더, 할일을 함께 나누는 우리 가족만의 공간 🏡",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSiteConfig();
+  return {
+    title: `${site.siteName} · ${site.tagline}`,
+    description: `사진, 계획, 캘린더, 할일을 함께 나누는 ${site.siteName} 가족만의 공간 🏡`,
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#fbfaf7",
@@ -33,14 +37,20 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const user = await getCurrentUser();
+  const [user, site, nav] = await Promise.all([
+    getCurrentUser(),
+    getSiteConfig(),
+    getNav(),
+  ]);
   return (
     <html
       lang="ko"
       className={`${pretendard.variable} ${fredoka.variable} h-full antialiased`}
     >
       <body className="min-h-full font-sans">
-        <AppShell user={user}>{children}</AppShell>
+        <AppShell user={user} site={site} nav={nav}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );

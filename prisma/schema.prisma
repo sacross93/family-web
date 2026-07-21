@@ -198,6 +198,30 @@ model ShoppingItem {
 }
 
 // ─────────────────────────────────────────────
+// 사이트 설정 (브랜드·히어로) — 관리자가 /admin 에서 편집. 싱글턴 row(id="main").
+// ─────────────────────────────────────────────
+model SiteConfig {
+  id            String   @id @default("main")
+  siteName      String   @default("포동")
+  tagline       String   @default("우리 가족 공간")
+  brandEmoji    String   @default("🏡")
+  brandImageUrl String?
+  heroSubtitle  String   @default("오늘도 우리 가족의 소중한 하루를 함께 채워봐요.")
+  heroEmoji     String   @default("🏡")
+  heroImageUrl  String?
+  updatedAt     DateTime @updatedAt
+}
+
+// 사이드바 메뉴 항목 오버라이드 (href별 이모지·이름·설명). 없으면 lib/nav 기본값 사용.
+model NavItem {
+  href        String @id
+  emoji       String
+  label       String
+  description String
+  sortOrder   Int    @default(0)
+}
+
+// ─────────────────────────────────────────────
 // 아이디/비밀번호 로그인 계정
 // 회원가입은 없고, 계정은 DB에서 직접 추가합니다.
 // 비밀번호는 bcrypt 해시로 저장.

@@ -4,6 +4,7 @@ import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { Card, Tag, Avatar, EmptyState } from "@/components/ui";
 import { kDate, kDateShort, kTime, dday, startOfDay } from "@/lib/date";
+import { getSiteConfig } from "@/lib/site";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -116,6 +117,7 @@ export default async function HomePage() {
     shopping,
     plan,
   } = await getData();
+  const site = await getSiteConfig();
 
   const doneCount = todayTodos.filter((t) => t.done).length;
 
@@ -135,16 +137,21 @@ export default async function HomePage() {
           <div>
             <p className="text-sm font-semibold text-primary-ink">{kDate(new Date())}</p>
             <h1 className="mt-1 font-display text-3xl font-bold leading-tight text-ink sm:text-4xl">
-              {greeting()}, <span className="text-primary">포동</span> 가족! 👋
+              {greeting()}, <span className="text-primary">{site.siteName}</span> 가족! 👋
             </h1>
-            <p className="mt-2 max-w-md text-sm text-ink-soft">
-              오늘도 우리 가족의 소중한 하루를 함께 채워봐요.
-            </p>
+            <p className="mt-2 max-w-md text-sm text-ink-soft">{site.heroSubtitle}</p>
           </div>
         </div>
-        <div className="pointer-events-none absolute -right-6 -top-6 text-[120px] opacity-20 sm:text-[160px]">
-          🏡
-        </div>
+        {site.heroImageUrl ? (
+          <div className="pointer-events-none absolute -right-4 -top-4 h-40 w-40 overflow-hidden rounded-3xl opacity-90 sm:h-52 sm:w-52">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={site.heroImageUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute -right-6 -top-6 text-[120px] opacity-20 sm:text-[160px]">
+            {site.heroEmoji}
+          </div>
+        )}
       </section>
 
       {/* ── 대시보드 그리드 ── */}

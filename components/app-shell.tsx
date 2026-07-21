@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X, LogOut, Palette } from "lucide-react";
-import { NAV } from "@/lib/nav";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { Decorations } from "@/components/decorations";
+import type { NavItem } from "@/lib/nav";
+import type { SiteConfigData } from "@/lib/site";
 import type { SessionUser } from "@/lib/session";
 
 function isActive(pathname: string, href: string) {
@@ -15,11 +16,11 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavList({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.map((item) => {
+      {nav.map((item) => {
         const active = isActive(pathname, item.href);
         const pal = palette(item.color);
         return (
@@ -61,15 +62,20 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function Brand() {
+function Brand({ site }: { site: SiteConfigData }) {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-1 py-1">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl shadow-sm">
-        🏡
+      <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl shadow-sm">
+        {site.brandImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={site.brandImageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          site.brandEmoji
+        )}
       </span>
       <span className="flex flex-col leading-none">
-        <span className="font-display text-2xl font-bold text-ink">포동</span>
-        <span className="mt-1 text-[11px] text-ink-faint">우리 가족 공간</span>
+        <span className="font-display text-2xl font-bold text-ink">{site.siteName}</span>
+        <span className="mt-1 text-[11px] text-ink-faint">{site.tagline}</span>
       </span>
     </Link>
   );
@@ -119,9 +125,13 @@ function Footer({ user }: { user: SessionUser | null }) {
 export function AppShell({
   children,
   user,
+  site,
+  nav,
 }: {
   children: React.ReactNode;
   user: SessionUser | null;
+  site: SiteConfigData;
+  nav: NavItem[];
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -140,20 +150,22 @@ export function AppShell({
   // 로그인 페이지는 셸 없이 전체 화면
   if (pathname === "/login") return <>{children}</>;
 
+  const isTopLevel = nav.some((n) => n.href === pathname);
+
   return (
     <div className="min-h-dvh">
       {/* ── 데스크톱 사이드바 ── */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-6 border-r border-line bg-surface/80 px-4 py-6 backdrop-blur-sm lg:flex">
-        <Brand />
+        <Brand site={site} />
         <div className="scrollbar-thin flex-1 overflow-y-auto">
-          <NavList />
+          <NavList nav={nav} />
         </div>
         <Footer user={user} />
       </aside>
 
       {/* ── 모바일 상단바 ── */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface/85 px-4 py-3 backdrop-blur-md lg:hidden">
-        <Brand />
+        <Brand site={site} />
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -175,7 +187,7 @@ export function AppShell({
           />
           <aside className="absolute inset-y-0 left-0 flex w-[80%] max-w-[300px] flex-col gap-6 bg-surface px-4 py-6 shadow-lg animate-[pop-in_.25s_ease]">
             <div className="flex items-center justify-between">
-              <Brand />
+              <Brand site={site} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -186,7 +198,7 @@ export function AppShell({
               </button>
             </div>
             <div className="scrollbar-thin flex-1 overflow-y-auto">
-              <NavList onNavigate={() => setOpen(false)} />
+              <NavList nav={nav} onNavigate={() => setOpen(false)} />
             </div>
             <Footer user={user} />
           </aside>
@@ -197,7 +209,7 @@ export function AppShell({
       <main className="lg:pl-[264px]">
         <div className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
           {/* 전역 페이지 꾸미기는 상단 메뉴 페이지에서만. 상세(계획/앨범)는 자체 꾸미기 사용 */}
-          {NAV.some((n) => n.href === pathname) ? (
+          {isTopLevel ? (
             <Decorations isAdmin={Boolean(user?.isAdmin)}>{children}</Decorations>
           ) : (
             children
