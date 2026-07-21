@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { put } from "@vercel/blob";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,9 @@ function extFor(file: File): string {
   return EXT_BY_TYPE[file.type] || ".jpg";
 }
 
+// 프로덕션(Vercel): Blob 토큰이 있으면 클라우드 저장. 로컬: public/uploads.
+const useBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+
 export async function POST(req: NextRequest) {
   const form = await req.formData();
 
@@ -33,15 +37,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "올릴 사진이 없어요." }, { status: 400 });
   }
 
-  const dir = path.join(process.cwd(), "public", "uploads");
   const urls: string[] = [];
 
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
-    const bytes = Buffer.from(await file.arrayBuffer());
     const filename = `${randomUUID()}${extFor(file)}`;
-    await writeFile(path.join(dir, filename), bytes);
-    urls.push(`/uploads/${filename}`);
+
+    if (useBlob()) {
+      // ── 클라우드(Vercel Blob) 저장 ──
+      const blob = await put(`uploads/${filename}`, file, {
+        access: "public",
+        contentType: file.type,
+      });
+      urls.push(blob.url);
+    } else {
+      // ── 로컬 파일 저장 (개발용) ──
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const dir = path.join(process.cwd(), "public", "uploads");
+      await writeFile(path.join(dir, filename), bytes);
+      urls.push(`/uploads/${filename}`);
+    }
   }
 
   if (urls.length === 0) {

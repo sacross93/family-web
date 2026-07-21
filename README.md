@@ -80,8 +80,9 @@ npm run dev:lan    # 같은 네트워크의 다른 기기에서도 접속 (0.0.0
 
 ## 문서
 
+- **[DEPLOY.md](DEPLOY.md)** — Vercel 배포 가이드 (Neon DB · Blob · 환경변수, 단계별)
 - **[DESIGN.md](DESIGN.md)** — 디자인 시스템 & 일관성 가이드 (새 화면 만들 때 필독)
-- **[REQUIREMENTS.md](REQUIREMENTS.md)** — 구글 로그인·캘린더·알림·배포를 켜기 위한 준비물
+- **[REQUIREMENTS.md](REQUIREMENTS.md)** — 구글 로그인·캘린더·알림을 켜기 위한 준비물
 
 ## 폴더 구조
 
