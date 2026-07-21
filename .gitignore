@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — 비밀 정보! 절대 커밋 금지 (템플릿 .env.example 만 예외)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 가족이 올린 사진 (로컬 저장, 커밋 제외)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Claude Code 로컬 설정
+.claude/
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db

@@ -1,26 +1,274 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ═══════════════════════════════════════════════════════════════
+   포동(Podong) 디자인 시스템 · 경쾌한 파스텔
+   토큰의 단일 출처(Single Source of Truth). 규칙은 DESIGN.md 참고.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── 폰트 ── */
+  --font-sans: var(--font-pretendard), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fredoka), var(--font-pretendard), sans-serif;
+
+  /* ── 중립색 (종이 · 표면 · 잉크) ── */
+  --color-paper: #fbfaf7;
+  --color-surface: #ffffff;
+  --color-sunken: #f3f1ec;
+  --color-ink: #3a3a44;
+  --color-ink-soft: #6e6e7a;
+  --color-ink-faint: #a6a6b2;
+  --color-line: #ece9e3;
+  --color-line-strong: #e0dcd4;
+
+  /* ── 브랜드 / 주요 액션 (소프트 그레이프) ── */
+  --color-primary: #7a6cf0;
+  --color-primary-hover: #6a5ce8;
+  --color-primary-soft: #ece9fd;
+  --color-primary-ink: #5647c9;
+
+  /* ── 파스텔 카테고리 (각 색: base 점 · soft 배경 · ink 글자) ── */
+  --color-lavender: #c7b9f5;
+  --color-lavender-soft: #ede8fe;
+  --color-lavender-ink: #6455c4;
+
+  --color-peach: #ffc9a9;
+  --color-peach-soft: #ffe9dc;
+  --color-peach-ink: #c26a3f;
+
+  --color-mint: #a8e0c5;
+  --color-mint-soft: #dff5ea;
+  --color-mint-ink: #348a63;
+
+  --color-sky: #a9d4f5;
+  --color-sky-soft: #e2f0fd;
+  --color-sky-ink: #3877b8;
+
+  --color-butter: #fbe29a;
+  --color-butter-soft: #fff6d9;
+  --color-butter-ink: #a67f22;
+
+  --color-rose: #f5b7c9;
+  --color-rose-soft: #fde5ec;
+  --color-rose-ink: #c1567c;
+
+  /* ── 상태색 ── */
+  --color-success: #348a63;
+  --color-danger: #e0607e;
+  --color-danger-soft: #fce4ea;
+
+  /* ── 모서리 ── */
+  --radius-sm: 0.625rem; /* 10px */
+  --radius-md: 1rem; /* 16px */
+  --radius-lg: 1.5rem; /* 24px */
+  --radius-xl: 2rem; /* 32px */
+
+  /* ── 그림자 (부드럽고 컬러 살짝) ── */
+  --shadow-sm: 0 1px 2px rgba(70, 60, 110, 0.05), 0 1px 3px rgba(70, 60, 110, 0.04);
+  --shadow-md: 0 4px 16px -4px rgba(80, 70, 120, 0.1), 0 2px 6px -3px rgba(80, 70, 120, 0.06);
+  --shadow-lg: 0 14px 34px -10px rgba(80, 70, 120, 0.16), 0 4px 10px -4px rgba(80, 70, 120, 0.08);
+  --shadow-pop: 0 20px 44px -14px rgba(90, 75, 150, 0.24);
+
+  /* ── 모션 ── */
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pop-in: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-float: float 6s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   기본 요소 스타일
+   ═══════════════════════════════════════════════════════════════ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* 스티커/넓은 콘텐츠로 인한 가로 스크롤 방지 (세로 스크롤은 유지) */
+  overflow-x: hidden;
+  background-color: var(--color-paper);
+  /* 아주 옅은 도트 그리드 — '가족 게시판/모눈종이' 결을 은은하게 */
+  background-image: radial-gradient(rgba(120, 108, 160, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-ink);
+}
+
+/* 접근성: 키보드 포커스 링 (전역 기본값) */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 얇은 스크롤바 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 9999px;
+}
+
+/* 숫자를 Fredoka(디스플레이)로 — 날짜/카운트가 경쾌하게 */
+.font-num {
+  font-family: var(--font-display);
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   시그니처: 사진/메모 카드의 '워시테이프' 조각
+   .tape 를 가진 요소 위쪽 가운데에 반투명 파스텔 테이프가 붙음
+   ═══════════════════════════════════════════════════════════════ */
+.tape::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 74px;
+  height: 20px;
+  transform: translateX(-50%) rotate(-2.5deg);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(80, 70, 120, 0.12);
+  backdrop-filter: blur(1px);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   마크다운 렌더링(.md-content) — 옵시디언식 글쓰기 결과 스타일
+   ═══════════════════════════════════════════════════════════════ */
+.md-content {
+  color: var(--color-ink);
+  line-height: 1.7;
+  word-break: break-word;
+}
+.md-content > :first-child { margin-top: 0; }
+.md-content > :last-child { margin-bottom: 0; }
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1em 0 0.4em;
+}
+.md-content h1 { font-size: 1.5rem; }
+.md-content h2 { font-size: 1.25rem; }
+.md-content h3 { font-size: 1.1rem; }
+.md-content p { margin: 0.5em 0; }
+.md-content strong { font-weight: 700; }
+.md-content em { font-style: italic; }
+.md-content del { color: var(--color-ink-faint); }
+.md-content a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-content ul,
+.md-content ol { margin: 0.5em 0; padding-left: 1.35em; }
+.md-content ul { list-style: disc; }
+.md-content ol { list-style: decimal; }
+.md-content li { margin: 0.2em 0; }
+.md-content li::marker { color: var(--color-ink-faint); }
+/* GFM 체크박스 */
+.md-content li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.1em; }
+.md-content input[type="checkbox"] {
+  margin-right: 0.5em;
+  width: 1.05em;
+  height: 1.05em;
+  accent-color: var(--color-primary);
+  vertical-align: -2px;
+}
+.md-content blockquote {
+  margin: 0.7em 0;
+  padding: 0.2em 0 0.2em 0.9em;
+  border-left: 3px solid var(--color-primary);
+  color: var(--color-ink-soft);
+  background: var(--color-primary-soft);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.md-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--color-sunken);
+  padding: 0.12em 0.4em;
+  border-radius: 0.4rem;
+}
+.md-content pre {
+  margin: 0.7em 0;
+  padding: 0.9em 1em;
+  background: var(--color-sunken);
+  border-radius: 0.9rem;
+  overflow-x: auto;
+}
+.md-content pre code { background: none; padding: 0; font-size: 0.85em; }
+.md-content hr { margin: 1em 0; border: 0; border-top: 1px solid var(--color-line); }
+.md-content img { max-width: 100%; border-radius: 1rem; margin: 0.5em 0; }
+.md-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.7em 0;
+  font-size: 0.95em;
+}
+.md-content th,
+.md-content td {
+  border: 1px solid var(--color-line);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.md-content th { background: var(--color-sunken); font-weight: 700; }
+
+/* 접근성: 모션 최소화 선호 시 애니메이션 억제 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

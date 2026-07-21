@@ -1,0 +1,281 @@
+// 포동(Podong) 가족 웹사이트 · 데이터 모델
+// PostgreSQL + Prisma
+//
+// 색상은 팔레트 키 문자열로 저장합니다: "lavender" | "peach" | "mint" | "sky" | "butter" | "rose"
+// (components/ui 의 색상 매핑과 DESIGN.md 참고)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// 가족 구성원
+// ─────────────────────────────────────────────
+model FamilyMember {
+  id        String   @id @default(cuid())
+  name      String
+  emoji     String   @default("🙂")
+  color     String   @default("lavender") // 팔레트 키
+  role      String? // 예: "엄마", "아빠", "첫째"
+  birthday  DateTime?
+  createdAt DateTime @default(now())
+
+  todos         Todo[]
+  boardPosts    BoardPost[]
+  shoppingItems ShoppingItem[]
+  anniversaries Anniversary[]
+
+  // 나중에 Google 로그인 시 연결 (선택)
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// 사진첩 (테마별 앨범)
+// ─────────────────────────────────────────────
+model Album {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  emoji       String   @default("📸")
+  color       String   @default("peach")
+  coverUrl    String?
+  takenOn     DateTime? // 여행/이벤트 날짜
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  photos Photo[]
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  albumId   String
+  album     Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  url       String
+  caption   String?
+  width     Int?
+  height    Int?
+  takenAt   DateTime?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([albumId])
+}
+
+// ─────────────────────────────────────────────
+// 계획 (여행/주말 등 날짜 기반 일정 만들기)
+// ─────────────────────────────────────────────
+model Plan {
+  id          String   @id @default(cuid())
+  title       String
+  type        String   @default("여행") // 여행 | 주말 | 이벤트 | 기타
+  emoji       String   @default("🗺️")
+  color       String   @default("sky")
+  description String?
+  location    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items PlanItem[]
+}
+
+model PlanItem {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dayDate   DateTime? // 이 항목이 속한 날짜
+  time      String? // "09:30" 자유 형식
+  title     String
+  note      String?
+  location  String?
+  category  String   @default("mint") // 색 태그 (활동/식사/이동 등 자유)
+  done      Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+}
+
+// ─────────────────────────────────────────────
+// 캘린더 이벤트
+// ─────────────────────────────────────────────
+model CalendarEvent {
+  id            String   @id @default(cuid())
+  title         String
+  description   String?
+  start         DateTime
+  end           DateTime?
+  allDay        Boolean  @default(false)
+  color         String   @default("lavender")
+  location      String?
+  googleEventId String? // 나중에 Google Calendar 동기화용
+  source        String   @default("local") // local | google
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([start])
+}
+
+// ─────────────────────────────────────────────
+// 할일 (그날그날 TODO → 캘린더 동기화 + 알림)
+// ─────────────────────────────────────────────
+model Todo {
+  id            String   @id @default(cuid())
+  title         String
+  done          Boolean  @default(false)
+  date          DateTime // 할 날짜 (하루 단위)
+  dueTime       String? // "14:00"
+  priority      String   @default("normal") // low | normal | high
+  remindAt      DateTime? // 알림 시각
+  googleEventId String? // 캘린더 동기화 시 채워짐
+  syncedToGoogle Boolean @default(false)
+  memberId      String?
+  member        FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+  @@index([memberId])
+}
+
+// ─────────────────────────────────────────────
+// 기념일 / 생일 (D-day)
+// ─────────────────────────────────────────────
+model Anniversary {
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  type      String   @default("anniversary") // birthday | anniversary | memorial | etc
+  recurring Boolean  @default(true) // 매년 반복
+  emoji     String   @default("🎉")
+  color     String   @default("rose")
+  note      String?
+  memberId  String?
+  member    FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// 가족 게시판 (한마디 / 공지 / 메모)
+// ─────────────────────────────────────────────
+model BoardPost {
+  id        String   @id @default(cuid())
+  content   String
+  emoji     String   @default("💬")
+  color     String   @default("butter")
+  pinned    Boolean  @default(false)
+  authorId  String?
+  author    FamilyMember? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// 장보기 목록 (공유 쇼핑 리스트)
+// ─────────────────────────────────────────────
+model ShoppingItem {
+  id        String   @id @default(cuid())
+  name      String
+  quantity  String? // "2개", "1L" 등 자유
+  category  String   @default("mint") // 색 태그
+  done      Boolean  @default(false)
+  addedById String?
+  addedBy   FamilyMember? @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([done])
+}
+
+// ─────────────────────────────────────────────
+// 아이디/비밀번호 로그인 계정
+// 회원가입은 없고, 계정은 DB에서 직접 추가합니다.
+// 비밀번호는 bcrypt 해시로 저장.
+// ─────────────────────────────────────────────
+model AppUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  name         String?
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// 꾸미기 스티커 — 관리자가 각 페이지 아무 위치에나 놓는 사진
+// page: 경로("/", "/albums" …) 또는 "global"(모든 페이지)
+// 좌표: xPct(콘텐츠 폭 대비 가로 %, 스티커 중심 기준), yPx(콘텐츠 상단에서 px, 중심 기준)
+// ─────────────────────────────────────────────
+model Decoration {
+  id        String   @id @default(cuid())
+  page      String   @default("global")
+  url       String
+  xPct      Float    @default(50)
+  yPx       Float    @default(200)
+  width     Float    @default(160)
+  rotation  Float    @default(0)
+  z         Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([page])
+}
+
+// ─────────────────────────────────────────────
+// NextAuth (Auth.js) 모델 — Google 로그인 밑작업
+// 지금은 사용하지 않지만, 나중에 바로 켤 수 있도록 준비.
+// ─────────────────────────────────────────────
+model User {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String?  @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  member        FamilyMember?
+  createdAt     DateTime @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}

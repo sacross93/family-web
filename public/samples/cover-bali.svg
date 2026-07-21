@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="g2000E0F0FD" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E0F0FD"/>
+      <stop offset="1" stop-color="#A9D4F5"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g2000E0F0FD)"/>
+  <text x="50%" y="50%" font-size="272" text-anchor="middle" dominant-baseline="central">🌴</text>
+</svg>
