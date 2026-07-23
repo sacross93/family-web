@@ -53,3 +53,8 @@ public/uploads/*
 .idea/
 *.swp
 Thumbs.db
+
+# agent / skill 로컬 도구 파일 (앱과 무관)
+.agents/
+.neon
+skills-lock.json
