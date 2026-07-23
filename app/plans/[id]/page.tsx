@@ -14,6 +14,7 @@ export default async function PlanDetailPage({
     where: { id },
     include: {
       items: { orderBy: [{ dayDate: "asc" }, { sortOrder: "asc" }] },
+      checklist: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
     },
   });
 

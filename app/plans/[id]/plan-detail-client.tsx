@@ -33,10 +33,40 @@ import { DecorationSurface } from "@/components/decoration-surface";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { kDate, kDateShort, dday } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import type { PlanWithItems, PlanItem } from "@/lib/types";
+import type { PlanDetail, PlanItem, PlanChecklistItem, Plan } from "@/lib/types";
 
 const PLAN_TYPES = ["여행", "주말", "이벤트", "기타"] as const;
 const NO_DAY = "__none__";
+
+// 여행 계획에 흔히 필요한 추천 항목 (원터치 추가)
+const PREP_SUGGESTIONS = [
+  "항공권 예약",
+  "숙소 예약",
+  "여행자보험 가입",
+  "환전 / 트래블카드",
+  "유심 / 로밍",
+  "렌터카 예약",
+  "온라인 체크인",
+  "맛집 / 장소 찾기",
+  "반려동물 맡기기",
+  "택배 / 우편물 정지",
+];
+const PACKING_SUGGESTIONS = [
+  "여권 / 신분증",
+  "지갑 / 카드",
+  "현금",
+  "휴대폰 충전기",
+  "보조배터리",
+  "멀티 어댑터",
+  "세면도구",
+  "상비약",
+  "선크림",
+  "옷 / 속옷",
+  "우산 / 우비",
+  "카메라",
+  "이어폰",
+  "물티슈 / 마스크",
+];
 
 function timeVal(t?: string | null) {
   if (t && /^\d{1,2}:\d{2}$/.test(t)) {
@@ -56,7 +86,7 @@ function toInputDate(d?: Date | string | null) {
   return d ? format(new Date(d), "yyyy-MM-dd") : "";
 }
 
-function periodLabel(plan: PlanWithItems): string | null {
+function periodLabel(plan: Plan): string | null {
   if (plan.startDate && plan.endDate)
     return `${kDateShort(plan.startDate)} ~ ${kDateShort(plan.endDate)}`;
   if (plan.startDate) return `${kDateShort(plan.startDate)}부터`;
@@ -64,7 +94,7 @@ function periodLabel(plan: PlanWithItems): string | null {
   return null;
 }
 
-export function PlanDetailClient({ initialPlan }: { initialPlan: PlanWithItems }) {
+export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
   const router = useRouter();
   const [plan, setPlan] = useState(initialPlan);
   const [busy, setBusy] = useState(false);
@@ -206,6 +236,46 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanWithItems }
     if (!res.ok) setPlan((p) => ({ ...p, items: prev }));
   }
 
+  // ── 준비 체크리스트 (여행 전 준비 / 준비물) ───
+  async function addCheck(kind: "prep" | "packing", text: string) {
+    const t = text.trim();
+    if (!t) return;
+    const res = await fetch("/api/plan-checklist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planId: plan.id, kind, text: t }),
+    });
+    if (res.ok) {
+      const created: PlanChecklistItem = await res.json();
+      setPlan((p) => ({ ...p, checklist: [...p.checklist, created] }));
+    }
+  }
+
+  async function toggleCheck(item: PlanChecklistItem) {
+    const next = !item.done;
+    setPlan((p) => ({
+      ...p,
+      checklist: p.checklist.map((c) => (c.id === item.id ? { ...c, done: next } : c)),
+    }));
+    await fetch(`/api/plan-checklist/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: next }),
+    }).catch(() =>
+      setPlan((p) => ({
+        ...p,
+        checklist: p.checklist.map((c) => (c.id === item.id ? { ...c, done: item.done } : c)),
+      }))
+    );
+  }
+
+  async function removeCheck(id: string) {
+    const prev = plan.checklist;
+    setPlan((p) => ({ ...p, checklist: p.checklist.filter((c) => c.id !== id) }));
+    const res = await fetch(`/api/plan-checklist/${id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) setPlan((p) => ({ ...p, checklist: prev }));
+  }
+
   // ── 계획(메타) 폼 상태 ───────────────────────
   const [planOpen, setPlanOpen] = useState(false);
   const [pTitle, setPTitle] = useState(plan.title);
@@ -248,8 +318,8 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanWithItems }
         }),
       });
       if (res.ok) {
-        const updated: PlanWithItems = await res.json();
-        setPlan(updated);
+        const updated: Plan = await res.json();
+        setPlan((p) => ({ ...p, ...updated }));
         setPlanOpen(false);
       }
     } finally {
@@ -355,6 +425,30 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanWithItems }
           </div>
         </div>
       </Card>
+
+      {/* 준비 체크리스트 (여행 전 준비 · 준비물) */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <ChecklistSection
+          title="여행 전 준비"
+          emoji="✅"
+          color="mint"
+          items={plan.checklist.filter((c) => c.kind === "prep")}
+          suggestions={PREP_SUGGESTIONS}
+          onAdd={(t) => addCheck("prep", t)}
+          onToggle={toggleCheck}
+          onRemove={removeCheck}
+        />
+        <ChecklistSection
+          title="준비물 · 챙길 것"
+          emoji="🎒"
+          color="peach"
+          items={plan.checklist.filter((c) => c.kind === "packing")}
+          suggestions={PACKING_SUGGESTIONS}
+          onAdd={(t) => addCheck("packing", t)}
+          onToggle={toggleCheck}
+          onRemove={removeCheck}
+        />
+      </div>
 
       {/* 여정 */}
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -646,5 +740,122 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanWithItems }
         </div>
       </Modal>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   준비 체크리스트 섹션 (여행 전 준비 / 준비물)
+   ───────────────────────────────────────────── */
+function ChecklistSection({
+  title,
+  emoji,
+  color,
+  items,
+  suggestions,
+  onAdd,
+  onToggle,
+  onRemove,
+}: {
+  title: string;
+  emoji: string;
+  color: PaletteKey;
+  items: PlanChecklistItem[];
+  suggestions: string[];
+  onAdd: (text: string) => void;
+  onToggle: (item: PlanChecklistItem) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const pal = palette(color);
+  const doneCount = items.filter((i) => i.done).length;
+  const remaining = suggestions.filter(
+    (s) => !items.some((i) => i.text === s)
+  );
+
+  function add(t: string) {
+    const v = t.trim();
+    if (!v) return;
+    onAdd(v);
+    setText("");
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-2.5">
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>
+          {emoji}
+        </span>
+        <h3 className="text-base font-bold text-ink">{title}</h3>
+        {items.length > 0 && (
+          <Tag color={color} className="font-num ml-auto">
+            {doneCount}/{items.length}
+          </Tag>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-sm text-ink-faint">
+          아래에 직접 적거나, 추천을 눌러 담아보세요.
+        </p>
+      ) : (
+        <ul className="flex flex-col">
+          {items.map((it) => (
+            <li
+              key={it.id}
+              className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0"
+            >
+              <Checkbox checked={it.done} onChange={() => onToggle(it)} color={color} size="sm" />
+              <span
+                className={cn(
+                  "flex-1 text-[15px]",
+                  it.done ? "text-ink-faint line-through" : "text-ink"
+                )}
+              >
+                {it.text}
+              </span>
+              <IconButton
+                variant="danger"
+                size="sm"
+                aria-label="삭제"
+                onClick={() => onRemove(it.id)}
+                className="opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100"
+              >
+                <Trash2 className="h-4 w-4" />
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 직접 추가 */}
+      <div className="flex gap-2">
+        <Input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add(text)}
+          placeholder="직접 추가…"
+          className="flex-1"
+        />
+        <Button variant="soft" onClick={() => add(text)} disabled={!text.trim()}>
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* 추천 항목 */}
+      {remaining.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {remaining.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onAdd(s)}
+              className="rounded-full border border-line bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

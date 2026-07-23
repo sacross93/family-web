@@ -23,6 +23,7 @@ async function main() {
   // FK 순서 고려하여 삭제
   await prisma.photo.deleteMany();
   await prisma.album.deleteMany();
+  await prisma.planChecklistItem.deleteMany();
   await prisma.planItem.deleteMany();
   await prisma.plan.deleteMany();
   await prisma.calendarEvent.deleteMany();
@@ -159,6 +160,19 @@ async function main() {
       { planId: trip.id, dayDate: d2, time: "16:00", title: "우도 유람선", category: "sky", sortOrder: 2 },
       { planId: trip.id, dayDate: d3, time: "10:00", title: "카페 & 기념품", category: "lavender", sortOrder: 0 },
       { planId: trip.id, dayDate: d3, time: "14:00", title: "공항 이동 · 귀가", category: "sky", sortOrder: 1 },
+    ],
+  });
+  await prisma.planChecklistItem.createMany({
+    data: [
+      { planId: trip.id, kind: "prep", text: "항공권 예약", done: true, sortOrder: 0 },
+      { planId: trip.id, kind: "prep", text: "숙소 예약", done: true, sortOrder: 1 },
+      { planId: trip.id, kind: "prep", text: "렌터카 예약", sortOrder: 2 },
+      { planId: trip.id, kind: "prep", text: "여행자보험 가입", sortOrder: 3 },
+      { planId: trip.id, kind: "packing", text: "여권 / 신분증", sortOrder: 0 },
+      { planId: trip.id, kind: "packing", text: "휴대폰 충전기", sortOrder: 1 },
+      { planId: trip.id, kind: "packing", text: "선크림", sortOrder: 2 },
+      { planId: trip.id, kind: "packing", text: "상비약", sortOrder: 3 },
+      { planId: trip.id, kind: "packing", text: "수영복", sortOrder: 4 },
     ],
   });
 

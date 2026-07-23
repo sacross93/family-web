@@ -6,6 +6,7 @@ import type {
   Photo,
   Plan,
   PlanItem,
+  PlanChecklistItem,
   CalendarEvent,
   Todo,
   Anniversary,
@@ -19,6 +20,7 @@ export type {
   Photo,
   Plan,
   PlanItem,
+  PlanChecklistItem,
   CalendarEvent,
   Todo,
   Anniversary,
@@ -29,6 +31,10 @@ export type {
 export type AlbumWithCount = Album & { _count: { photos: number } };
 export type AlbumWithPhotos = Album & { photos: Photo[] };
 export type PlanWithItems = Plan & { items: PlanItem[] };
+export type PlanDetail = Plan & {
+  items: PlanItem[];
+  checklist: PlanChecklistItem[];
+};
 export type PlanWithCount = Plan & { _count: { items: number } };
 export type TodoWithMember = Todo & { member: FamilyMember | null };
 export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null };

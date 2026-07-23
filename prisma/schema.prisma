@@ -83,7 +83,8 @@ model Plan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items PlanItem[]
+  items     PlanItem[]
+  checklist PlanChecklistItem[]
 }
 
 model PlanItem {
@@ -96,6 +97,20 @@ model PlanItem {
   note      String?
   location  String?
   category  String   @default("mint") // 색 태그 (활동/식사/이동 등 자유)
+  done      Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+}
+
+// 계획 준비 체크리스트 — kind: "prep"(여행 전 준비) | "packing"(준비물/챙길 것)
+model PlanChecklistItem {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  kind      String   @default("packing")
+  text      String
   done      Boolean  @default(false)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
