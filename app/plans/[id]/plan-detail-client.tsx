@@ -13,6 +13,8 @@ import {
   CalendarRange,
   CalendarDays,
   Sparkles,
+  Clock,
+  Plane,
 } from "lucide-react";
 import {
   Card,
@@ -26,12 +28,22 @@ import {
   Input,
   Select,
   ColorPicker,
+  Segmented,
 } from "@/components/ui";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
 import { DecorationSurface } from "@/components/decoration-surface";
 import { palette, type PaletteKey } from "@/lib/colors";
-import { kDate, kDateShort, dday } from "@/lib/date";
+import {
+  kDate,
+  kDateShort,
+  dday,
+  toKorea,
+  toLocal,
+  shiftTime,
+  dayDeltaLabel,
+  tzOffsetLabel,
+} from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { PlanDetail, PlanItem, PlanChecklistItem, Plan } from "@/lib/types";
 
@@ -66,6 +78,18 @@ const PACKING_SUGGESTIONS = [
   "카메라",
   "이어폰",
   "물티슈 / 마스크",
+];
+
+// 현지 시차 프리셋 (현지-한국, 분). DST 등으로 대략값이니 필요시 직접 조정.
+const TZ_PRESETS: { label: string; min: number }[] = [
+  { label: "한국과 같음", min: 0 },
+  { label: "발리·싱가포르 −1", min: -60 },
+  { label: "태국·베트남 −2", min: -120 },
+  { label: "두바이 −5", min: -300 },
+  { label: "유럽 −8", min: -480 },
+  { label: "미국 동부 −13", min: -780 },
+  { label: "미국 서부 −16", min: -960 },
+  { label: "호주 시드니 +1", min: 60 },
 ];
 
 function timeVal(t?: string | null) {
@@ -286,6 +310,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
   const [pLoc, setPLoc] = useState(plan.location ?? "");
   const [pStart, setPStart] = useState(toInputDate(plan.startDate));
   const [pEnd, setPEnd] = useState(toInputDate(plan.endDate));
+  const [pTz, setPTz] = useState(plan.tzOffsetMin);
 
   function openEditPlan() {
     setPTitle(plan.title);
@@ -296,6 +321,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     setPLoc(plan.location ?? "");
     setPStart(toInputDate(plan.startDate));
     setPEnd(toInputDate(plan.endDate));
+    setPTz(plan.tzOffsetMin);
     setPlanOpen(true);
   }
 
@@ -315,6 +341,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           location: pLoc,
           startDate: pStart || null,
           endDate: pEnd || null,
+          tzOffsetMin: pTz,
         }),
       });
       if (res.ok) {
@@ -391,6 +418,12 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                     {plan.location}
                   </p>
                 )}
+                {plan.tzOffsetMin !== 0 && (
+                  <p className="flex items-center gap-1.5 text-sm text-ink-soft">
+                    <Clock className="h-4 w-4 shrink-0 text-ink-faint" />
+                    현지 시차 · {tzOffsetLabel(plan.tzOffsetMin)}
+                  </p>
+                )}
               </div>
               {plan.description && (
                 <div className="mt-2.5 text-sm text-ink-soft">
@@ -450,6 +483,13 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         />
       </div>
 
+      {/* 시차 계산기 */}
+      {plan.tzOffsetMin !== 0 && (
+        <div className="mb-6">
+          <TimezoneCalculator offsetMin={plan.tzOffsetMin} />
+        </div>
+      )}
+
       {/* 여정 */}
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="font-display text-xl font-bold text-ink">여정</h2>
@@ -494,14 +534,31 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                 {group.items.map((it, i) => {
                   const cat = palette(it.category);
                   const last = i === group.items.length - 1;
+                  const kr =
+                    plan.tzOffsetMin && it.time
+                      ? toKorea(it.time, plan.tzOffsetMin)
+                      : null;
                   return (
                     <li key={it.id} className="group flex gap-3">
-                      {/* 시간 */}
-                      <div className="w-12 shrink-0 pt-2.5 text-right sm:w-14">
+                      {/* 시간 (현지 + 한국) */}
+                      <div
+                        className={cn(
+                          "shrink-0 pt-2.5 text-right",
+                          kr ? "w-16 sm:w-20" : "w-12 sm:w-14"
+                        )}
+                      >
                         {it.time ? (
-                          <span className="font-num text-sm font-semibold text-ink-soft">
-                            {it.time}
-                          </span>
+                          <>
+                            <span className="font-num block text-sm font-semibold text-ink-soft">
+                              {it.time}
+                            </span>
+                            {kr && (
+                              <span className="font-num block text-[10px] leading-tight text-ink-faint">
+                                🇰🇷 {kr.time}
+                                {kr.dayDelta ? ` ${dayDeltaLabel(kr.dayDelta)}` : ""}
+                              </span>
+                            )}
+                          </>
                         ) : (
                           <span className="text-xs text-ink-faint">종일</span>
                         )}
@@ -730,6 +787,42 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
             </Field>
           </div>
 
+          <Field
+            label="현지 시차"
+            hint="현지가 한국보다 몇 시간? (느리면 −, 빠르면 +) · 설정하면 일정에 한국시간도 함께 표시돼요"
+          >
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                {TZ_PRESETS.map((t) => (
+                  <button
+                    key={t.label}
+                    type="button"
+                    onClick={() => setPTz(t.min)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                      pTz === t.min
+                        ? "border-primary bg-primary-soft text-primary-ink"
+                        : "border-line bg-sunken text-ink-soft hover:text-ink"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={pTz / 60}
+                  onChange={(e) => setPTz(Math.round(Number(e.target.value || 0) * 60))}
+                  className="w-24"
+                  aria-label="시차 시간"
+                />
+                <span className="text-sm text-ink-soft">시간 · {tzOffsetLabel(pTz)}</span>
+              </div>
+            </div>
+          </Field>
+
           <Field label="장소" hint="선택 사항이에요.">
             <Input value={pLoc} onChange={(e) => setPLoc(e.target.value)} />
           </Field>
@@ -856,6 +949,120 @@ function ChecklistSection({
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   시차 계산기 (시간 변환 · 비행 도착 시각)
+   ───────────────────────────────────────────── */
+function TimezoneCalculator({ offsetMin }: { offsetMin: number }) {
+  // 1) 시간 변환
+  const [convTime, setConvTime] = useState("09:00");
+  const [convDir, setConvDir] = useState<"L2K" | "K2L">("L2K");
+  const conv =
+    convDir === "L2K" ? toKorea(convTime, offsetMin) : toLocal(convTime, offsetMin);
+
+  // 2) 비행 도착
+  const [depTime, setDepTime] = useState("14:00");
+  const [dur, setDur] = useState("7");
+  const [flightDir, setFlightDir] = useState<"K2L" | "L2K">("L2K");
+  const durMin = Math.max(0, Math.round(Number(dur || 0) * 60));
+  // 출발지 시각 → 도착지 시간대로 변환 → 소요시간 더하기
+  const arrBase =
+    flightDir === "K2L" ? toLocal(depTime, offsetMin) : toKorea(depTime, offsetMin);
+  const arr = arrBase ? shiftTime(arrBase.time, durMin) : null;
+  const arrDay = (arrBase?.dayDelta ?? 0) + (arr?.dayDelta ?? 0);
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-soft text-lg">
+          🕐
+        </span>
+        <h3 className="text-base font-bold text-ink">시차 계산기</h3>
+        <span className="ml-auto text-xs text-ink-faint">{tzOffsetLabel(offsetMin)}</span>
+      </div>
+
+      {/* 시간 변환 */}
+      <div className="flex flex-col gap-2 rounded-2xl bg-sunken/60 p-3">
+        <p className="text-sm font-semibold text-ink">시간 변환</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            value={convDir}
+            onChange={(v) => setConvDir(v)}
+            options={[
+              { value: "L2K", label: "현지 → 한국" },
+              { value: "K2L", label: "한국 → 현지" },
+            ]}
+          />
+          <Input
+            type="time"
+            value={convTime}
+            onChange={(e) => setConvTime(e.target.value)}
+            className="w-32"
+            aria-label="변환할 시각"
+          />
+          <span className="text-ink-faint">→</span>
+          <span className="font-num rounded-full bg-primary-soft px-3 py-2 text-sm font-bold text-primary-ink">
+            {conv ? conv.time : "--:--"}
+            {conv?.dayDelta ? ` (${dayDeltaLabel(conv.dayDelta)})` : ""}
+            <span className="ml-1 text-xs font-medium">
+              {convDir === "L2K" ? "한국" : "현지"}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      {/* 비행 도착 시각 */}
+      <div className="flex flex-col gap-2 rounded-2xl bg-sunken/60 p-3">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Plane className="h-4 w-4 text-ink-faint" /> 비행 도착 시각
+        </p>
+        <Segmented
+          value={flightDir}
+          onChange={(v) => setFlightDir(v)}
+          options={[
+            { value: "L2K", label: "현지 출발 → 한국 도착" },
+            { value: "K2L", label: "한국 출발 → 현지 도착" },
+          ]}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
+            출발
+            <Input
+              type="time"
+              value={depTime}
+              onChange={(e) => setDepTime(e.target.value)}
+              className="w-28"
+              aria-label="출발 시각"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
+            비행
+            <Input
+              type="number"
+              step="0.5"
+              min="0"
+              value={dur}
+              onChange={(e) => setDur(e.target.value)}
+              className="w-20"
+              aria-label="비행 소요 시간(시간)"
+            />
+            시간
+          </label>
+        </div>
+        <p className="text-sm text-ink-soft">
+          →{" "}
+          <span className="font-num rounded-full bg-primary-soft px-3 py-1.5 text-sm font-bold text-primary-ink">
+            {arr ? arr.time : "--:--"}
+            {arrDay ? ` (${dayDeltaLabel(arrDay)})` : ""}
+            <span className="ml-1 text-xs font-medium">
+              {flightDir === "L2K" ? "한국" : "현지"} 도착
+            </span>
+          </span>
+        </p>
+      </div>
     </Card>
   );
 }

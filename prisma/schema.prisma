@@ -80,6 +80,7 @@ model Plan {
   location    String?
   startDate   DateTime?
   endDate     DateTime?
+  tzOffsetMin Int      @default(0) // 현지시간 - 한국시간 (분). 예: 발리 -60, 미국서부 -960
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
