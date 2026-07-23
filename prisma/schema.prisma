@@ -94,6 +94,7 @@ model PlanItem {
   plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
   dayDate   DateTime? // 이 항목이 속한 날짜
   time      String? // "09:30" 자유 형식
+  tz        String   @default("local") // 이 시각의 기준: "local"(현지) | "home"(한국)
   title     String
   note      String?
   location  String?

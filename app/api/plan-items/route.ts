@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
       planId: body.planId,
       dayDate: body.dayDate ? new Date(body.dayDate) : null,
       time: body.time?.trim() || null,
+      tz: body.tz === "home" ? "home" : "local",
       title: body.title.trim(),
       note: body.note?.trim() || null,
       location: body.location?.trim() || null,

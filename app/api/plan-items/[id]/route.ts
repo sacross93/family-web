@@ -13,6 +13,7 @@ export async function PATCH(
   if ("dayDate" in body)
     data.dayDate = body.dayDate ? new Date(body.dayDate) : null;
   if ("time" in body) data.time = body.time?.trim() || null;
+  if (body.tz === "home" || body.tz === "local") data.tz = body.tz;
   if ("note" in body) data.note = body.note?.trim() || null;
   if ("location" in body) data.location = body.location?.trim() || null;
   if (typeof body.category === "string") data.category = body.category;

@@ -169,6 +169,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
   const [iNote, setINote] = useState("");
   const [iLoc, setILoc] = useState("");
   const [iCat, setICat] = useState<PaletteKey>("mint");
+  const [iTz, setITz] = useState<"local" | "home">("local");
 
   function openAddItem(presetDay: string) {
     setEditingItem(null);
@@ -178,6 +179,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     setINote("");
     setILoc("");
     setICat("mint");
+    setITz("local");
     setItemOpen(true);
   }
 
@@ -189,6 +191,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     setINote(it.note ?? "");
     setILoc(it.location ?? "");
     setICat((it.category as PaletteKey) ?? "mint");
+    setITz(it.tz === "home" ? "home" : "local");
     setItemOpen(true);
   }
 
@@ -198,6 +201,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     const payload = {
       dayDate: iDay || null,
       time: iTime || null,
+      tz: iTz,
       title: iTitle,
       note: iNote,
       location: iLoc,
@@ -302,6 +306,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
 
   // ── 계획(메타) 폼 상태 ───────────────────────
   const [planOpen, setPlanOpen] = useState(false);
+  const [tzOpen, setTzOpen] = useState(false);
   const [pTitle, setPTitle] = useState(plan.title);
   const [pType, setPType] = useState<string>(plan.type);
   const [pEmoji, setPEmoji] = useState(plan.emoji);
@@ -323,6 +328,30 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     setPEnd(toInputDate(plan.endDate));
     setPTz(plan.tzOffsetMin);
     setPlanOpen(true);
+  }
+
+  function openTz() {
+    setPTz(plan.tzOffsetMin);
+    setTzOpen(true);
+  }
+
+  async function saveTz() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/plans/${plan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tzOffsetMin: pTz }),
+      });
+      if (res.ok) {
+        const updated: Plan = await res.json();
+        setPlan((p) => ({ ...p, ...updated }));
+        setTzOpen(false);
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function savePlan() {
@@ -442,6 +471,14 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
               </IconButton>
               <IconButton
                 variant="surface"
+                aria-label="시차 설정"
+                onClick={openTz}
+                className={plan.tzOffsetMin !== 0 ? "text-primary" : undefined}
+              >
+                <Clock className="h-4 w-4" />
+              </IconButton>
+              <IconButton
+                variant="surface"
                 aria-label="계획 수정"
                 onClick={openEditPlan}
               >
@@ -458,6 +495,24 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           </div>
         </div>
       </Card>
+
+      {/* 해외 여행이면 시차 설정 안내 */}
+      {plan.tzOffsetMin === 0 && (
+        <button
+          type="button"
+          onClick={openTz}
+          className="mb-6 flex w-full items-center gap-2.5 rounded-2xl border border-dashed border-line-strong bg-surface/60 px-4 py-3 text-left text-sm text-ink-soft transition hover:border-primary hover:text-ink"
+        >
+          <Clock className="h-4 w-4 shrink-0 text-ink-faint" />
+          <span className="flex-1">
+            해외 여행인가요? <b className="text-ink">시차를 설정</b>하면 일정에 한국시간이 함께
+            표시되고, 비행 도착 시각도 계산돼요.
+          </span>
+          <span className="shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary-ink">
+            시차 설정
+          </span>
+        </button>
+      )}
 
       {/* 준비 체크리스트 (여행 전 준비 · 준비물) */}
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -534,23 +589,29 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                 {group.items.map((it, i) => {
                   const cat = palette(it.category);
                   const last = i === group.items.length - 1;
+                  const showTz = plan.tzOffsetMin !== 0 && !!it.time;
+                  const isHome = it.tz === "home";
+                  // 현지 시각 항목만 한국시간을 병기 (한국 시각 항목은 그대로)
                   const kr =
-                    plan.tzOffsetMin && it.time
+                    showTz && !isHome && it.time
                       ? toKorea(it.time, plan.tzOffsetMin)
                       : null;
                   return (
                     <li key={it.id} className="group flex gap-3">
-                      {/* 시간 (현지 + 한국) */}
+                      {/* 시간 (현지/한국 기준에 따라) */}
                       <div
                         className={cn(
                           "shrink-0 pt-2.5 text-right",
-                          kr ? "w-16 sm:w-20" : "w-12 sm:w-14"
+                          showTz ? "w-16 sm:w-20" : "w-12 sm:w-14"
                         )}
                       >
                         {it.time ? (
                           <>
                             <span className="font-num block text-sm font-semibold text-ink-soft">
                               {it.time}
+                              {showTz && isHome && (
+                                <span className="ml-0.5 text-[10px]">🇰🇷</span>
+                              )}
                             </span>
                             {kr && (
                               <span className="font-num block text-[10px] leading-tight text-ink-faint">
@@ -696,6 +757,22 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
             </Field>
           </div>
 
+          {plan.tzOffsetMin !== 0 && (
+            <Field
+              label="시각 기준"
+              hint="이 시각이 현지 시각인지 한국 시각인지 (예: 인천공항 출발은 한국)"
+            >
+              <Segmented
+                value={iTz}
+                onChange={(v) => setITz(v)}
+                options={[
+                  { value: "local", label: "🏝️ 현지 시각" },
+                  { value: "home", label: "🇰🇷 한국 시각" },
+                ]}
+              />
+            </Field>
+          )}
+
           <Field label="색 분류">
             <ColorPicker value={iCat} onChange={setICat} />
           </Field>
@@ -787,42 +864,6 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
             </Field>
           </div>
 
-          <Field
-            label="현지 시차"
-            hint="현지가 한국보다 몇 시간? (느리면 −, 빠르면 +) · 설정하면 일정에 한국시간도 함께 표시돼요"
-          >
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-1.5">
-                {TZ_PRESETS.map((t) => (
-                  <button
-                    key={t.label}
-                    type="button"
-                    onClick={() => setPTz(t.min)}
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                      pTz === t.min
-                        ? "border-primary bg-primary-soft text-primary-ink"
-                        : "border-line bg-sunken text-ink-soft hover:text-ink"
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  step="0.5"
-                  value={pTz / 60}
-                  onChange={(e) => setPTz(Math.round(Number(e.target.value || 0) * 60))}
-                  className="w-24"
-                  aria-label="시차 시간"
-                />
-                <span className="text-sm text-ink-soft">시간 · {tzOffsetLabel(pTz)}</span>
-              </div>
-            </div>
-          </Field>
-
           <Field label="장소" hint="선택 사항이에요.">
             <Input value={pLoc} onChange={(e) => setPLoc(e.target.value)} />
           </Field>
@@ -830,6 +871,62 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           <Field label="설명" hint="마크다운으로 꾸밀 수 있어요.">
             <MarkdownEditor value={pDesc} onChange={setPDesc} minHeight={120} />
           </Field>
+        </div>
+      </Modal>
+
+      {/* 시차 설정 모달 */}
+      <Modal
+        open={tzOpen}
+        onClose={() => setTzOpen(false)}
+        title="현지 시차 설정"
+        emoji="🕐"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setTzOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={saveTz} disabled={busy}>
+              저장
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-ink-soft">
+            여행지가 한국과 몇 시간 차이 나나요? 설정하면 일정에 <b className="text-ink">한국시간</b>이
+            함께 보이고, <b className="text-ink">비행 도착 시각</b>도 계산해줘요.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {TZ_PRESETS.map((t) => (
+              <button
+                key={t.label}
+                type="button"
+                onClick={() => setPTz(t.min)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-sm font-medium transition",
+                  pTz === t.min
+                    ? "border-primary bg-primary-soft text-primary-ink"
+                    : "border-line bg-sunken text-ink-soft hover:text-ink"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-ink-soft">직접</span>
+            <Input
+              type="number"
+              step="0.5"
+              value={pTz / 60}
+              onChange={(e) => setPTz(Math.round(Number(e.target.value || 0) * 60))}
+              className="w-24"
+              aria-label="시차 시간"
+            />
+            <span className="text-sm text-ink-soft">
+              시간 · <b className="text-ink">{tzOffsetLabel(pTz)}</b>
+            </span>
+          </div>
         </div>
       </Modal>
     </div>
