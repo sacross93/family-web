@@ -7,7 +7,6 @@ import type {
   Plan,
   PlanItem,
   PlanChecklistItem,
-  PlanNote,
   CalendarEvent,
   Todo,
   Anniversary,
@@ -22,7 +21,6 @@ export type {
   Plan,
   PlanItem,
   PlanChecklistItem,
-  PlanNote,
   CalendarEvent,
   Todo,
   Anniversary,
@@ -36,7 +34,6 @@ export type PlanWithItems = Plan & { items: PlanItem[] };
 export type PlanDetail = Plan & {
   items: PlanItem[];
   checklist: PlanChecklistItem[];
-  notes: PlanNote[];
 };
 export type PlanWithCount = Plan & { _count: { items: number } };
 export type TodoWithMember = Todo & { member: FamilyMember | null };

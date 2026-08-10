@@ -21,6 +21,7 @@ export async function PATCH(
     data.endDate = body.endDate ? new Date(body.endDate) : null;
   if (typeof body.tzOffsetMin === "number")
     data.tzOffsetMin = Math.round(body.tzOffsetMin);
+  if (typeof body.memo === "string") data.memo = body.memo;
 
   const plan = await prisma.plan.update({
     where: { id },

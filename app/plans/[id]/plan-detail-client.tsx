@@ -15,8 +15,6 @@ import {
   Sparkles,
   Clock,
   Plane,
-  Film,
-  Play,
 } from "lucide-react";
 import {
   Card,
@@ -47,14 +45,7 @@ import {
   tzOffsetLabel,
 } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import type {
-  PlanDetail,
-  PlanItem,
-  PlanChecklistItem,
-  PlanNote,
-  Plan,
-} from "@/lib/types";
-import { youtubeIds, firstImageUrl, stripMarkdown } from "@/lib/media";
+import type { PlanDetail, PlanItem, PlanChecklistItem, Plan } from "@/lib/types";
 
 const PLAN_TYPES = ["여행", "주말", "이벤트", "기타"] as const;
 const NO_DAY = "__none__";
@@ -313,70 +304,28 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     if (!res || !res.ok) setPlan((p) => ({ ...p, checklist: prev }));
   }
 
-  // ── 아이디어 메모 ─────────────────────────────
-  const [noteEditOpen, setNoteEditOpen] = useState(false);
-  const [noteViewOpen, setNoteViewOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState<PlanNote | null>(null);
-  const [viewingNote, setViewingNote] = useState<PlanNote | null>(null);
-  const [nTitle, setNTitle] = useState("");
-  const [nContent, setNContent] = useState("");
+  // ── 아이디어 메모 (자유 스크래치패드) ──────────
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [memoDraft, setMemoDraft] = useState(plan.memo);
 
-  function openNoteAdd() {
-    setEditingNote(null);
-    setNTitle("");
-    setNContent("");
-    setNoteEditOpen(true);
-  }
-  function openNoteEdit(note: PlanNote) {
-    setEditingNote(note);
-    setNTitle(note.title ?? "");
-    setNContent(note.content);
-    setNoteViewOpen(false);
-    setNoteEditOpen(true);
-  }
-  function openNoteView(note: PlanNote) {
-    setViewingNote(note);
-    setNoteViewOpen(true);
+  function openMemo() {
+    setMemoDraft(plan.memo);
+    setMemoOpen(true);
   }
 
-  async function saveNote() {
-    if ((!nTitle.trim() && !nContent.trim()) || busy) return;
-    setBusy(true);
-    try {
-      if (editingNote) {
-        const res = await fetch(`/api/plan-notes/${editingNote.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: nTitle, content: nContent }),
-        });
-        if (res.ok) {
-          const u: PlanNote = await res.json();
-          setPlan((p) => ({ ...p, notes: p.notes.map((n) => (n.id === u.id ? u : n)) }));
-          setNoteEditOpen(false);
-        }
-      } else {
-        const res = await fetch("/api/plan-notes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planId: plan.id, title: nTitle, content: nContent }),
-        });
-        if (res.ok) {
-          const c: PlanNote = await res.json();
-          setPlan((p) => ({ ...p, notes: [c, ...p.notes] }));
-          setNoteEditOpen(false);
-        }
-      }
-    } finally {
-      setBusy(false);
+  async function saveMemo() {
+    if (memoDraft === plan.memo) {
+      setMemoOpen(false);
+      return;
     }
-  }
-
-  async function removeNote(id: string) {
-    const prev = plan.notes;
-    setPlan((p) => ({ ...p, notes: p.notes.filter((n) => n.id !== id) }));
-    setNoteViewOpen(false);
-    const res = await fetch(`/api/plan-notes/${id}`, { method: "DELETE" }).catch(() => null);
-    if (!res || !res.ok) setPlan((p) => ({ ...p, notes: prev }));
+    const draft = memoDraft;
+    setPlan((p) => ({ ...p, memo: draft }));
+    setMemoOpen(false);
+    await fetch(`/api/plans/${plan.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memo: draft }),
+    }).catch(() => {});
   }
 
   // ── 계획(메타) 폼 상태 ───────────────────────
@@ -620,47 +569,25 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         </div>
       )}
 
-      {/* 아이디어 메모 */}
-      <div className="mb-8">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 font-display text-xl font-bold text-ink">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-butter-soft text-lg">
-              💡
-            </span>
-            아이디어 메모
-          </h2>
-          <Button variant="soft" size="sm" onClick={openNoteAdd}>
-            <Plus className="h-4 w-4" /> 메모 추가
-          </Button>
+      {/* 아이디어 메모 (자유 스크래치패드) */}
+      <button
+        type="button"
+        onClick={openMemo}
+        className="mb-8 flex w-full items-center gap-3 rounded-3xl border border-line bg-surface p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-pop"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-butter-soft text-xl">
+          💡
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-ink">아이디어 메모</p>
+          <p className="text-sm text-ink-soft">
+            링크·사진 막 붙여넣는 자유 메모장 — 나중에 일정 짤 때 꺼내봐요
+          </p>
         </div>
-
-        {plan.notes.length === 0 ? (
-          <button
-            type="button"
-            onClick={openNoteAdd}
-            className="flex w-full flex-col items-center gap-2 rounded-3xl border border-dashed border-line-strong bg-surface/50 px-6 py-10 text-center transition hover:border-primary"
-          >
-            <span className="text-3xl">🔗</span>
-            <span className="text-sm font-semibold text-ink">
-              가고 싶은 곳·영상·사진을 모아두세요
-            </span>
-            <span className="text-xs text-ink-faint">
-              유튜브 링크 · 이미지 붙여넣기 · 자유 메모 — 나중에 일정 짤 때 꺼내봐요
-            </span>
-          </button>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {plan.notes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onOpen={() => openNoteView(note)}
-                onRemove={() => removeNote(note.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-bold text-primary-ink">
+          {plan.memo.trim() ? "메모 열기" : "메모 쓰기"}
+        </span>
+      </button>
 
       {/* 여정 */}
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -1047,94 +974,27 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         </div>
       </Modal>
 
-      {/* 메모 보기 팝업 */}
-      {viewingNote && (
-        <Modal
-          open={noteViewOpen}
-          onClose={() => setNoteViewOpen(false)}
-          title={viewingNote.title || "메모"}
-          emoji="💡"
-          size="lg"
-          footer={
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => removeNote(viewingNote.id)}
-                className="mr-auto hover:text-danger"
-              >
-                <Trash2 className="h-4 w-4" /> 삭제
-              </Button>
-              <Button variant="soft" onClick={() => openNoteEdit(viewingNote)}>
-                <Pencil className="h-4 w-4" /> 수정
-              </Button>
-              <Button onClick={() => setNoteViewOpen(false)}>닫기</Button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-4">
-            {viewingNote.content.trim() && (
-              <MarkdownView>{viewingNote.content}</MarkdownView>
-            )}
-            {youtubeIds(viewingNote.content).map((id) => (
-              <div
-                key={id}
-                className="overflow-hidden rounded-2xl bg-ink/5"
-                style={{ aspectRatio: "16 / 9" }}
-              >
-                <iframe
-                  src={`https://www.youtube.com/embed/${id}`}
-                  title="YouTube"
-                  className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ))}
-          </div>
-        </Modal>
-      )}
-
-      {/* 메모 작성/수정 팝업 */}
+      {/* 아이디어 메모 팝업 (자유 스크래치패드) */}
       <Modal
-        open={noteEditOpen}
-        onClose={() => setNoteEditOpen(false)}
-        title={editingNote ? "메모 수정" : "새 메모"}
+        open={memoOpen}
+        onClose={saveMemo}
+        title="아이디어 메모"
         emoji="💡"
         size="lg"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setNoteEditOpen(false)}>
-              취소
-            </Button>
-            <Button
-              onClick={saveNote}
-              disabled={(!nTitle.trim() && !nContent.trim()) || busy}
-            >
-              {editingNote ? "저장" : "추가"}
-            </Button>
-          </>
-        }
+        footer={<Button onClick={saveMemo}>완료</Button>}
       >
-        <div className="flex flex-col gap-4">
-          <Field label="제목" hint="비워도 돼요">
-            <Input
-              value={nTitle}
-              onChange={(e) => setNTitle(e.target.value)}
-              placeholder="예: 우붓 원숭이 숲 꼭 가보기"
-              autoFocus
-            />
-          </Field>
-          <Field
-            label="내용"
-            hint="유튜브 링크 붙여넣기 · 이미지 복사→붙여넣기(⌘/Ctrl+V) · 자유롭게"
-          >
-            <MarkdownEditor
-              value={nContent}
-              onChange={setNContent}
-              minHeight={200}
-              placeholder="가고 싶은 곳, 유튜브 링크, 사진을 막 붙여넣어요. 유튜브 링크는 저장하면 팝업에서 바로 재생돼요 ▶️"
-            />
-          </Field>
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-ink-faint">
+            유튜브 링크 붙여넣기 · 이미지 복사 → 붙여넣기(⌘/Ctrl+V) · 막 적어두세요.{" "}
+            <b>미리보기</b>를 누르면 영상·사진이 보여요. (자동 저장)
+          </p>
+          <MarkdownEditor
+            value={memoDraft}
+            onChange={setMemoDraft}
+            minHeight={320}
+            placeholder="가고 싶은 곳, 유튜브 링크, 사진, 메모… 자유롭게 붙여넣어요."
+            autoFocus
+          />
         </div>
       </Modal>
     </div>
@@ -1372,66 +1232,3 @@ function TimezoneCalculator({ offsetMin }: { offsetMin: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────
-   아이디어 메모 카드 (클릭 시 팝업)
-   ───────────────────────────────────────────── */
-function NoteCard({
-  note,
-  onOpen,
-  onRemove,
-}: {
-  note: PlanNote;
-  onOpen: () => void;
-  onRemove: () => void;
-}) {
-  const img = firstImageUrl(note.content);
-  const yt = youtubeIds(note.content)[0];
-  const thumb = img || (yt ? `https://img.youtube.com/vi/${yt}/mqdefault.jpg` : null);
-  const preview = stripMarkdown(note.content);
-  const title = note.title || preview.split("\n")[0] || "메모";
-
-  return (
-    <div className="group relative">
-      <Card interactive flush onClick={onOpen} className="flex h-full flex-col overflow-hidden">
-        {thumb && (
-          <div className="relative aspect-video bg-sunken">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={thumb} alt="" className="h-full w-full object-cover" loading="lazy" />
-            {yt && !img && (
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-ink/55 text-white">
-                  <Play className="h-5 w-5" fill="currentColor" />
-                </span>
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex flex-1 flex-col gap-1 p-4">
-          <p className="line-clamp-1 font-bold text-ink">{title}</p>
-          {preview && <p className="line-clamp-2 text-sm text-ink-soft">{preview}</p>}
-          <div className="mt-auto flex items-center gap-2 pt-2 text-xs text-ink-faint">
-            {yt && (
-              <span className="flex items-center gap-0.5">
-                <Film className="h-3.5 w-3.5" /> 영상
-              </span>
-            )}
-            {img && <span>🖼️ 사진</span>}
-            <span className="ml-auto">{kDateShort(note.createdAt)}</span>
-          </div>
-        </div>
-      </Card>
-      <IconButton
-        variant="surface"
-        size="sm"
-        aria-label="메모 삭제"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute right-2 top-2 opacity-100 transition hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"
-      >
-        <Trash2 className="h-4 w-4" />
-      </IconButton>
-    </div>
-  );
-}

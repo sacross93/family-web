@@ -81,26 +81,12 @@ model Plan {
   startDate   DateTime?
   endDate     DateTime?
   tzOffsetMin Int      @default(0) // 현지시간 - 한국시간 (분). 예: 발리 -60, 미국서부 -960
+  memo        String   @default("") // 자유 아이디어 메모장 (링크·사진·메모 복붙)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   items     PlanItem[]
   checklist PlanChecklistItem[]
-  notes     PlanNote[]
-}
-
-// 여행 아이디어 메모 (유튜브 링크·이미지·자유 메모 스크랩)
-model PlanNote {
-  id        String   @id @default(cuid())
-  planId    String
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  title     String?
-  content   String   @default("")
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([planId])
 }
 
 model PlanItem {
