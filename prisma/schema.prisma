@@ -86,6 +86,21 @@ model Plan {
 
   items     PlanItem[]
   checklist PlanChecklistItem[]
+  notes     PlanNote[]
+}
+
+// 여행 아이디어 메모 (유튜브 링크·이미지·자유 메모 스크랩)
+model PlanNote {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  title     String?
+  content   String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
 }
 
 model PlanItem {

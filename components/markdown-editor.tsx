@@ -221,6 +221,21 @@ export function MarkdownEditor({
               uploadImage(f);
             }
           }}
+          onPaste={(e) => {
+            // 클립보드 이미지 붙여넣기 → 업로드
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const it of items) {
+              if (it.type.startsWith("image/")) {
+                const f = it.getAsFile();
+                if (f) {
+                  e.preventDefault();
+                  uploadImage(f);
+                }
+                return;
+              }
+            }
+          }}
           placeholder={placeholder}
           autoFocus={autoFocus}
           className="block w-full resize-none border-0 bg-transparent px-4 py-3 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint"
