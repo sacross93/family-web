@@ -612,22 +612,13 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         <div className="flex flex-col gap-7">
           {groups.map((group) => (
             <section key={group.key} className="animate-fade-up">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="flex items-center gap-2 text-base font-bold text-ink">
-                  <CalendarDays className="h-4 w-4 text-ink-faint" />
-                  {group.date ? kDate(group.date) : "미정"}
-                  <span className="font-num text-sm font-semibold text-ink-faint">
-                    · {group.items.length}
-                  </span>
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openAddItem(group.key)}
-                >
-                  <Plus className="h-4 w-4" /> 일정
-                </Button>
-              </div>
+              <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-ink">
+                <CalendarDays className="h-4 w-4 text-ink-faint" />
+                {group.date ? kDate(group.date) : "미정"}
+                <span className="font-num text-sm font-semibold text-ink-faint">
+                  · {group.items.length}
+                </span>
+              </h3>
 
               <ol className="flex flex-col">
                 {group.items.map((it, i) => {
