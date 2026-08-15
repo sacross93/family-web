@@ -14,7 +14,6 @@ import {
   CalendarDays,
   Sparkles,
   Clock,
-  Plane,
 } from "lucide-react";
 import {
   Card,
@@ -39,8 +38,6 @@ import {
   kDateShort,
   dday,
   toKorea,
-  toLocal,
-  shiftTime,
   dayDeltaLabel,
   tzOffsetLabel,
 } from "@/lib/date";
@@ -561,13 +558,6 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           onRemove={removeCheck}
         />
       </div>
-
-      {/* 시차 계산기 */}
-      {plan.tzOffsetMin !== 0 && (
-        <div className="mb-6">
-          <TimezoneCalculator offsetMin={plan.tzOffsetMin} />
-        </div>
-      )}
 
       {/* 아이디어 메모 (자유 스크래치패드) */}
       <button
@@ -1108,118 +1098,3 @@ function ChecklistSection({
     </Card>
   );
 }
-
-/* ─────────────────────────────────────────────
-   시차 계산기 (시간 변환 · 비행 도착 시각)
-   ───────────────────────────────────────────── */
-function TimezoneCalculator({ offsetMin }: { offsetMin: number }) {
-  // 1) 시간 변환
-  const [convTime, setConvTime] = useState("09:00");
-  const [convDir, setConvDir] = useState<"L2K" | "K2L">("L2K");
-  const conv =
-    convDir === "L2K" ? toKorea(convTime, offsetMin) : toLocal(convTime, offsetMin);
-
-  // 2) 비행 도착
-  const [depTime, setDepTime] = useState("14:00");
-  const [dur, setDur] = useState("7");
-  const [flightDir, setFlightDir] = useState<"K2L" | "L2K">("L2K");
-  const durMin = Math.max(0, Math.round(Number(dur || 0) * 60));
-  // 출발지 시각 → 도착지 시간대로 변환 → 소요시간 더하기
-  const arrBase =
-    flightDir === "K2L" ? toLocal(depTime, offsetMin) : toKorea(depTime, offsetMin);
-  const arr = arrBase ? shiftTime(arrBase.time, durMin) : null;
-  const arrDay = (arrBase?.dayDelta ?? 0) + (arr?.dayDelta ?? 0);
-
-  return (
-    <Card className="flex flex-col gap-4">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-soft text-lg">
-          🕐
-        </span>
-        <h3 className="text-base font-bold text-ink">시차 계산기</h3>
-        <span className="ml-auto text-xs text-ink-faint">{tzOffsetLabel(offsetMin)}</span>
-      </div>
-
-      {/* 시간 변환 */}
-      <div className="flex flex-col gap-2 rounded-2xl bg-sunken/60 p-3">
-        <p className="text-sm font-semibold text-ink">시간 변환</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented
-            value={convDir}
-            onChange={(v) => setConvDir(v)}
-            options={[
-              { value: "L2K", label: "현지 → 한국" },
-              { value: "K2L", label: "한국 → 현지" },
-            ]}
-          />
-          <Input
-            type="time"
-            value={convTime}
-            onChange={(e) => setConvTime(e.target.value)}
-            className="w-32"
-            aria-label="변환할 시각"
-          />
-          <span className="text-ink-faint">→</span>
-          <span className="font-num rounded-full bg-primary-soft px-3 py-2 text-sm font-bold text-primary-ink">
-            {conv ? conv.time : "--:--"}
-            {conv?.dayDelta ? ` (${dayDeltaLabel(conv.dayDelta)})` : ""}
-            <span className="ml-1 text-xs font-medium">
-              {convDir === "L2K" ? "한국" : "현지"}
-            </span>
-          </span>
-        </div>
-      </div>
-
-      {/* 비행 도착 시각 */}
-      <div className="flex flex-col gap-2 rounded-2xl bg-sunken/60 p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <Plane className="h-4 w-4 text-ink-faint" /> 비행 도착 시각
-        </p>
-        <Segmented
-          value={flightDir}
-          onChange={(v) => setFlightDir(v)}
-          options={[
-            { value: "L2K", label: "현지 출발 → 한국 도착" },
-            { value: "K2L", label: "한국 출발 → 현지 도착" },
-          ]}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
-            출발
-            <Input
-              type="time"
-              value={depTime}
-              onChange={(e) => setDepTime(e.target.value)}
-              className="w-28"
-              aria-label="출발 시각"
-            />
-          </label>
-          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
-            비행
-            <Input
-              type="number"
-              step="0.5"
-              min="0"
-              value={dur}
-              onChange={(e) => setDur(e.target.value)}
-              className="w-20"
-              aria-label="비행 소요 시간(시간)"
-            />
-            시간
-          </label>
-        </div>
-        <p className="text-sm text-ink-soft">
-          →{" "}
-          <span className="font-num rounded-full bg-primary-soft px-3 py-1.5 text-sm font-bold text-primary-ink">
-            {arr ? arr.time : "--:--"}
-            {arrDay ? ` (${dayDeltaLabel(arrDay)})` : ""}
-            <span className="ml-1 text-xs font-medium">
-              {flightDir === "L2K" ? "한국" : "현지"} 도착
-            </span>
-          </span>
-        </p>
-      </div>
-    </Card>
-  );
-}
-
