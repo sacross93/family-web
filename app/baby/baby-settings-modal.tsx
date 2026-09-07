@@ -3,16 +3,16 @@
 import { useState } from "react";
 import { Modal, Button, Field, Input, ColorPicker, Checkbox } from "@/components/ui";
 import type { PaletteKey } from "@/lib/colors";
-import { toDateInput, fromDateInput } from "@/lib/date";
+import { toDateInput } from "@/lib/date";
 import type { Baby } from "@/lib/types";
 
 export interface BabySettingsPatch {
   nickname: string;
   emoji: string;
   color: PaletteKey;
-  /** ISO */
+  /** "yyyy-MM-dd" */
   dueDate: string;
-  /** ISO 또는 null(지움) */
+  /** "yyyy-MM-dd" 또는 null(지움) */
   birthDate: string | null;
   showOnHome: boolean;
 }
@@ -45,8 +45,8 @@ export function BabySettingsModal({
         nickname: nickname.trim(),
         emoji: emoji.trim() || "🌱",
         color,
-        dueDate: fromDateInput(dueStr).toISOString(),
-        birthDate: birthStr ? fromDateInput(birthStr).toISOString() : null,
+        dueDate: dueStr,
+        birthDate: birthStr || null,
         showOnHome,
       });
       onClose();

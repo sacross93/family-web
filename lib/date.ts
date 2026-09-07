@@ -204,3 +204,15 @@ export function fromDateInput(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d, 0, 0, 0, 0);
 }
+
+/**
+ * API 요청의 날짜 값을 Date 로. "yyyy-MM-dd"(10자 이하)는 서버 로컬 자정,
+ * 그 외 문자열은 ISO 로 파싱. 문자열이 아니거나 비었거나 잘못되면 null.
+ * (기념일·할일 API 와 같은 규칙 — 클라이언트는 날짜를 "yyyy-MM-dd" 로 보낸다)
+ */
+export function parseDateInput(v: unknown): Date | null {
+  if (typeof v !== "string" || !v.trim()) return null;
+  const s = v.trim();
+  const d = s.length <= 10 ? new Date(`${s}T00:00:00`) : new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}

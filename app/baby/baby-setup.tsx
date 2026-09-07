@@ -9,8 +9,9 @@ export interface BabySetupPayload {
   nickname: string;
   emoji: string;
   color: PaletteKey;
-  /** ISO. 서버는 dueDate 를 그대로 저장 */
-  dueDate: string;
+  /** "yyyy-MM-dd" — 둘 중 하나만 보낸다 */
+  dueDate?: string;
+  lmpDate?: string;
 }
 
 type DateMode = "due" | "lmp";
@@ -39,7 +40,7 @@ export function BabySetup({ onCreate }: { onCreate: (p: BabySetupPayload) => Pro
         nickname: nickname.trim(),
         emoji: emoji.trim() || "🌱",
         color,
-        dueDate: due.toISOString(),
+        ...(mode === "due" ? { dueDate: dateStr } : { lmpDate: dateStr }),
       });
     } finally {
       setBusy(false);

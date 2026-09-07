@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PageHeader, Button } from "@/components/ui";
-import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor } from "@/lib/types";
+import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem } from "@/lib/types";
+import { fromDateInput } from "@/lib/date";
 import { BabySetup, type BabySetupPayload } from "./baby-setup";
 import { BabyHero } from "./baby-hero";
 import { BabySettingsModal, type BabySettingsPatch } from "./baby-settings-modal";
 import { EntryModal, type EntryPayload } from "./entry-modal";
 import { EntryTimeline, type EntryFilter } from "./entry-timeline";
-import type { BabyChecklistItem } from "@/lib/types";
 import { DEFAULT_CHECKLIST } from "./baby-meta";
 import { BabyChecklist } from "./baby-checklist";
 
@@ -51,7 +51,7 @@ export function BabyClient({
   async function saveSettings(patch: BabySettingsPatch) {
     if (!baby) return;
     const prev = baby;
-    setBaby({ ...baby, ...patch, dueDate: new Date(patch.dueDate), birthDate: patch.birthDate ? new Date(patch.birthDate) : null });
+    setBaby({ ...baby, ...patch, dueDate: fromDateInput(patch.dueDate), birthDate: patch.birthDate ? fromDateInput(patch.birthDate) : null });
     const res = await fetch("/api/baby", {
       method: "PATCH",
       headers: JSON_HEADERS,

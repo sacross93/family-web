@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PALETTE_KEYS } from "@/lib/colors";
-import { dueDateFromLmp } from "@/lib/date";
+import { dueDateFromLmp, parseDateInput } from "@/lib/date";
 
 const COLORS = new Set<string>(PALETTE_KEYS);
-
-function parseDate(v: unknown): Date | null {
-  if (typeof v !== "string" || !v) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 /** 현재 아기(최신 1명). 없으면 null */
 export async function GET() {
@@ -25,8 +19,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "태명을 입력해 주세요." }, { status: 400 });
   }
 
-  const lmp = parseDate(body?.lmpDate);
-  const dueDate = parseDate(body?.dueDate) ?? (lmp ? dueDateFromLmp(lmp) : null);
+  const lmp = parseDateInput(body?.lmpDate);
+  const dueDate = parseDateInput(body?.dueDate) ?? (lmp ? dueDateFromLmp(lmp) : null);
   if (!dueDate) {
     return NextResponse.json(
       { error: "출산 예정일 또는 마지막 생리일을 알려 주세요." },
@@ -58,13 +52,13 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.color === "string" && COLORS.has(body.color)) data.color = body.color;
   if (typeof body.showOnHome === "boolean") data.showOnHome = body.showOnHome;
 
-  const due = parseDate(body.dueDate);
+  const due = parseDateInput(body.dueDate);
   if (due) data.dueDate = due;
 
   if (body.birthDate === null) {
     data.birthDate = null;
   } else {
-    const birth = parseDate(body.birthDate);
+    const birth = parseDateInput(body.birthDate);
     if (birth) data.birthDate = birth;
   }
 

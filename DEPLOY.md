@@ -40,6 +40,16 @@ DATABASE_URL="<Neon Direct 문자열>" npm run db:seed
 > DATABASE_URL="<Neon Direct>" npm run user:add -- 아빠아이디 강한비번 아빠 --admin
 > ```
 
+### 스키마가 바뀐 커밋을 배포할 때
+
+모델(`prisma/schema.prisma`)이 바뀐 커밋은 **코드 push 전에** 아래를 먼저 실행하세요.
+
+```bash
+DATABASE_URL="<Neon Direct>" npx prisma db push
+```
+
+안 하면 새 테이블을 쓰는 페이지가 열리지 않아요. 예: 아기 페이지(`Baby`·`BabyEntry`·`BabyChecklistItem`).
+
 ---
 
 ## 3. Vercel 프로젝트 만들기
@@ -53,6 +63,7 @@ DATABASE_URL="<Neon Direct 문자열>" npm run db:seed
    |---|---|
    | `DATABASE_URL` | Neon **Pooled** 문자열 + 끝에 `&pgbouncer=true` 붙이기 |
    | `AUTH_SECRET` | 아래 명령으로 생성한 값 |
+   | `TZ` | `Asia/Seoul` — 서버 "오늘" 계산(주차·D-day)을 한국 날짜 기준으로 |
 
    ```bash
    openssl rand -base64 32   # 나온 값을 AUTH_SECRET 에 붙여넣기

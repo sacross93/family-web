@@ -168,7 +168,7 @@ PageHeader 우측 `Button primary "+ 기록 남기기"` → `Modal`:
 | `/api/baby-checklist/[id]` | PATCH | `done?` `text?` | 반환 item |
 | `/api/baby-checklist/[id]` | DELETE | — | `{ ok: true }` |
 
-`color`는 `PaletteKey` 6종 외면 무시(기본 유지). 날짜는 `new Date(iso)` 후 `startOfDay` 없이 저장하되, 클라이언트가 `yyyy-MM-dd`를 로컬 자정으로 만들어 ISO로 보낸다(기념일 패턴 `toDateInput` 역방향).
+`color`는 `PaletteKey` 6종 외면 무시(기본 유지). **날짜는 클라이언트가 `yyyy-MM-dd` 문자열로 보내고 서버가 `parseDateInput`(lib/date.ts)으로 서버 로컬 자정 Date 를 만든다** — 기념일·할일 API 와 같은 규칙. 전체 ISO 문자열도 허용. 배포 서버는 `TZ=Asia/Seoul` 로 둔다(DEPLOY.md).
 
 ## 8. 타입 (`lib/types.ts`)
 

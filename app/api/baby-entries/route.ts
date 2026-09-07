@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseDateInput } from "@/lib/date";
 
 const KINDS = new Set(["diary", "checkup", "letter"]);
 
@@ -12,8 +13,8 @@ export async function POST(req: NextRequest) {
   if (!content) {
     return NextResponse.json({ error: "내용을 적어 주세요." }, { status: 400 });
   }
-  const date = body?.date ? new Date(body.date) : new Date();
-  if (Number.isNaN(date.getTime())) {
+  const date = body?.date ? parseDateInput(body.date) : new Date();
+  if (!date) {
     return NextResponse.json({ error: "날짜를 확인해 주세요." }, { status: 400 });
   }
 

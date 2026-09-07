@@ -5,12 +5,12 @@ import { Trash2 } from "lucide-react";
 import { Modal, Button, Field, Input, Segmented, Avatar } from "@/components/ui";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { cn } from "@/lib/utils";
-import { toDateInput, fromDateInput } from "@/lib/date";
+import { toDateInput } from "@/lib/date";
 import type { BabyEntryWithAuthor, FamilyMember } from "@/lib/types";
 import { ENTRY_KINDS, KIND_META, MOODS, AUTHOR_STORAGE_KEY, type EntryKind } from "./baby-meta";
 
 export interface EntryPayload {
-  /** ISO (로컬 자정) */
+  /** "yyyy-MM-dd" */
   date: string;
   kind: EntryKind;
   mood: string | null;
@@ -58,7 +58,7 @@ export function EntryModal({
     setBusy(true);
     try {
       const ok = await onSave({
-        date: fromDateInput(dateStr).toISOString(),
+        date: dateStr,
         kind,
         mood: kind === "diary" ? mood : null,
         content: content.trim(),

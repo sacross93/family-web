@@ -11,6 +11,16 @@ import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 
+/** 마크다운 본문에서 홈 카드용 한 줄: 이미지 문법 제거, 첫 비어있지 않은 줄, 서식 접두 제거 */
+function firstLine(md: string): string {
+  const line = md
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .split("\n")
+    .map((l) => l.replace(/^[#>*\-\s]+/, "").trim())
+    .find((l) => l.length > 0);
+  return line ?? "사진을 남겼어요 📷";
+}
+
 function greeting() {
   const h = new Date().getHours();
   if (h < 6) return "늦은 밤이에요";
@@ -57,17 +67,19 @@ async function getData() {
         orderBy: { startDate: "asc" },
         include: { _count: { select: { items: true } } },
       }),
-      prisma.baby.findFirst({
-        where: { showOnHome: true },
-        orderBy: { createdAt: "desc" },
-        include: {
-          entries: {
-            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-            take: 1,
-            include: { author: true },
+      prisma.baby
+        .findFirst({
+          where: { showOnHome: true },
+          orderBy: { createdAt: "desc" },
+          include: {
+            entries: {
+              orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+              take: 1,
+              include: { author: true },
+            },
           },
-        },
-      }),
+        })
+        .catch(() => null),
     ]);
 
   const upcomingAnnis = annis
@@ -185,18 +197,25 @@ export default async function HomePage() {
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
                 <div className="flex items-baseline gap-3">
+                  {born && (
+                    <Tag color={baby.color} className="font-num">
+                      태어난 지
+                    </Tag>
+                  )}
                   <span className="font-num text-3xl font-bold leading-none text-ink">
                     {born ? `${daysSinceBirth(baby.birthDate!)}일` : weekLabel(p)}
                   </span>
-                  <Tag color={baby.color} className="font-num">
-                    {born ? "태어난 지" : `출산 ${p.dueLabel}`}
-                  </Tag>
+                  {!born && (
+                    <Tag color={baby.color} className="font-num">
+                      출산 {p.dueLabel}
+                    </Tag>
+                  )}
                 </div>
                 {latest ? (
                   <p className="min-w-0 flex-1 truncate text-sm text-ink-soft">
                     <span className="mr-1">{kindMeta(latest.kind).emoji}</span>
                     {latest.author && <span className="mr-1 font-semibold text-ink">{latest.author.name}</span>}
-                    {latest.content.split("\n")[0].replace(/^[#>*\-\s]+/, "")}
+                    {firstLine(latest.content)}
                   </p>
                 ) : (
                   <p className="text-sm text-ink-faint">아직 기록이 없어요. 첫 이야기를 남겨볼까요?</p>

@@ -87,7 +87,7 @@ export function EntryTimeline({
                     <div className="flex items-center gap-2.5">
                       <Avatar emoji={e.author?.emoji} color={e.author?.color} name={e.author?.name} size="sm" />
                       <span className="text-sm font-semibold text-ink">{e.author?.name ?? "가족"}</span>
-                      <Tag color={meta.color}>
+                      <Tag color={meta.color} className={cn(isLetter && "bg-surface/80")}>
                         {meta.emoji} {meta.label}
                       </Tag>
                       {e.mood && <span className="text-lg leading-none">{e.mood}</span>}

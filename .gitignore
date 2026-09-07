@@ -58,3 +58,4 @@ Thumbs.db
 .agents/
 .neon
 skills-lock.json
+.playwright-mcp/

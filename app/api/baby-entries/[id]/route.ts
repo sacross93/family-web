@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseDateInput } from "@/lib/date";
 
 const KINDS = new Set(["diary", "checkup", "letter"]);
 
@@ -17,10 +18,8 @@ export async function PATCH(
   else if (typeof body?.mood === "string") data.mood = body.mood.trim() || null;
   if (body?.authorId === null) data.authorId = null;
   else if (typeof body?.authorId === "string" && body.authorId) data.authorId = body.authorId;
-  if (typeof body?.date === "string") {
-    const d = new Date(body.date);
-    if (!Number.isNaN(d.getTime())) data.date = d;
-  }
+  const date = parseDateInput(body?.date);
+  if (date) data.date = date;
 
   const entry = await prisma.babyEntry.update({
     where: { id },

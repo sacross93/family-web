@@ -7,6 +7,7 @@ import {
   daysSinceBirth,
   toDateInput,
   fromDateInput,
+  parseDateInput,
 } from "@/lib/date";
 
 // 예정일 2027-05-20 고정. daysBefore(n) = 예정일 n일 전.
@@ -102,5 +103,30 @@ describe("toDateInput / fromDateInput", () => {
     expect(d.getMonth()).toBe(4);
     expect(d.getDate()).toBe(20);
     expect(d.getHours()).toBe(0);
+  });
+});
+
+describe("parseDateInput", () => {
+  it('"yyyy-MM-dd" 는 서버 로컬 자정', () => {
+    const d = parseDateInput("2027-05-20")!;
+    expect(d).not.toBeNull();
+    expect(d.getFullYear()).toBe(2027);
+    expect(d.getMonth()).toBe(4);
+    expect(d.getDate()).toBe(20);
+    expect(d.getHours()).toBe(0);
+  });
+
+  it("전체 ISO 문자열은 그 순간 그대로", () => {
+    const iso = "2027-05-20T15:00:00.000Z";
+    expect(parseDateInput(iso)!.getTime()).toBe(new Date(iso).getTime());
+  });
+
+  it("잘못된 문자열·빈 값·문자열이 아니면 null", () => {
+    expect(parseDateInput("not-a-date")).toBeNull();
+    expect(parseDateInput("")).toBeNull();
+    expect(parseDateInput("   ")).toBeNull();
+    expect(parseDateInput(null)).toBeNull();
+    expect(parseDateInput(undefined)).toBeNull();
+    expect(parseDateInput(123)).toBeNull();
   });
 });

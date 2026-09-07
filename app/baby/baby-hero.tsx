@@ -87,11 +87,11 @@ export function BabyHero({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Tag color={baby.color} className="font-num">
+                <Tag color={baby.color} className="font-num bg-surface/80">
                   출산 {p.dueLabel}
                 </Tag>
                 {nextCheckup && (
-                  <Tag color="sky" className="font-num">
+                  <Tag color="sky" className="font-num bg-surface/80">
                     다음 검진 {dday(nextCheckup.date).label} · {kDateShort(nextCheckup.date)}
                   </Tag>
                 )}
