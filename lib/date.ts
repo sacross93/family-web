@@ -130,3 +130,77 @@ export function withTime(date: Date, time?: string | null): Date {
   }
   return d;
 }
+
+// ─────────────────────────────────────────────
+// 임신 · 아기 (/baby)
+// ─────────────────────────────────────────────
+
+/** 임신 기간(일). 예정일 = 마지막 생리일 + 280일 */
+export const PREGNANCY_DAYS = 280;
+
+/** 마지막 생리일 → 출산 예정일 (로컬 자정) */
+export function dueDateFromLmp(lmp: Date | string): Date {
+  const d = startOfDay(new Date(lmp));
+  d.setDate(d.getDate() + PREGNANCY_DAYS);
+  return d;
+}
+
+export interface PregnancyProgress {
+  /** 시작일(예정일-280)부터 오늘까지 경과일. 0 이상 */
+  elapsedDays: number;
+  weeks: number;
+  days: number;
+  /** 14주 미만 1 · 28주 미만 2 · 그 외 3 */
+  trimester: 1 | 2 | 3;
+  /** 0~1 */
+  progress: number;
+  /** 예정일까지 남은 일수 (오늘=0, 지났으면 음수) */
+  dueDays: number;
+  /** "D-245" | "D-DAY" | "D+3" */
+  dueLabel: string;
+  overdue: boolean;
+}
+
+/** 출산 예정일 기준 임신 진행 상황 */
+export function pregnancyProgress(
+  dueDate: Date | string,
+  today: Date = new Date()
+): PregnancyProgress {
+  const due = startOfDay(new Date(dueDate));
+  const t = startOfDay(today);
+  const start = new Date(due);
+  start.setDate(start.getDate() - PREGNANCY_DAYS);
+
+  const elapsedDays = Math.max(0, differenceInCalendarDays(t, start));
+  const weeks = Math.floor(elapsedDays / 7);
+  const days = elapsedDays % 7;
+  const trimester: 1 | 2 | 3 = weeks < 14 ? 1 : weeks < 28 ? 2 : 3;
+  const progress = Math.min(1, elapsedDays / PREGNANCY_DAYS);
+
+  const dueDays = differenceInCalendarDays(due, t);
+  const dueLabel =
+    dueDays === 0 ? "D-DAY" : dueDays > 0 ? `D-${dueDays}` : `D+${Math.abs(dueDays)}`;
+
+  return { elapsedDays, weeks, days, trimester, progress, dueDays, dueLabel, overdue: dueDays < 0 };
+}
+
+/** "5주 3일" */
+export function weekLabel(p: PregnancyProgress): string {
+  return `${p.weeks}주 ${p.days}일`;
+}
+
+/** 태어난 지 N일 (출생 당일 = 0) */
+export function daysSinceBirth(birthDate: Date | string, today: Date = new Date()): number {
+  return Math.max(0, differenceInCalendarDays(startOfDay(today), startOfDay(new Date(birthDate))));
+}
+
+/** Date → "yyyy-MM-dd" (로컬 기준, <input type="date"> 용) */
+export function toDateInput(d: Date | string): string {
+  return format(new Date(d), "yyyy-MM-dd");
+}
+
+/** "yyyy-MM-dd" → 로컬 자정 Date */
+export function fromDateInput(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
