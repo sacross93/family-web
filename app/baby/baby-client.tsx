@@ -9,6 +9,9 @@ import { BabyHero } from "./baby-hero";
 import { BabySettingsModal, type BabySettingsPatch } from "./baby-settings-modal";
 import { EntryModal, type EntryPayload } from "./entry-modal";
 import { EntryTimeline, type EntryFilter } from "./entry-timeline";
+import type { BabyChecklistItem } from "@/lib/types";
+import { DEFAULT_CHECKLIST } from "./baby-meta";
+import { BabyChecklist } from "./baby-checklist";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -108,6 +111,52 @@ export function BabyClient({
     }
   }
 
+  // ── 체크리스트 ──
+  async function addCheck(text: string) {
+    if (!baby) return;
+    const res = await fetch("/api/baby-checklist", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ babyId: baby.id, text }),
+    }).catch(() => null);
+    if (!res || !res.ok) return;
+    const created: BabyChecklistItem = await res.json();
+    setBaby((b) => (b ? { ...b, checklist: [...b.checklist, created] } : b));
+  }
+
+  async function addDefaultChecks() {
+    if (!baby) return;
+    const res = await fetch("/api/baby-checklist", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ babyId: baby.id, texts: DEFAULT_CHECKLIST }),
+    }).catch(() => null);
+    if (!res || !res.ok) return;
+    const created: BabyChecklistItem[] = await res.json();
+    setBaby((b) => (b ? { ...b, checklist: [...b.checklist, ...created] } : b));
+  }
+
+  async function toggleCheck(item: BabyChecklistItem) {
+    const next = !item.done;
+    setBaby((b) => (b ? { ...b, checklist: b.checklist.map((c) => (c.id === item.id ? { ...c, done: next } : c)) } : b));
+    const res = await fetch(`/api/baby-checklist/${item.id}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ done: next }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      setBaby((b) => (b ? { ...b, checklist: b.checklist.map((c) => (c.id === item.id ? { ...c, done: item.done } : c)) } : b));
+    }
+  }
+
+  async function removeCheck(id: string) {
+    if (!baby) return;
+    const prev = baby.checklist;
+    setBaby((b) => (b ? { ...b, checklist: b.checklist.filter((c) => c.id !== id) } : b));
+    const res = await fetch(`/api/baby-checklist/${id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) setBaby((b) => (b ? { ...b, checklist: prev } : b));
+  }
+
   // ── 아기 없음: 첫 설정 ──
   if (!baby) {
     return (
@@ -129,16 +178,32 @@ export function BabyClient({
 
       <BabyHero baby={baby} entries={baby.entries} onOpenSettings={() => setSettingsOpen(true)} />
 
-      <EntryTimeline
-        entries={baby.entries}
-        filter={filter}
-        onFilterChange={setFilter}
-        dueDate={baby.dueDate}
-        birthDate={baby.birthDate}
-        onEdit={(e) => setEntryModal(e)}
-        onDelete={deleteEntry}
-        onCreate={() => setEntryModal("new")}
-      />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:order-2">
+          <div className="lg:sticky lg:top-6">
+            <BabyChecklist
+              items={baby.checklist}
+              color={baby.color}
+              onAdd={addCheck}
+              onAddDefaults={addDefaultChecks}
+              onToggle={toggleCheck}
+              onRemove={removeCheck}
+            />
+          </div>
+        </div>
+        <div className="lg:order-1 lg:col-span-2">
+          <EntryTimeline
+            entries={baby.entries}
+            filter={filter}
+            onFilterChange={setFilter}
+            dueDate={baby.dueDate}
+            birthDate={baby.birthDate}
+            onEdit={(e) => setEntryModal(e)}
+            onDelete={deleteEntry}
+            onCreate={() => setEntryModal("new")}
+          />
+        </div>
+      </div>
 
       {settingsOpen && (
         <BabySettingsModal baby={baby} onClose={() => setSettingsOpen(false)} onSave={saveSettings} />
