@@ -29,6 +29,7 @@ model FamilyMember {
   boardPosts    BoardPost[]
   shoppingItems ShoppingItem[]
   anniversaries Anniversary[]
+  babyEntries   BabyEntry[]
 
   // 나중에 Google 로그인 시 연결 (선택)
   userId String? @unique
@@ -270,6 +271,55 @@ model Decoration {
   createdAt DateTime @default(now())
 
   @@index([page])
+}
+
+// ─────────────────────────────────────────────
+// 아기 — 임신 중엔 태명+예정일, 출생 후엔 출생일을 채워 성장 일기로 이어감.
+// UI는 아기 1명(createdAt 최신)만 다룬다.
+// ─────────────────────────────────────────────
+model Baby {
+  id         String    @id @default(cuid())
+  nickname   String // 태명 (예: "콩이")
+  emoji      String    @default("🌱")
+  color      String    @default("rose") // 팔레트 키
+  dueDate    DateTime // 출산 예정일
+  birthDate  DateTime? // 출생일 (출생 후)
+  showOnHome Boolean   @default(false) // 홈 대시보드 카드 노출
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  entries   BabyEntry[]
+  checklist BabyChecklistItem[]
+}
+
+// 아기 기록 — kind: "diary"(일상) | "checkup"(검진) | "letter"(편지)
+// 검진 기록의 date 가 미래면 "다음 검진"으로 히어로에 표시.
+model BabyEntry {
+  id        String   @id @default(cuid())
+  babyId    String
+  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  date      DateTime // 기록 날짜 (하루 단위)
+  kind      String   @default("diary")
+  mood      String? // 컨디션 이모지 (일상 기록용)
+  content   String // 마크다운
+  authorId  String?
+  author    FamilyMember? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([babyId, date])
+}
+
+model BabyChecklistItem {
+  id        String   @id @default(cuid())
+  babyId    String
+  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  text      String
+  done      Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([babyId])
 }
 
 // ─────────────────────────────────────────────
