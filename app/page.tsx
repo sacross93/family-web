@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { Card, Tag, Avatar, EmptyState } from "@/components/ui";
-import { kDate, kDateShort, kTime, dday, startOfDay } from "@/lib/date";
+import { kDate, kDateShort, kTime, dday, startOfDay, pregnancyProgress, weekLabel, daysSinceBirth } from "@/lib/date";
+import { kindMeta } from "@/app/baby/baby-meta";
 import { getSiteConfig } from "@/lib/site";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,7 +26,7 @@ async function getData() {
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
-  const [members, todayTodos, events, annis, albums, photos, posts, shopping, plan] =
+  const [members, todayTodos, events, annis, albums, photos, posts, shopping, plan, baby] =
     await Promise.all([
       prisma.familyMember.findMany({ orderBy: { createdAt: "asc" } }),
       prisma.todo.findMany({
@@ -56,6 +57,17 @@ async function getData() {
         orderBy: { startDate: "asc" },
         include: { _count: { select: { items: true } } },
       }),
+      prisma.baby.findFirst({
+        where: { showOnHome: true },
+        orderBy: { createdAt: "desc" },
+        include: {
+          entries: {
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            include: { author: true },
+          },
+        },
+      }),
     ]);
 
   const upcomingAnnis = annis
@@ -63,7 +75,7 @@ async function getData() {
     .sort((a, b) => a.d.days - b.d.days)
     .slice(0, 4);
 
-  return { members, todayTodos, events, upcomingAnnis, albums, photos, posts, shopping, plan };
+  return { members, todayTodos, events, upcomingAnnis, albums, photos, posts, shopping, plan, baby };
 }
 
 function DashCard({
@@ -116,6 +128,7 @@ export default async function HomePage() {
     posts,
     shopping,
     plan,
+    baby,
   } = await getData();
   const site = await getSiteConfig();
 
@@ -155,7 +168,44 @@ export default async function HomePage() {
       </section>
 
       {/* ── 대시보드 그리드 ── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* 아기 (홈 표시가 켜진 경우만) */}
+        {baby && (() => {
+          const born = !!baby.birthDate;
+          const p = pregnancyProgress(baby.dueDate);
+          const latest = baby.entries[0];
+          return (
+            <DashCard
+              href="/baby"
+              emoji={baby.emoji}
+              title={baby.nickname}
+              color={baby.color}
+              action="일기 보기"
+              className="sm:col-span-2 lg:col-span-3"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-num text-3xl font-bold leading-none text-ink">
+                    {born ? `${daysSinceBirth(baby.birthDate!)}일` : weekLabel(p)}
+                  </span>
+                  <Tag color={baby.color} className="font-num">
+                    {born ? "태어난 지" : `출산 ${p.dueLabel}`}
+                  </Tag>
+                </div>
+                {latest ? (
+                  <p className="min-w-0 flex-1 truncate text-sm text-ink-soft">
+                    <span className="mr-1">{kindMeta(latest.kind).emoji}</span>
+                    {latest.author && <span className="mr-1 font-semibold text-ink">{latest.author.name}</span>}
+                    {latest.content.split("\n")[0].replace(/^[#>*\-\s]+/, "")}
+                  </p>
+                ) : (
+                  <p className="text-sm text-ink-faint">아직 기록이 없어요. 첫 이야기를 남겨볼까요?</p>
+                )}
+              </div>
+            </DashCard>
+          );
+        })()}
+
         {/* 오늘 할일 */}
         <DashCard href="/todos" emoji="✅" title="오늘 할일" color="rose">
           {todayTodos.length === 0 ? (

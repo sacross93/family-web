@@ -21,6 +21,9 @@ function addDays(base: Date, days: number) {
 async function main() {
   console.log("🌱 기존 데이터 정리...");
   // FK 순서 고려하여 삭제
+  await prisma.babyChecklistItem.deleteMany();
+  await prisma.babyEntry.deleteMany();
+  await prisma.baby.deleteMany();
   await prisma.photo.deleteMany();
   await prisma.album.deleteMany();
   await prisma.planChecklistItem.deleteMany();
@@ -256,6 +259,50 @@ async function main() {
       { name: "세제", quantity: "1통", category: "mint", addedById: appa.id, sortOrder: 3 },
       { name: "여행용 선크림", quantity: "2개", category: "peach", addedById: appa.id, sortOrder: 4 },
       { name: "강아지 사료", quantity: "1봉", category: "peach", done: true, addedById: eomma.id, sortOrder: 5 },
+    ],
+  });
+
+  console.log("🌱 아기...");
+  const baby = await prisma.baby.create({
+    data: {
+      nickname: "콩이",
+      emoji: "🌱",
+      color: "rose",
+      dueDate: addDays(today(), 245), // 오늘 기준 5주 0일
+      showOnHome: false,
+    },
+  });
+  await prisma.babyEntry.createMany({
+    data: [
+      {
+        babyId: baby.id,
+        date: addDays(today(), -2),
+        kind: "diary",
+        mood: "🤢",
+        content: "아침에 입덧이 좀 있었어요. 크래커가 도와줬어요 🍘",
+        authorId: eomma.id,
+      },
+      {
+        babyId: baby.id,
+        date: addDays(today(), -2),
+        kind: "letter",
+        content: "콩아, 엄마가 오늘 조금 힘들었대. 아빠가 미역국 끓였어. 건강하게 자라줘 💌",
+        authorId: appa.id,
+      },
+      {
+        babyId: baby.id,
+        date: addDays(today(), 12),
+        kind: "checkup",
+        content: "다음 병원 방문. 초음파 예정 🩺",
+        authorId: eomma.id,
+      },
+    ],
+  });
+  await prisma.babyChecklistItem.createMany({
+    data: [
+      { babyId: baby.id, text: "산모수첩 챙기기", done: true, sortOrder: 0 },
+      { babyId: baby.id, text: "다닐 병원 정하기", sortOrder: 1 },
+      { babyId: baby.id, text: "태명 정하기 🌱", done: true, sortOrder: 2 },
     ],
   });
 

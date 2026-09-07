@@ -16,6 +16,7 @@ export const NAV: NavItem[] = [
   { href: "/calendar", label: "캘린더", emoji: "📅", color: "peach", desc: "가족 일정 달력" },
   { href: "/todos", label: "할일", emoji: "✅", color: "rose", desc: "그날그날 할일" },
   { href: "/anniversaries", label: "기념일", emoji: "🎉", color: "butter", desc: "생일·기념일 D-day" },
+  { href: "/baby", label: "아기", emoji: "🌱", color: "rose", desc: "함께 쓰는 아기 일기" },
   { href: "/board", label: "게시판", emoji: "💬", color: "lavender", desc: "가족 한마디" },
   { href: "/shopping", label: "장보기", emoji: "🛒", color: "mint", desc: "공유 장보기 목록" },
 ];

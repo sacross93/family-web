@@ -31,6 +31,12 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 새 계정: `npm run user:add`. 공유 계정 `wlsdud022`(관리자). 모든 IP 접속: `npm run dev:lan`.
 - `middleware.ts`는 `lib/session.ts`만 import (jose). prisma/next-headers/bcrypt는 route(nodejs)에서만.
 
+## 아기 페이지 (`/baby`)
+- 모델 `Baby`(태명·예정일·출생일·showOnHome) · `BabyEntry`(kind: diary|checkup|letter, 작성자=FamilyMember) · `BabyChecklistItem`. 사진은 마크다운 이미지로.
+- 주차 계산은 `lib/date.ts`의 `pregnancyProgress(dueDate)`·`weekLabel`·`daysSinceBirth`·`dueDateFromLmp` (vitest: `npm test`). 분기 경계 14주/28주.
+- UI 파일은 `app/baby/*` 책임별 분리(setup·hero·settings-modal·entry-modal·entry-timeline·checklist). 종류 메타·기본 체크리스트는 `app/baby/baby-meta.ts`.
+- 의료 시기·국가 제도 문구를 UI에 넣지 않는다. 홈 노출은 `showOnHome` 토글일 때만. 스펙: `docs/superpowers/specs/2026-09-08-baby-page-design.md`.
+
 ## 마크다운 글쓰기
 - `components/markdown-editor.tsx`(툴바·단축키 ⌘B/I/K·미리보기·이미지 업로드·목록 자동이음) + `components/markdown-view.tsx`(react-markdown+remark-gfm). 렌더 스타일은 globals.css `.md-content`.
 - 적용처: 게시판 글(작성/수정/표시), 계획 설명·일정 메모. 새 글쓰기 UI엔 MarkdownEditor를 쓸 것.
