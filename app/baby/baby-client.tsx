@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader } from "@/components/ui";
-import type { BabyDetail, FamilyMember, Baby } from "@/lib/types";
+import { Plus } from "lucide-react";
+import { PageHeader, Button } from "@/components/ui";
+import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor } from "@/lib/types";
 import { BabySetup, type BabySetupPayload } from "./baby-setup";
 import { BabyHero } from "./baby-hero";
 import { BabySettingsModal, type BabySettingsPatch } from "./baby-settings-modal";
+import { EntryModal, type EntryPayload } from "./entry-modal";
+import { EntryTimeline, type EntryFilter } from "./entry-timeline";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -21,9 +24,11 @@ export function BabyClient({
   initialBaby: BabyDetail | null;
   members: FamilyMember[];
 }) {
-  void members; // Task 5에서 사용
   const [baby, setBaby] = useState<BabyDetail | null>(initialBaby);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filter, setFilter] = useState<EntryFilter>("all");
+  // null=닫힘, "new"=새 기록, entry=수정
+  const [entryModal, setEntryModal] = useState<"new" | BabyEntryWithAuthor | null>(null);
 
   // ── 아기 생성 / 설정 ──
   async function createBaby(payload: BabySetupPayload) {
@@ -58,6 +63,51 @@ export function BabyClient({
     setBaby((b) => (b ? { ...b, ...updated } : b));
   }
 
+  // ── 기록 ──
+  function sortEntries(list: BabyEntryWithAuthor[]) {
+    return [...list].sort((a, b) => {
+      const d = new Date(b.date).getTime() - new Date(a.date).getTime();
+      return d !== 0 ? d : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }
+
+  async function saveEntry(payload: EntryPayload): Promise<boolean> {
+    if (!baby) return false;
+    const editing = entryModal && entryModal !== "new" ? entryModal : null;
+    const res = await fetch(editing ? `/api/baby-entries/${editing.id}` : "/api/baby-entries", {
+      method: editing ? "PATCH" : "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(editing ? payload : { babyId: baby.id, ...payload }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      alert(res ? await readError(res, "기록을 저장하지 못했어요.") : "기록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return false;
+    }
+    const saved: BabyEntryWithAuthor = await res.json();
+    setBaby((b) =>
+      b
+        ? {
+            ...b,
+            entries: sortEntries(editing ? b.entries.map((e) => (e.id === saved.id ? saved : e)) : [saved, ...b.entries]),
+          }
+        : b
+    );
+    return true;
+  }
+
+  async function deleteEntry(entry: BabyEntryWithAuthor) {
+    if (!baby) return;
+    if (!confirm("이 기록을 지울까요?")) return;
+    const prev = baby.entries;
+    setBaby((b) => (b ? { ...b, entries: b.entries.filter((e) => e.id !== entry.id) } : b));
+    setEntryModal(null);
+    const res = await fetch(`/api/baby-entries/${entry.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      setBaby((b) => (b ? { ...b, entries: prev } : b));
+      alert("기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
   // ── 아기 없음: 첫 설정 ──
   if (!baby) {
     return (
@@ -71,12 +121,36 @@ export function BabyClient({
   // ── 아기 있음 ──
   return (
     <div className="flex flex-col gap-6 pb-24">
-      <PageHeader emoji={baby.emoji} title={baby.nickname} description="함께 쓰는 아기 일기" />
+      <PageHeader emoji={baby.emoji} title={baby.nickname} description="함께 쓰는 아기 일기">
+        <Button onClick={() => setEntryModal("new")}>
+          <Plus className="h-4 w-4" /> 기록 남기기
+        </Button>
+      </PageHeader>
 
       <BabyHero baby={baby} entries={baby.entries} onOpenSettings={() => setSettingsOpen(true)} />
 
+      <EntryTimeline
+        entries={baby.entries}
+        filter={filter}
+        onFilterChange={setFilter}
+        dueDate={baby.dueDate}
+        birthDate={baby.birthDate}
+        onEdit={(e) => setEntryModal(e)}
+        onDelete={deleteEntry}
+        onCreate={() => setEntryModal("new")}
+      />
+
       {settingsOpen && (
         <BabySettingsModal baby={baby} onClose={() => setSettingsOpen(false)} onSave={saveSettings} />
+      )}
+      {entryModal && (
+        <EntryModal
+          members={members}
+          initial={entryModal === "new" ? null : entryModal}
+          onClose={() => setEntryModal(null)}
+          onSave={saveEntry}
+          onDelete={entryModal === "new" ? undefined : () => deleteEntry(entryModal)}
+        />
       )}
     </div>
   );
