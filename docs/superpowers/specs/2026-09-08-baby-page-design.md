@@ -159,7 +159,7 @@ PageHeader 우측 `Button primary "+ 기록 남기기"` → `Modal`:
 
 | 경로 | 메서드 | 본문 | 동작 |
 |---|---|---|---|
-| `/api/baby` | POST | `nickname`, `dueDate`(ISO) 또는 `lmpDate`(ISO), `emoji?`, `color?` | 생성. 둘 다 없으면 400. `lmpDate`만 오면 `dueDateFromLmp`. 반환 Baby |
+| `/api/baby` | POST | `nickname`, `dueDate`(yyyy-MM-dd) 또는 `lmpDate`(yyyy-MM-dd), `emoji?`, `color?` | 생성. 둘 다 없으면 400. `lmpDate`만 오면 `dueDateFromLmp`. 반환 Baby |
 | `/api/baby` | PATCH | `id`, 부분 필드 `nickname` `emoji` `color` `dueDate` `birthDate`(null 허용) `showOnHome` | 부분 수정. 반환 Baby |
 | `/api/baby-entries` | POST | `babyId`, `date`, `kind`, `mood?`, `content`, `authorId?` | `kind`는 3종 외면 `diary`. `content` 빈값 400. 반환 entry(+author) |
 | `/api/baby-entries/[id]` | PATCH | `date?` `kind?` `mood?`(null 허용) `content?` `authorId?` | 반환 entry(+author) |
