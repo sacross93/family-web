@@ -13,6 +13,7 @@ export default async function BabyPage() {
           include: { author: true },
         },
         checklist: { orderBy: { sortOrder: "asc" } },
+        links: { orderBy: { sortOrder: "asc" } },
       },
     }),
     prisma.familyMember.findMany({ orderBy: { createdAt: "asc" } }),

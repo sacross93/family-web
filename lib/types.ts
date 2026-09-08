@@ -15,6 +15,7 @@ import type {
   Baby,
   BabyEntry,
   BabyChecklistItem,
+  BabyLink,
 } from "@prisma/client";
 
 export type {
@@ -32,6 +33,7 @@ export type {
   Baby,
   BabyEntry,
   BabyChecklistItem,
+  BabyLink,
 };
 
 export type AlbumWithCount = Album & { _count: { photos: number } };
@@ -51,4 +53,5 @@ export type BabyEntryWithAuthor = BabyEntry & { author: FamilyMember | null };
 export type BabyDetail = Baby & {
   entries: BabyEntryWithAuthor[];
   checklist: BabyChecklistItem[];
+  links: BabyLink[];
 };

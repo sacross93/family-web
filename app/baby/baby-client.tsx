@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PageHeader, Button } from "@/components/ui";
-import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem } from "@/lib/types";
+import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem, BabyLink } from "@/lib/types";
 import { fromDateInput } from "@/lib/date";
 import { BabySetup, type BabySetupPayload } from "./baby-setup";
 import { BabyHero } from "./baby-hero";
@@ -12,6 +12,7 @@ import { EntryModal, type EntryPayload } from "./entry-modal";
 import { EntryTimeline, type EntryFilter } from "./entry-timeline";
 import { DEFAULT_CHECKLIST } from "./baby-meta";
 import { BabyChecklist } from "./baby-checklist";
+import { BabyLinks } from "./baby-links";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -45,7 +46,7 @@ export function BabyClient({
       return;
     }
     const created: Baby = await res.json();
-    setBaby({ ...created, entries: [], checklist: [] });
+    setBaby({ ...created, entries: [], checklist: [], links: [] });
   }
 
   async function saveSettings(patch: BabySettingsPatch) {
@@ -157,6 +158,42 @@ export function BabyClient({
     if (!res || !res.ok) setBaby((b) => (b ? { ...b, checklist: prev } : b));
   }
 
+  // ── 참고 사이트 ──
+  async function addLink(url: string, title: string) {
+    if (!baby) return;
+    const res = await fetch("/api/baby-links", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ babyId: baby.id, url, title }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      alert(res ? await readError(res, "사이트를 저장하지 못했어요.") : "사이트를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+    const created: BabyLink = await res.json();
+    setBaby((b) => (b ? { ...b, links: [...b.links, created] } : b));
+  }
+
+  async function editLinkTitle(id: string, title: string) {
+    if (!baby) return;
+    const prev = baby.links;
+    setBaby((b) => (b ? { ...b, links: b.links.map((l) => (l.id === id ? { ...l, title } : l)) } : b));
+    const res = await fetch(`/api/baby-links/${id}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ title }),
+    }).catch(() => null);
+    if (!res || !res.ok) setBaby((b) => (b ? { ...b, links: prev } : b));
+  }
+
+  async function removeLink(id: string) {
+    if (!baby) return;
+    const prev = baby.links;
+    setBaby((b) => (b ? { ...b, links: b.links.filter((l) => l.id !== id) } : b));
+    const res = await fetch(`/api/baby-links/${id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) setBaby((b) => (b ? { ...b, links: prev } : b));
+  }
+
   // ── 아기 없음: 첫 설정 ──
   if (!baby) {
     return (
@@ -179,8 +216,8 @@ export function BabyClient({
       <BabyHero baby={baby} entries={baby.entries} onOpenSettings={() => setSettingsOpen(true)} />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:order-2">
-          <div className="lg:sticky lg:top-6">
+        <div className="min-w-0 lg:order-2">
+          <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-6">
             <BabyChecklist
               items={baby.checklist}
               color={baby.color}
@@ -188,6 +225,13 @@ export function BabyClient({
               onAddDefaults={addDefaultChecks}
               onToggle={toggleCheck}
               onRemove={removeCheck}
+            />
+            <BabyLinks
+              items={baby.links}
+              color={baby.color}
+              onAdd={addLink}
+              onEditTitle={editLinkTitle}
+              onRemove={removeLink}
             />
           </div>
         </div>

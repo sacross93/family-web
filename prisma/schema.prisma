@@ -290,6 +290,7 @@ model Baby {
 
   entries   BabyEntry[]
   checklist BabyChecklistItem[]
+  links     BabyLink[]
 }
 
 // 아기 기록 — kind: "diary"(일상) | "checkup"(검진) | "letter"(편지)
@@ -316,6 +317,19 @@ model BabyChecklistItem {
   baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   text      String
   done      Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([babyId])
+}
+
+// 아기 관련 참고 사이트 — url + 사용자가 쓴 한 줄 설명(title). title이 비면 도메인으로 표시.
+model BabyLink {
+  id        String   @id @default(cuid())
+  babyId    String
+  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  url       String
+  title     String   @default("")
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
