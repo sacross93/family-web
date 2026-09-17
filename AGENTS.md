@@ -50,7 +50,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 토큰은 `AgentAuth` 에 암호화 저장, 주입은 `npm run agent:auth`. **`AUTH_SECRET` 또는 `crypto.ts` 의 `KEY_DOMAIN` 이 바뀌면 기존 토큰을 못 읽는다** — 배포 전 [DEPLOY.md](DEPLOY.md) 6절 필독.
 - **2단계(라우트·UI)가 지켜야 할 것** — 엔진이 강제하지 못하는 부분이라 여기 적어 둔다.
   - `ToolContext.origin` 을 `Host`/`X-Forwarded-Host` 헤더에서 만들지 말 것. 세션 쿠키가 공격자 서버로 나간다 — 환경변수나 고정 상수에서.
-  - `decoration` 의 `listPath` `/decorations` 는 **실재하지 않는 가상 경로**다(`app/decorations/` 없음). 결과 카드에서 그리로 보내면 404.
+  - `listPath` 중 `/decorations`(꾸미기)·`/family`(가족)는 **실재하지 않는 가상 경로**다(`app/decorations/`·`app/family/` 없음 — 리소스끼리 겹치지 않게 둔 자리표시자). 결과 카드에서 그리로 보내면 404.
   - `runAgent` 는 최종 `messages` 를 반환하지 않는다. 라우트가 대화 기록을 보관할 땐 assistant 의 `toolCalls` 와 tool 의 `toolCallId` 를 **짝째로** 저장해야 네이티브 도구 모드가 그 경계에서 안 깨진다.
   - `/api/agent` 의 `maxDuration` 은 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유보다 크게. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
 

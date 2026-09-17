@@ -37,25 +37,38 @@ app/api/agent/route.ts          SSE 엔드포인트 (대화 1턴)
       │    └ fake.ts            테스트용 (대본 재생)
       ├ lib/agent/catalog.ts    1층 — 목차 생성
       ├ lib/agent/tools.ts      2층 — 도구 스키마 생성 + 실행
-      ├ lib/agent/registry.ts   ⭐ 리소스 단일 진실 원천
+      ├ lib/agent/resources.ts  ⭐ 리소스 단일 진실 원천 (RESOURCES 16종)
+      ├ lib/agent/registry.ts   타입 + 경로 해석기 (데이터는 없다)
       └ lib/agent/auth.ts       Codex 토큰 저장·갱신
 
 components/agent/agent-fab.tsx    꾸미기 옆 버튼
 components/agent/agent-sheet.tsx  대화 시트 (모바일 우선)
 ```
 
-**설계 중심축: 하드코딩 금지.** 리소스마다 if/else 를 쓰지 않는다. `registry.ts` 한 곳에 리소스를 선언하면 목차·도구 스키마·경로 해석·추가·되돌리기가 **전부 거기서 파생**된다. 새 기능이 생기면 레지스트리에 한 줄 추가로 끝난다.
+**설계 중심축: 하드코딩 금지.** 리소스마다 if/else 를 쓰지 않는다. `resources.ts` 한 곳에 리소스를 선언하면 목차·도구 스키마·경로 해석·추가·되돌리기가 **전부 거기서 파생**된다. 새 기능이 생기면 `RESOURCES` 에 한 항목 추가로 끝난다.
 
 ---
 
-## 3. 리소스 레지스트리 (`lib/agent/registry.ts`)
+## 3. 리소스 선언 (`lib/agent/resources.ts`)
+
+**리소스는 `lib/agent/resources.ts` 의 `RESOURCES` 배열 한 곳에만 선언한다.** 목차·도구 스키마·경로 해석·추가·되돌리기가 전부 거기서 파생된다.
+
+`lib/agent/registry.ts` 에는 **타입과 해석기만** 둔다 — `AgentResource`·`CreateSpec`·`CatalogEntry`·`ToolSchema`·`JsonSchema` 와 `findResource()`·`detailPath()`·`resolvePath()`. 리소스 데이터는 들어가지 않는다.
 
 ```ts
+// registry.ts — 타입
 export interface AgentResource {
   key: string;                      // "album" — 도구 인자로 쓰는 식별자
   label: string;                    // "앨범" — LLM·사용자에게 보이는 이름
   listPath: string;                 // "/albums"
-  detailPath?: (id: string) => string;
+
+  /**
+   * "/plans/:id" — 함수가 아니라 **패턴 문자열**이다.
+   * `open_page("/plans/abc")` 를 해석하려면 경로를 되짚어 id 를 뽑아야 하는데,
+   * `(id) => string` 함수로는 결과에서 id 를 되뽑을 수 없다(역방향이 막힌다).
+   * 패턴이면 양방향이 된다 — 정방향 `detailPath()`, 역방향 `resolvePath()`.
+   */
+  detailPattern?: string;
 
   /** 1층 목차 한 줄. 제목·날짜·개수 수준으로만. */
   catalog(): Promise<CatalogEntry[]>;
@@ -64,45 +77,53 @@ export interface AgentResource {
   detail?(id: string): Promise<unknown>;
 
   /** 추가 가능한 리소스만 정의. 없으면 agent는 추가할 수 없다. */
-  create?: {
-    api: string;                    // "/api/baby-links"
-    /** LLM 에게 주는 설명 + 인자 스키마 (JSON Schema) */
-    describe: string;
-    schema: JsonSchema;
-    /** 서버가 인자를 API 본문으로 바꾼다. 문맥(babyId 등)은 여기서 채운다. */
-    toBody(args: Record<string, unknown>): Promise<Record<string, unknown>>;
-    /** 되돌리기 경로. 없으면 되돌릴 수 없는 추가로 표시한다. */
-    undoApi?: (id: string) => string;
-  };
+  create?: CreateSpec;
+}
+
+export interface CreateSpec {
+  api: string;                      // "/api/baby-links"
+  /** LLM 에게 주는 설명 + 인자 스키마 (JSON Schema) */
+  describe: string;
+  schema: JsonSchema;
+  /** 서버가 인자를 API 본문으로 바꾼다. 문맥(babyId 등)은 여기서 채운다. */
+  toBody(args: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** 되돌리기 경로. 없으면 되돌릴 수 없는 추가로 표시한다. */
+  undoApi?: (id: string) => string;
 }
 
 export interface CatalogEntry {
   id?: string;
   title: string;
   hint?: string;        // "2026-07 · 사진 12"
-  path?: string;
 }
 ```
 
-**1단계 등록 리소스**
+**1단계 등록 리소스 (16종)**
 
-| key | label | 목차 | 상세 | 추가 | 되돌리기 |
-|---|---|---|---|---|---|
-| `album` | 앨범 | 제목·날짜·사진수 | 사진 목록 | ✅ `/api/albums` | `DELETE /api/albums/[id]` |
-| `photo` | 사진 | (앨범 목차에 개수만) | — | ✅ `/api/photos` | `DELETE /api/photos/[id]` |
-| `plan` | 계획 | 제목·기간 | 일정·체크리스트·메모 | ✅ `/api/plans` | `DELETE /api/plans/[id]` |
-| `planItem` | 일정 | — | — | ✅ `/api/plan-items` | `DELETE /api/plan-items/[id]` |
-| `planChecklist` | 계획 준비물 | — | — | ✅ `/api/plan-checklist` | `DELETE /api/plan-checklist/[id]` |
-| `todo` | 할일 | 날짜·제목·완료 | — | ✅ `/api/todos` | `DELETE /api/todos/[id]` |
-| `event` | 캘린더 | 날짜·제목 | — | ✅ `/api/events` | `DELETE /api/events/[id]` |
-| `anniversary` | 기념일 | 날짜·제목 | — | ✅ `/api/anniversaries` | `DELETE /api/anniversaries/[id]` |
-| `board` | 게시판 | 작성자·앞부분 | 본문 | ✅ `/api/board` | `DELETE /api/board/[id]` |
-| `shopping` | 장보기 | 이름·완료 | — | ✅ `/api/shopping` | `DELETE /api/shopping/[id]` |
-| `baby` | 아기 | 태명·예정일·주차 | 기록·체크리스트·참고사이트 | — | — |
-| `babyEntry` | 아기 기록 | 개수만 | — | ✅ `/api/baby-entries` | `DELETE /api/baby-entries/[id]` |
-| `babyChecklist` | 아기 준비물 | — | — | ✅ `/api/baby-checklist` | `DELETE /api/baby-checklist/[id]` |
-| `babyLink` | 아기 참고 사이트 | 개수만 | — | ✅ `/api/baby-links` | `DELETE /api/baby-links/[id]` |
-| `decoration` | 꾸미기 스티커 | 페이지별 개수 | 좌표·크기·회전 | ✅ `/api/decorations` | `DELETE /api/decorations/[id]` |
+| key | label | listPath | 목차 한 줄 | 상세 | 추가 | 되돌리기 |
+|---|---|---|---|---|---|---|
+| `familyMember` | 가족 | `/family` ⚠️ | 이름·역할 | — | — (읽기 전용) | — |
+| `album` | 앨범 | `/albums` · `/albums/:id` | 제목·날짜·사진수 | ✅ 사진 목록 | `/api/albums` | `DELETE /api/albums/[id]` |
+| `photo` | 사진 | `/albums` | 총 장수만 | — | `/api/photos` | `DELETE /api/photos/[id]` |
+| `plan` | 계획 | `/plans` · `/plans/:id` | 제목·기간·일정수 | ✅ 일정·체크리스트·메모 | `/api/plans` | `DELETE /api/plans/[id]` |
+| `planItem` | 계획 일정 | `/plans` | 총 개수만 | — | `/api/plan-items` | `DELETE /api/plan-items/[id]` |
+| `planChecklist` | 계획 준비 체크리스트 | `/plans` | 총 개수만 | — | `/api/plan-checklist` | `DELETE /api/plan-checklist/[id]` |
+| `todo` | 할일 | `/todos` | 미완료 날짜·제목 + 완료 건수 | — | `/api/todos` | `DELETE /api/todos/[id]` |
+| `event` | 캘린더 일정 | `/calendar` | 날짜·시각·장소·제목 | — | `/api/events` | `DELETE /api/events/[id]` |
+| `anniversary` | 기념일 | `/anniversaries` | 날짜·제목 (D-day 순, 지난 것은 뒤로) | — | `/api/anniversaries` | `DELETE /api/anniversaries/[id]` |
+| `board` | 게시판 글 | `/board` | 첫 줄·날짜·작성자 | — | `/api/board` | `DELETE /api/board/[id]` |
+| `shopping` | 장보기 | `/shopping` | 이름·수량·완료 | — | `/api/shopping` | `DELETE /api/shopping/[id]` |
+| `baby` | 아기 | `/baby` | 태명·예정일(또는 출생)·기록수 | — | — | — |
+| `babyEntry` | 아기 기록 | `/baby` | 총 개수만 | — | `/api/baby-entries` | `DELETE /api/baby-entries/[id]` |
+| `babyChecklist` | 아기 준비 체크리스트 | `/baby` | 총 개수·완료수 | — | `/api/baby-checklist` | `DELETE /api/baby-checklist/[id]` |
+| `babyLink` | 아기 참고 사이트 | `/baby` | 총 개수만 | — | `/api/baby-links` | `DELETE /api/baby-links/[id]` |
+| `decoration` | 꾸미기 스티커 | `/decorations` ⚠️ | 총 개수만 | — | `/api/decorations` | `DELETE /api/decorations/[id]` |
+
+⚠️ **`/family` 와 `/decorations` 는 실재하지 않는 가상 경로다**(`app/family/`·`app/decorations/` 가 없다). 가족만 모아 보는 페이지도, 스티커만 모아 보는 페이지도 없어서 `listPath` 가 다른 리소스와 겹치지 않도록 둔 자리표시자다(`decoration` 에 `"/"` 를 주면 홈 질문이 "스티커 목록"으로 해석된다). **결과 카드에서 사용자를 이 두 경로로 보내면 404 다.**
+
+- **`familyMember` 는 읽기 전용이다** — 에이전트가 가족 구성원을 만들어서는 안 된다. 그런데도 목차에 올리는 이유는, `todo`·`anniversary`·`board`·`shopping`·`babyEntry` 가 이름·역할로 사람을 찾기 때문이다. 목록이 없으면 LLM 이 이름을 지어내고 조회가 실패해 **추가가 통째로 깨진다**.
+- **`detail` 을 가진 건 `album`·`plan` 둘뿐이다.** 나머지는 목차로 답하거나 `list_resource` 로 펼친다.
+- LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범·계획은 제목으로, 아기는 1명으로, 가족은 이름(또는 역할)으로 찾아 `toBody` 가 id 를 채운다.
 
 `site-config` · `nav` · `auth` 는 등록하지 않는다(설정 변경은 범위 밖).
 
@@ -349,7 +370,7 @@ model AgentRun {
 
 ### 실측 완료 (2026-09-18, `POST https://chatgpt.com/backend-api/codex/responses`)
 
-탐침 4회 모두 HTTP 200. 원시 덤프는 `.superpowers/sdd/2026-09-17-site-agent-engine/probe-1..4` 와 `WIRE-FINDINGS.md`(저장소 밖, 로컬 작업 폴더).
+탐침 6회 모두 HTTP 200. 원시 덤프는 `.superpowers/sdd/2026-09-17-site-agent-engine/probe-1..4` · `probe-5a-structured.txt` · `probe-5b-flattened.txt` 와 `WIRE-FINDINGS.md`(저장소 밖, 로컬 작업 폴더).
 
 | 항목 | 결과 |
 |---|---|
@@ -359,16 +380,33 @@ model AgentRun {
 | 이미지 입력 | ✅ **지원** — `content` 가 `[{type:"input_text"},{type:"input_image"}]` 파트 배열을 받는다 → 3층(화면보기)이 기술적으로 가능 |
 | 스트림 종료 | ✅ **`response.completed`**. `[DONE]` 센티널은 **오지 않는다**(계획서 픽스처가 틀렸다 — 와도 무해하게 받아만 둔다) |
 | 도구 호출 식별자 | ✅ `response.output_item.done` 의 `item.call_id`(`call_…`). `item.id`(`fc_…`)와 **다르며**, 결과 짝짓기는 `call_id` 쪽 |
+| 2턴째 도구 결과 되돌려주기 | ✅ **양쪽 다 동작**(아래 참고). 한 턴에 도구가 1개일 땐 어느 쪽을 써도 같은 답을 받았다 |
+| `function_call_output` 수용 여부 | ✅ **받아 준다** — `{type:"function_call", call_id, name, arguments}` + `{type:"function_call_output", call_id, output}` 로 200 |
 
 부수 사실: `type:"reasoning"` 항목(`encrypted_content` 수 KB)과 모든 data 줄의 `obfuscation` 필드는 조용히 무시한다. 모르는 `type` 때문에 스트림 전체가 죽으면 안 된다.
+
+#### 도구 결과 되돌려주기 — 구조화를 택한 이유 (WIRE-FINDINGS §8)
+
+같은 조건으로 두 방식을 찔렀고 **둘 다 HTTP 200 에 같은 답변**("발리 계획은 3박 4일이에요.")을 받았다.
+
+| 방식 | 입력 형태 | 결과 |
+|---|---|---|
+| 5a 구조화 | `function_call` + `function_call_output` 을 `call_id` 로 묶음 | ✅ 200 |
+| 5b 평탄화 | assistant `"[도구 호출] …"` + user `"[도구 결과] …"` | ✅ 200 |
+
+**구조화로 간다.** 이유는 다중 호출이다 — 한 턴에 도구가 2개 이상 불리면 평탄화는 **순서로만** 짝을 복원할 수 있어, 어느 결과가 어느 호출의 것인지 모델이 헷갈릴 여지가 있다. 구조화는 `call_id` 로 명시적으로 묶인다. API 가 받아주는 것이 확인된 이상 더 취약한 쪽을 유지할 이유가 없다.
+
+**되돌릴 근거도 남겨 둔다**: 평탄화도 200 이므로, 구조화 쪽에서 문제가 생기면 위 표를 근거로 되돌려도 된다. 고장 난 상태에서 고치는 것이 아니다.
+
+> 📌 이 문서를 쓰는 시점(2026-09-18)의 `toInputItems()` 는 아직 **평탄화**한다 — 구조화 전환 작업이 진행 중이다.
+> 평탄화 규칙이 그 함수 한 곳에 모여 있으므로 전환도 그 함수만 바꾼다.
 
 ### 아직 미확인
 
 | 항목 | 지금 대응 | 확인되는 시점 |
 |---|---|---|
 | 토큰 갱신 본문 형식 (JSON vs form-encoded) | 양쪽 폴백 — JSON 먼저, 4xx 면 form-encoded 1회 재시도 | 첫 갱신(2026-09-27 즈음) 로그에 `refresh: json ok` / `refresh: form ok` 로 드러난다 |
-| 2턴째 도구 결과 되돌려주기 | 실측이 단일 턴뿐이라 미검증 | 2단계에서 실제 왕복을 태울 때 |
-| `function_call_output`·`role:"tool"` 아이템 수용 여부 | 받아 준다는 보장이 없어 `toInputItems()` 가 전부 사람이 읽는 텍스트로 평탄화한다 | 위와 같음. 받아 준다면 그 함수 하나만 고치면 된다 |
+| 한 턴에 도구 2개 이상일 때의 동작 | 구조화(`call_id` 짝짓기)로 대비 | 2단계에서 실제로 그런 질문을 태울 때 |
 
 **전부 `lib/agent/llm/codex.ts` 한 파일 안에서 흡수된다.** 루프·도구·화면은 바뀌지 않는다.
 
