@@ -121,47 +121,104 @@ async function lockRow(tx: Prisma.TransactionClient): Promise<{ accessToken: str
   return row;
 }
 
-interface RefreshResult extends ExpiryHint {
+export interface RefreshResult extends ExpiryHint {
   access_token: string;
   refresh_token?: string;
 }
 
-async function requestRefresh(refreshToken: string): Promise<RefreshResult> {
+/** 본문 형식. 어느 쪽이 맞는지 실측할 수 없어 둘 다 시도합니다(아래 requestRefresh 주석). */
+type RefreshEncoding = "json" | "form";
+
+type RefreshAttempt =
+  | { ok: true; value: RefreshResult }
+  | { ok: false; reason: "network" | "http" | "body"; status: number | null; code: string | null };
+
+function refreshPayload(encoding: RefreshEncoding, refreshToken: string) {
+  const fields = { client_id: CLIENT_ID, grant_type: "refresh_token", refresh_token: refreshToken };
+  return encoding === "json"
+    ? { contentType: "application/json", body: JSON.stringify(fields) }
+    : { contentType: "application/x-www-form-urlencoded", body: new URLSearchParams(fields).toString() };
+}
+
+/**
+ * 토큰을 갱신합니다. 본문 형식은 **JSON 먼저, 4xx 면 form-encoded 로 1회 재시도** 입니다.
+ * 상류 Codex CLI 는 JSON 을 쓰고(codex-rs/login/src/auth/manager.rs), 이 엔드포인트가
+ * form-encoded 를 받아준다는 것도 실측된 바 있어 — 어느 쪽이 refresh 에 맞는지는
+ * 실제 갱신 시점(토큰 만료 직전)까지 확인할 수 없습니다. 그래서 고르지 않고 둘 다 시도합니다.
+ * 테스트를 위해 fetch 를 주입할 수 있습니다.
+ */
+export async function requestRefresh(
+  refreshToken: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<RefreshResult> {
+  const first = await attemptRefresh("json", refreshToken, fetchImpl);
+  if (first.ok) {
+    console.warn("refresh: json ok");
+    return first.value;
+  }
+
+  // 4xx 는 "형식이 마음에 안 든다"일 수 있으니 다른 형식으로 한 번 더. 5xx·네트워크 오류는 형식 문제가 아닙니다.
+  if (first.reason === "http" && first.status !== null && first.status >= 400 && first.status < 500) {
+    const second = await attemptRefresh("form", refreshToken, fetchImpl);
+    if (second.ok) {
+      console.warn("refresh: form ok");
+      return second.value;
+    }
+    throw refreshError(second);
+  }
+  throw refreshError(first);
+}
+
+async function attemptRefresh(
+  encoding: RefreshEncoding,
+  refreshToken: string,
+  fetchImpl: typeof fetch
+): Promise<RefreshAttempt> {
+  const { contentType, body } = refreshPayload(encoding, refreshToken);
   let res: Response;
   try {
-    res = await fetch(TOKEN_URL, {
+    res = await fetchImpl(TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: CLIENT_ID,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
+      headers: { "Content-Type": contentType },
+      body,
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
   } catch {
     // 원인 객체에 요청 본문이 실릴 수 있으므로 그대로 올리지 않습니다.
-    throw new Error("토큰 갱신 요청을 보내지 못했어요 (네트워크 오류이거나 시간이 초과됐어요).");
+    return { ok: false, reason: "network", status: null, code: null };
   }
 
   if (!res.ok) {
-    const code = await oauthErrorCode(res);
-    throw new Error(
-      `토큰 갱신에 실패했어요 (HTTP ${res.status}${code ? ` · ${code}` : ""}). ` +
-        "`npm run agent:auth` 로 토큰을 다시 넣어 주세요."
-    );
+    return { ok: false, reason: "http", status: res.status, code: await oauthErrorCode(res) };
   }
 
-  const body = (await res.json().catch(() => null)) as Partial<RefreshResult> | null;
-  if (!body || typeof body.access_token !== "string" || !body.access_token) {
-    throw new Error("토큰 갱신 응답에 access_token 이 없어요.");
+  const parsed = (await res.json().catch(() => null)) as Partial<RefreshResult> | null;
+  if (!parsed || typeof parsed.access_token !== "string" || !parsed.access_token) {
+    return { ok: false, reason: "body", status: res.status, code: null };
   }
   return {
-    access_token: body.access_token,
-    refresh_token: typeof body.refresh_token === "string" ? body.refresh_token : undefined,
-    expires_in: typeof body.expires_in === "number" ? body.expires_in : undefined,
-    expires_at: typeof body.expires_at === "number" ? body.expires_at : undefined,
+    ok: true,
+    value: {
+      access_token: parsed.access_token,
+      refresh_token: typeof parsed.refresh_token === "string" ? parsed.refresh_token : undefined,
+      expires_in: typeof parsed.expires_in === "number" ? parsed.expires_in : undefined,
+      expires_at: typeof parsed.expires_at === "number" ? parsed.expires_at : undefined,
+    },
   };
+}
+
+/** 실패 사유를 사람이 읽을 문구로. 토큰 값은 들어가지 않습니다. */
+function refreshError(attempt: Extract<RefreshAttempt, { ok: false }>): Error {
+  if (attempt.reason === "network") {
+    return new Error("토큰 갱신 요청을 보내지 못했어요 (네트워크 오류이거나 시간이 초과됐어요).");
+  }
+  if (attempt.reason === "body") {
+    return new Error("토큰 갱신 응답에 access_token 이 없어요.");
+  }
+  return new Error(
+    `토큰 갱신에 실패했어요 (HTTP ${attempt.status}${attempt.code ? ` · ${attempt.code}` : ""}). ` +
+      "`npm run agent:auth` 로 토큰을 다시 넣어 주세요."
+  );
 }
 
 /** 오류 응답에서 짧은 코드(invalid_grant 등)만 뽑습니다. 본문을 그대로 쓰지 않습니다. */

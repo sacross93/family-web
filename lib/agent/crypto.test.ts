@@ -14,10 +14,22 @@ describe("secret 암호화", () => {
   it("같은 값도 매번 다른 암호문(IV 랜덤)", () => {
     expect(encryptSecret("x")).not.toBe(encryptSecret("x"));
   });
+  // 마지막 글자를 바꾸는 방식은 우연히 같은 바이트가 나올 수 있어(1/256) 깜빡입니다.
+  // 바이트를 확실히 뒤집어 GCM 인증이 반드시 실패하게 합니다.
+  function flipFirstByte(part: string): string {
+    const bytes = Buffer.from(part, "base64url");
+    bytes[0] ^= 0xff;
+    return bytes.toString("base64url");
+  }
+
   it("변조된 암호문은 예외", () => {
-    const blob = encryptSecret("x");
-    const bad = blob.slice(0, -2) + (blob.endsWith("a") ? "bb" : "aa");
-    expect(() => decryptSecret(bad)).toThrow();
+    const [iv, tag, ct] = encryptSecret("sk-refresh-abc.def.ghi").split(":");
+    expect(() => decryptSecret([iv, tag, flipFirstByte(ct)].join(":"))).toThrow();
+  });
+
+  it("변조된 인증 태그는 예외", () => {
+    const [iv, tag, ct] = encryptSecret("sk-refresh-abc.def.ghi").split(":");
+    expect(() => decryptSecret([iv, flipFirstByte(tag), ct].join(":"))).toThrow();
   });
   it("AUTH_SECRET 이 없으면 예외", () => {
     const keep = process.env.AUTH_SECRET;
