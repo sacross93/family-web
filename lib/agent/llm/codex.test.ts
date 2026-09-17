@@ -4,6 +4,12 @@ import type { AgentEvent, ToolSchema } from "@/lib/agent/llm/types";
 
 beforeAll(() => { process.env.AUTH_SECRET = "t"; });
 
+// 주입하지 않았을 때 쓰는 저장소 경로(`lib/agent/auth`)를 막습니다 — 테스트가 DB 를 타지 않게.
+vi.mock("@/lib/agent/auth", () => ({
+  getAccessToken: async () => "저장소토큰",
+  getAccountId: async () => "acc_저장소",
+}));
+
 function sse(lines: string[]): Response {
   return new Response(
     new ReadableStream({
@@ -310,28 +316,35 @@ describe("codex 공급자 — 토큰·재시도", () => {
     expect(bodyOf(f, 0).model).toBe("다른-모델");
   });
 
-  it("계정 id 가 있으면 chatgpt-account-id 헤더를 붙인다", async () => {
-    process.env.AGENT_ACCOUNT_ID = "acc_1";
+  it("주입이 없으면 저장소(lib/agent/auth)의 토큰·계정 id 를 쓴다", async () => {
     const f = vi.fn(async () => sse([W.completed]));
-    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch });
     await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
-    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_1");
+    expect(headersOf(f, 0).Authorization).toBe("Bearer 저장소토큰");
+    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_저장소");
   });
 
-  it("access_token(JWT) 클레임에서 계정 id 를 꺼낸다 (환경변수 없이)", async () => {
-    const claims = { "https://api.openai.com/auth": { chatgpt_account_id: "acc_jwt" } };
-    const jwt = ["헤더", Buffer.from(JSON.stringify(claims)).toString("base64url"), "서명"].join(".");
+  it("저장소의 계정 id 를 chatgpt-account-id 헤더에 넣는다", async () => {
     const f = vi.fn(async () => sse([W.completed]));
-    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token: async () => jwt });
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token, accountId: async () => "acc_db" });
     await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
-    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_jwt");
+    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_db");
   });
 
-  it("계정 id 를 알 수 없으면 헤더를 빼고 보낸다", async () => {
+  it("저장소에 없으면 환경변수로 넘어간다", async () => {
+    process.env.AGENT_ACCOUNT_ID = "acc_env";
     const f = vi.fn(async () => sse([W.completed]));
-    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token, accountId: async () => null });
     await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_env");
+  });
+
+  it("둘 다 없으면 헤더를 빼고 보낸다 (요청은 나간다)", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token, accountId: async () => null });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
     expect(headersOf(f, 0)["chatgpt-account-id"]).toBeUndefined();
+    expect(ev.at(-1)!.type).toBe("done");
   });
 });
 

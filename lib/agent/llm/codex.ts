@@ -28,6 +28,8 @@ export interface CodexProviderOptions {
   fetchImpl?: typeof fetch;
   /** 테스트용 토큰 주입. 없으면 `lib/agent/auth` 의 저장소를 씁니다(지연 import — 테스트가 DB 를 타지 않게). */
   token?: () => Promise<string>;
+  /** 테스트용 계정 id 주입. 없으면 `lib/agent/auth` 의 `getAccountId()`(지연 import). */
+  accountId?: () => Promise<string | null>;
 }
 
 // ── 작은 도우미 ──────────────────────────────────────────────────────────────
@@ -151,25 +153,21 @@ function buildBody(input: SendTurnInput, mode: WireToolMode): Json {
 }
 
 /**
- * `chatgpt-account-id` 헤더 값. access_token(JWT) 의 클레임에서 꺼내고, 없으면 환경변수,
- * 그것도 없으면 헤더를 붙이지 않습니다. **토큰은 어디에도 남기지 않습니다.**
+ * `chatgpt-account-id` 헤더 값: 저장소(`AgentAuth.accountId`) → `AGENT_ACCOUNT_ID` 환경변수 → 생략.
+ * 토큰을 주입 시점에 한 번 파싱해 넣어 둔 평문 값이라 요청마다 다시 디코드하지 않습니다.
+ * 저장소를 못 읽어도 헤더만 빠지고 요청은 나갑니다.
  */
-function accountIdFrom(accessToken: string): string | null {
-  const payload = accessToken.split(".")[1];
-  if (payload) {
-    try {
-      const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Json;
-      const auth = asObject(claims["https://api.openai.com/auth"]);
-      const fromClaim = asString(auth?.chatgpt_account_id) ?? asString(claims.chatgpt_account_id);
-      if (fromClaim) return fromClaim;
-    } catch {
-      // JWT 가 아니면 환경변수로 넘어갑니다.
-    }
+async function resolveAccountId(read: () => Promise<string | null>): Promise<string | null> {
+  try {
+    const stored = await read();
+    if (stored) return stored;
+  } catch {
+    // 토큰이 아직 안 들어왔을 수 있습니다 — 환경변수로 넘어갑니다.
   }
   return process.env.AGENT_ACCOUNT_ID || null;
 }
 
-function buildHeaders(accessToken: string, sessionId: string): Record<string, string> {
+function buildHeaders(accessToken: string, sessionId: string, accountId: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
@@ -179,7 +177,6 @@ function buildHeaders(accessToken: string, sessionId: string): Record<string, st
     // 실측(WIRE-FINDINGS §6)에서 200 을 받은 헤더 조합 그대로입니다.
     // `OpenAI-Beta: responses=experimental` 없이 통과했으므로 일부러 넣지 않습니다.
   };
-  const accountId = accountIdFrom(accessToken);
   if (accountId) headers["chatgpt-account-id"] = accountId;
   return headers;
 }
@@ -611,8 +608,12 @@ export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvide
     ? () => injected()
     : async (force) => (await import("../auth")).getAccessToken(force);
 
+  const readAccountId: () => Promise<string | null> =
+    opts.accountId ?? (async () => (await import("../auth")).getAccountId());
+
   async function* sendTurn(input: SendTurnInput): AsyncGenerator<AgentEvent> {
     const configured = agentConfig().toolMode;
+    const accountId = await resolveAccountId(readAccountId); // 재시도해도 같은 값입니다.
     let mode: WireToolMode = configured === "json" ? "json" : "native";
     let refreshed = false;
     let downgraded = false;
@@ -634,7 +635,7 @@ export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvide
       try {
         res = await fetchImpl(ENDPOINT, {
           method: "POST",
-          headers: buildHeaders(accessToken, sessionId),
+          headers: buildHeaders(accessToken, sessionId, accountId),
           body: JSON.stringify(buildBody(input, mode)),
         });
       } catch {
