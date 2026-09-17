@@ -12,11 +12,16 @@ export type AgentEvent =
   | { type: "done" }
   | { type: "error"; message: string; status?: number };
 
-/** 대화 한 줄. role 이 "tool" 이면 toolCallId 로 어느 호출의 결과인지 짝짓는다. */
+/** 대화 한 줄. 도구 호출은 assistant 의 toolCalls 와 tool 의 toolCallId 로 짝을 이룬다. */
 export interface AgentMessage {
   role: "user" | "assistant" | "tool";
   content: string;
+  /** role:"tool" 일 때, 이 결과가 어느 호출에 대한 것인지 */
   toolCallId?: string;
+  /** role:"assistant" 일 때, 이 턴에 모델이 요청한 도구 호출들.
+   *  네이티브 도구 모드에서 히스토리를 원형대로 되돌리기 위해 필요하다.
+   *  args 모양은 위 tool_call 이벤트와 동일해야 한다(그래야 루프가 캐스팅 없이 옮겨 담는다). */
+  toolCalls?: { id: string; name: string; args: Record<string, unknown> }[];
 }
 
 /** 한 턴의 입력. 안내문 · 대화 기록 · 이번 턴에 노출할 도구 목록. */
