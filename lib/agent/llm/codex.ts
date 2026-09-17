@@ -1,8 +1,9 @@
 // ChatGPT 계정(OAuth)으로 Codex 백엔드를 부르는 LLM 공급자.
 //
-// ⚠️ 이 엔드포인트는 **비공식**이고, 실제 SSE 이벤트 이름·도구 호출 형식은 아직 실측되지 않았습니다.
-//    아래 와이어 포맷은 표준 Responses API 를 가정한 **잠정값**입니다. 실측 후 바뀌는 것은 이 파일뿐이고,
-//    루프·도구·화면은 정규화된 AgentEvent 만 보므로 영향받지 않습니다.
+// 와이어 포맷은 2026-09-18 실측으로 확정했습니다 —
+// `.superpowers/sdd/2026-09-17-site-agent-engine/WIRE-FINDINGS.md` (원시 덤프 probe-1~4).
+// 비공식 엔드포인트라 언제든 바뀔 수 있지만, 바뀌어도 고칠 곳은 이 파일뿐입니다.
+// 루프·도구·화면은 정규화된 AgentEvent 만 보므로 영향받지 않습니다.
 // ⚠️ 토큰 값은 로그·에러 메시지·반환값에 **절대** 넣지 않습니다. 사용자 본인의 ChatGPT 세션입니다.
 //
 // 파싱은 일부러 관대합니다 — 모르는 이벤트는 조용히 무시하고, 필드가 없으면 대안을 봅니다.
@@ -54,18 +55,16 @@ function parseArgs(raw: string | null | undefined): Record<string, unknown> {
 // ── 요청 만들기 ──────────────────────────────────────────────────────────────
 
 interface InputItem {
-  type: "message";
   role: "user" | "assistant";
-  content: { type: "input_text" | "output_text"; text: string }[];
+  content: string;
 }
 
 /**
  * 대화 기록 → 요청 본문의 `input` 배열. **평탄화 규칙은 전부 여기 모여 있습니다.**
  *
- * 백엔드가 `role:"tool"` 과 네이티브 function_call 아이템을 받는지 미확인이라, 지금은 전부
- * 사람이 읽는 텍스트로 눌러 담습니다. 실측 후 바꿀 곳은 이 함수 하나입니다:
- *  (a) tool 역할을 그대로 받는다면 → 아래 user 평탄화를 `function_call_output` 아이템으로
- *  (b) content 가 문자열이어야 한다면 → `item()` 의 content 를 문자열로
+ * 백엔드가 `role:"tool"` 과 네이티브 function_call/`function_call_output` 아이템을 받는지는
+ * 아직 확인하지 않았으므로(실측은 단일 턴만 했습니다), 지금은 전부 사람이 읽는 텍스트로 눌러 담습니다.
+ * 나중에 바꿀 곳도 이 함수 하나입니다 — tool 역할을 그대로 받는다면 아래 user 평탄화만 걷어내면 됩니다.
  */
 function toInputItems(messages: AgentMessage[], mode: WireToolMode): InputItem[] {
   return messages.flatMap((message) => {
@@ -74,13 +73,13 @@ function toInputItems(messages: AgentMessage[], mode: WireToolMode): InputItem[]
   });
 }
 
+/**
+ * 실측(probe-1)에서 200 을 받은 모양: `{role, content: "…"}`.
+ * content 는 파트 배열(`[{type:"input_text"|"input_image", …}]`)도 받습니다(probe-4) —
+ * 2단계에서 화면 캡처를 붙일 때 이미지가 그 자리로 들어옵니다.
+ */
 function item(role: "user" | "assistant", text: string): InputItem {
-  return {
-    type: "message",
-    role,
-    // codex_cli_rs 가 보내는 모양. 문자열 content 도 표준 API 는 받지만, 여기서는 CLI 를 따릅니다.
-    content: [{ type: role === "assistant" ? "output_text" : "input_text", text }],
-  };
+  return { role, content: text };
 }
 
 function renderMessage(message: AgentMessage, mode: WireToolMode): string {
@@ -177,8 +176,8 @@ function buildHeaders(accessToken: string, sessionId: string): Record<string, st
     Accept: "text/event-stream",
     originator: ORIGINATOR,
     session_id: sessionId,
-    // codex_cli_rs 가 함께 보내는 헤더. 실측에서 문제가 되면 이 줄만 지우면 됩니다.
-    "OpenAI-Beta": "responses=experimental",
+    // 실측(WIRE-FINDINGS §6)에서 200 을 받은 헤더 조합 그대로입니다.
+    // `OpenAI-Beta: responses=experimental` 없이 통과했으므로 일부러 넣지 않습니다.
   };
   const accountId = accountIdFrom(accessToken);
   if (accountId) headers["chatgpt-account-id"] = accountId;
@@ -472,6 +471,9 @@ interface StreamState {
   anyDelta: boolean;
 }
 
+/** 실측: 스트림은 `[DONE]` 센티널 없이 `response.completed` 로 끝난다. */
+const TERMINAL = /response\.(completed|incomplete)$/;
+
 function emitText(state: StreamState, text: string): AgentEvent[] {
   if (!text) return [];
   return state.mode === "json" ? state.filter.feed(text) : [{ type: "text", delta: text }];
@@ -500,9 +502,12 @@ function translate(event: Json, state: StreamState): AgentEvent[] {
 
   if (type.endsWith("output_item.done")) {
     const item = asObject(event.item);
+    // 실측: 도구 호출은 여기(item.type==="function_call")에서 이름·call_id·완성된 인자가 한 번에 옵니다.
     const events = state.calls.absorb(item, "call");
     if (events.length) return events;
-    // 델타 없이 완성본만 주는 백엔드 대비 — 델타를 한 번도 못 봤을 때만 본문을 꺼냅니다.
+    // 사고 과정 항목(encrypted_content 수 KB)은 통째로 버립니다.
+    if (/reasoning/i.test(asString(item?.type) ?? "")) return [];
+    // 델타 없이 완성본만 주는 경우 대비 — 델타를 한 번도 못 봤을 때만 본문을 꺼냅니다.
     const itemId = asString(item?.id) ?? "item";
     if (item && !state.deltaSeen.has(itemId) && !state.anyDelta) {
       return emitText(state, textOfItem(item));
@@ -510,7 +515,8 @@ function translate(event: Json, state: StreamState): AgentEvent[] {
     return [];
   }
 
-  if (type.endsWith("response.completed") || type.endsWith("response.incomplete")) {
+  if (TERMINAL.test(type)) {
+    // 실측에선 `response.completed` 의 output 이 빈 배열이었지만, 채워 오는 경우도 받아 둡니다.
     const output = asObject(event.response)?.output;
     if (!Array.isArray(output)) return [];
     return output.flatMap((raw, index) => state.calls.absorb(raw, `completed:${index}`));
@@ -568,6 +574,7 @@ async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<
 
   try {
     for await (const data of sseFrames(res.body)) {
+      // 실측에선 오지 않지만(종료는 response.completed), 와도 무해하게 받아 둡니다.
       if (data === "[DONE]") break;
       let event: Json | null = null;
       try {
@@ -580,6 +587,8 @@ async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<
         yield out;
         if (out.type === "error") return;
       }
+      // 종료 신호를 받으면 더 기다리지 않고 상류 연결을 끊습니다.
+      if (TERMINAL.test(asString(event.type) ?? "")) break;
     }
   } catch {
     yield { type: "error", message: "모델 응답을 받는 중에 연결이 끊겼어요. 다시 시도해 주세요." };
