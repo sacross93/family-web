@@ -16,7 +16,7 @@ async function main() {
   }
 
   const raw = await readFile(path.resolve(target), "utf8");
-  const data = JSON.parse(raw) as Partial<{
+  type AuthFileShape = Partial<{
     access_token: string;
     refresh_token: string;
     expires_in: number;
@@ -24,6 +24,15 @@ async function main() {
     account_id: string;
     provider: string;
   }>;
+
+  let data: AuthFileShape;
+  try {
+    data = JSON.parse(raw) as AuthFileShape;
+  } catch {
+    // SyntaxError 메시지에는 파일 일부가 실릴 수 있어 그대로 쓰지 않습니다.
+    console.error("JSON 파일을 읽지 못했어요. 파일이 깨지지 않았는지 확인해 주세요.");
+    process.exit(1);
+  }
 
   if (!data.access_token || !data.refresh_token) {
     console.error("파일에 access_token·refresh_token 이 없어요. codex_auth.json 이 맞는지 확인해 주세요.");
