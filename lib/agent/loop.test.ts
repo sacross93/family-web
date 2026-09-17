@@ -172,13 +172,13 @@ describe("runAgent", () => {
 
   // label 은 2단계에서 화면에 그대로 뜨는 한국어 한 줄이다. 그런데 도구 이름도 주소도
   // 모델이 낸 문자열이고, JSON.parse 가 "\n" 같은 이스케이프를 진짜 제어문자로 되살린다.
-  const CONTROL = /[ --]/;
+  const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
   it("도구 이름에 개행·제어문자가 섞여도 문구는 한 줄로 남는다", async () => {
     const p = createFakeProvider([
       [
         { type: "tool_call", id: "c1", name: "foo\nbar", args: {} },
-        { type: "tool_call", id: "c2", name: "a\tbc", args: {} },
+        { type: "tool_call", id: "c2", name: "a\tb\u0007c", args: {} },
         { type: "tool_call", id: "c3", name: "   ", args: {} }, // 다듬으면 빈 문자열 → 폴백 문구
         { type: "done" },
       ],
@@ -200,7 +200,7 @@ describe("runAgent", () => {
   it("주소가 주소답지 않아도 읽는 중 문구는 한 줄로 남는다", async () => {
     // displayDomain 은 파싱에 실패하면 입력을 **그대로** 돌려준다 → 모델 문자열이 문구로 샌다.
     const p = createFakeProvider([
-      [{ type: "tool_call", id: "c1", name: "read_url", args: { url: "ht tp://x\nbad" } }, { type: "done" }],
+      [{ type: "tool_call", id: "c1", name: "read_url", args: { url: "ht tp://x\n\u0007bad" } }, { type: "done" }],
       [{ type: "text", delta: "못 읽었어요" }, { type: "done" }],
     ]);
     const events = await drain(runAgent({ question: "x", provider: p, ctx, catalog: "" }));
