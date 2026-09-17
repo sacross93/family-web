@@ -318,6 +318,88 @@ describe("read_url 보강", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("사설·내부망 주소는 요청조차 보내지 않고 거부한다", async () => {
+    const blocked = [
+      "http://localhost:3000/api/agent",
+      "http://box.localhost/",
+      "http://127.0.0.1/",
+      "http://127.0.0.2:8080/x",
+      "http://0.0.0.0/",
+      "http://10.0.0.5/",
+      "http://172.16.0.1/",
+      "http://172.31.255.254/",
+      "http://192.168.0.1/",
+      "http://169.254.169.254/latest/meta-data/", // 클라우드 메타데이터(인증이 없다)
+      "http://2130706433/", // 십진수 표기
+      "http://0x7f000001/", // 16진법 표기
+      "http://0177.0.0.1/", // 8진법 표기
+      "http://127.1/", // 축약 표기
+      "http://[::1]/",
+      "http://[::ffff:127.0.0.1]/", // IPv6 매핑
+      "http://metadata.google.internal/computeMetadata/v1/",
+      "http://printer.local/",
+      "http://nas.home.arpa/",
+      "http://intranet/", // 점 없는 한 토막 이름 = 내부 서비스
+      "http://redis:6379/",
+    ];
+    const f = vi.fn(async () => new Response("secret", { status: 200 }));
+    for (const url of blocked) {
+      const r = await executeTool("read_url", { url }, ctx(f as unknown as typeof fetch));
+      expect(r, url).toEqual({ ok: false, error: "그 주소는 열 수 없어요." });
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("평범한 바깥 주소는 그대로 통과한다(과차단 회귀 방지)", async () => {
+    const allowed = [
+      "https://example.com/글",
+      "naver.com",
+      "https://blog.naver.com/mom/123",
+      "https://www.momsdiary.co.kr:8443/board?id=9",
+      "http://8.8.8.8/", // 공인 IP 리터럴은 막지 않는다
+      "http://172.32.0.1/", // 172.16/12 바로 바깥
+      "http://11.0.0.1/", // 10/8 바로 바깥
+    ];
+    const f = vi.fn(async () => new Response("<p>본문</p>", { status: 200, headers: { "content-type": "text/html" } }));
+    for (const url of allowed) {
+      const r = await executeTool("read_url", { url }, ctx(f as unknown as typeof fetch));
+      expect(r.ok, url).toBe(true);
+    }
+    expect(f).toHaveBeenCalledTimes(allowed.length);
+  });
+
+  it("리다이렉트를 직접 따라가며 목적지를 다시 검사한다", async () => {
+    const hops = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: "https://blog.example.com/real" } })
+      )
+      .mockResolvedValueOnce(
+        new Response("<title>진짜 글</title><p>내용</p>", { status: 200, headers: { "content-type": "text/html" } })
+      );
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(hops as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    // 감싸개에는 실제로 읽은 최종 주소가 들어간다
+    expect((r as { data: { url: string } }).data.url).toBe("https://blog.example.com/real");
+    expect((hops.mock.calls[0][1] as RequestInit).redirect).toBe("manual");
+  });
+
+  it("사설망으로 넘기는 리다이렉트는 따라가지 않는다", async () => {
+    const f = vi.fn(async () =>
+      new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } })
+    );
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r).toEqual({ ok: false, error: "그 주소는 열 수 없어요." });
+    expect(f).toHaveBeenCalledTimes(1); // 첫 요청만 나가고 메타데이터로는 가지 않았다
+  });
+
+  it("리다이렉트가 끝없이 이어지면 멈춘다", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://example.com/again" } }));
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(false);
+    expect(f.mock.calls.length).toBeLessThanOrEqual(5);
+  });
+
   it("제목과 설명을 함께 돌려준다", async () => {
     const html = `<html><head><title>포동 소개</title><meta name="description" content="가족 사이트"></head><body><script>bad()</script><p>본문</p></body></html>`;
     const f = vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
