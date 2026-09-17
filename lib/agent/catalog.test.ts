@@ -6,6 +6,18 @@ function res(key: string, label: string, entries: { title: string; hint?: string
   return { key, label, listPath: `/${key}`, catalog: async () => entries };
 }
 
+/** 쿼리가 터지는 리소스. 에러 본문에 스키마가 섞여 있다고 가정한다. */
+function boom(label: string): AgentResource {
+  return {
+    key: `x-${label}`,
+    label,
+    listPath: `/x-${label}`,
+    catalog: async () => {
+      throw new Error(`relation "Shopping" does not exist`);
+    },
+  };
+}
+
 describe("buildCatalog", () => {
   it("리소스별로 한 줄씩 만든다", async () => {
     const out = await buildCatalog([
@@ -36,6 +48,9 @@ describe("buildCatalog", () => {
     const out = await buildCatalog([broken, res("todo", "할일", [{ title: "우유 사기" }])], 4000);
     expect(out).toContain("우유 사기");
     expect(out).not.toContain("boom");
+    // 살리되 감추지 않는다 — 어느 리소스가 확인 안 됐는지 남긴다.
+    expect(out).toContain("불러오지 못했어요");
+    expect(out).toContain("고장");
   });
 
   it("전부 비었으면 안내 문구를 반환한다", async () => {
@@ -61,6 +76,7 @@ describe("buildCatalog 예산 배분", () => {
       Array.from({ length: 30 }, (_, i) => ({ title: `리소스${n}-항목${i}`, hint: `사진 ${i}장` }))
     )
   );
+  const FAILING = ["장보기", "기념일", "가계부"].map(boom);
 
   it("리소스가 많아도 소리 없이 사라지는 리소스가 없다", async () => {
     const out = await buildCatalog(crowded, 4000);
@@ -95,6 +111,17 @@ describe("buildCatalog 예산 배분", () => {
     expect(out).not.toMatch(/외 \d+종 생략/); // 줄째로 버린 건 아니다
   });
 
+  it("실패 표시가 붙어도 상한을 넘지 않는다", async () => {
+    const out = await buildCatalog([...crowded, ...FAILING], 400);
+
+    expect(out.length).toBeLessThanOrEqual(400);
+    expect(out).toContain("불러오지 못했어요");
+    // 이름이 다 안 들어가면 개수로 접는다.
+    expect(out).toMatch(/불러오지 못했어요[:(]/);
+    // 성공한 15종도 (항목은 접히더라도) 전부 남는다.
+    expect(LABELS.filter((l) => !out.includes(`${l}(`))).toEqual([]);
+  });
+
   it("줄을 통째로 버릴 때는 '외 N종 생략'으로 알린다", async () => {
     const two = [{ title: "항목1" }, { title: "항목2" }];
     const out = await buildCatalog(
@@ -107,5 +134,36 @@ describe("buildCatalog 예산 배분", () => {
     expect(out).toContain("나(2)");
     expect(out).not.toContain("라벨라벨"); // 들어갈 자리가 없던 리소스
     expect(out).toMatch(/외 1종 생략/); // 대신 사라졌다는 사실이 남는다
+  });
+});
+
+describe("buildCatalog 실패 처리", () => {
+  it("전부 실패하면 '아무것도 없습니다'가 아니라 실패를 알린다", async () => {
+    const out = await buildCatalog([boom("앨범"), boom("장보기")], 4000);
+
+    expect(out).not.toContain("아무것도 없습니다"); // 없는 게 아니라 못 불러온 것이다
+    expect(out).toContain("불러오지 못했어요");
+    expect(out).toContain("앨범");
+    expect(out).toContain("장보기");
+  });
+
+  it("실패 원인(에러 메시지)은 절대 담지 않는다", async () => {
+    const out = await buildCatalog([boom("장보기"), res("todo", "할일", [{ title: "우유" }])], 4000);
+
+    expect(out).not.toContain("relation"); // 쿼리·스키마가 LLM 에게 새면 안 된다
+    expect(out).not.toContain("does not exist");
+    expect(out).toContain("장보기");
+  });
+
+  it("실패한 리소스 이름이 길면 개수로 접는다", async () => {
+    const long = ["가".repeat(30), "나".repeat(30), "다".repeat(30)].map(boom);
+
+    const folded = await buildCatalog(long, 60);
+    expect(folded.length).toBeLessThanOrEqual(60);
+    expect(folded).toMatch(/외 \d+종$/); // 이름 일부 + 나머지 개수
+
+    const counted = await buildCatalog(long, 25);
+    expect(counted.length).toBeLessThanOrEqual(25);
+    expect(counted).toMatch(/\(3종\)$/); // 이름이 아예 안 들어가면 개수만
   });
 });
