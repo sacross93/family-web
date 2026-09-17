@@ -89,16 +89,20 @@ describe("buildCatalog 예산 배분", () => {
   it("어떤 줄도 항목 중간에서 잘리지 않는다", async () => {
     const out = await buildCatalog(crowded, 4000);
 
+    let checked = 0;
     for (const line of out.split("\n")) {
       expect(line.endsWith("…"), line).toBe(false);
-      const n = Number(line.match(/^리소스(\d+)\(/)![1]);
-      const all = partsOf(n);
+      const m = line.match(/^리소스(\d+)\(/);
+      if (!m) continue; // 생략·실패 알림 줄은 항목 줄이 아니다
+      checked++;
+      const all = partsOf(Number(m[1]));
       const shown = shownItems(line);
       for (const item of shown) expect(all, item).toContain(item);
       // 보인 개수 + 접힌 개수 = 전체 개수
       const folded = Number(line.match(/외 (\d+)개$/)?.[1] ?? 0);
       expect(shown.length + folded, line).toBe(30);
     }
+    expect(checked).toBe(15); // 항목 줄을 실제로 다 봤다
   });
 
   it("예산이 빠듯하면 항목 대신 이름과 개수만 남긴다", async () => {
@@ -115,9 +119,10 @@ describe("buildCatalog 예산 배분", () => {
     const out = await buildCatalog([...crowded, ...FAILING], 400);
 
     expect(out.length).toBeLessThanOrEqual(400);
-    expect(out).toContain("불러오지 못했어요");
-    // 이름이 다 안 들어가면 개수로 접는다.
-    expect(out).toMatch(/불러오지 못했어요[:(]/);
+    // 알림은 마지막 줄이고, 자리가 모자라 이름이 접힌 형태여야 한다(전체 나열도 개수형도 아니다).
+    const last = out.split("\n").at(-1)!;
+    expect(last).toMatch(/^일부를 불러오지 못했어요: .+ 외 \d+종$/);
+    expect(last).not.toContain("기념일"); // 접혔으므로 뒤 이름은 개수로만 남는다
     // 성공한 15종도 (항목은 접히더라도) 전부 남는다.
     expect(LABELS.filter((l) => !out.includes(`${l}(`))).toEqual([]);
   });
@@ -165,5 +170,37 @@ describe("buildCatalog 실패 처리", () => {
     const counted = await buildCatalog(long, 25);
     expect(counted.length).toBeLessThanOrEqual(25);
     expect(counted).toMatch(/\(3종\)$/); // 이름이 아예 안 들어가면 개수만
+  });
+});
+
+describe("buildCatalog 극단적인 상한", () => {
+  // 운영자가 AGENT_CATALOG_MAX_CHARS 에 작은 수를 넣으면 바로 발현하는 경계.
+  it("알림 문구가 안 들어가는 상한에서도 실패를 감추지 않는다", async () => {
+    const out = await buildCatalog([boom("장보기"), res("todo", "할일", [{ title: "우유 사기" }])], 15);
+
+    expect(out.length).toBeLessThanOrEqual(15);
+    expect(out).not.toBe("할일(1): 우유 사기"); // 완전한 목록처럼 보이면 안 된다
+    expect(out).toContain("확인 안 됨"); // 자리가 없으면 최소한의 표시라도
+  });
+
+  it("전부 실패 + 아주 작은 상한에서도 흔적이 남는다", async () => {
+    const out = await buildCatalog([boom("앨범"), boom("장보기")], 18);
+
+    expect(out.length).toBeLessThanOrEqual(18);
+    expect(out).toContain("확인 안 됨");
+  });
+
+  it("빈 사이트 안내 문구도 상한을 넘지 않는다", async () => {
+    const out = await buildCatalog([], 10);
+
+    expect(out.length).toBeLessThanOrEqual(10);
+    expect(out).not.toContain("아무것도 없습니다"); // 긴 문구는 들어갈 자리가 없다
+  });
+
+  it("상한이 숫자가 아니면 설정값으로 돌아간다", async () => {
+    const out = await buildCatalog([res("todo", "할일", [{ title: "우유 사기" }])], Number.NaN);
+
+    expect(out).toContain("할일(1)"); // 내용을 통째로 잃지 않는다
+    expect(out.length).toBeLessThanOrEqual(4000);
   });
 });

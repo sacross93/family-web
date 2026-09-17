@@ -7,6 +7,11 @@ const SEP = " · ";
 /** 불러오지 못한 리소스 알림 머리말 — 일부만 실패 / 전부 실패 */
 const FAIL_SOME = "일부를 불러오지 못했어요";
 const FAIL_ALL = "지금은 목록을 불러오지 못했어요";
+/** 문구도 못 실을 만큼 상한이 작을 때의 최소 표시. 실패를 감추느니 내용을 버린다. */
+const FAIL_MARK = "…확인 안 됨";
+/** 정말 비어 있을 때. 상한이 문구보다 짧으면 짧은 쪽을 쓴다. */
+const EMPTY = "사이트에 아직 아무것도 없습니다.";
+const EMPTY_SHORT = "비었어요";
 
 interface Row {
   /** "앨범(12): " */
@@ -30,6 +35,7 @@ interface FoldOptions {
  * - 예산은 리소스 수로 나눠 배분한다. 앞 줄이 아낀 만큼 뒤 줄이 더 쓴다.
  * - 넘치면 항목을 접고(`외 N개`), 그래도 안 되면 줄을 통째로 버리되 `…외 N종 생략`.
  * - 리소스 하나가 실패해도 나머지는 살리고, 마지막 줄에 실패한 리소스 이름을 남긴다.
+ *   이 알림은 내용보다 우선한다 — 자리가 없으면 내용 줄을 버려서라도 `…확인 안 됨` 을 남긴다.
  * - 문장 중간에서 자르지 않는다. 결과 길이는 언제나 maxChars 이하.
  */
 export async function buildCatalog(
@@ -55,11 +61,21 @@ export async function buildCatalog(
     });
   });
 
-  // 전부 실패한 것과 정말 비어 있는 것은 다르다. 후자일 때만 "없다"고 말한다.
-  if (rows.length === 0 && failed.length === 0) return "사이트에 아직 아무것도 없습니다.";
+  // 숫자가 아닌 상한이 오면(직접 호출자의 실수) 설정값으로 돌아간다.
+  // NaN 이면 모든 크기 비교가 false 가 되어 접기가 멈추지 않는다.
+  const cap = Number.isFinite(maxChars)
+    ? Math.max(1, Math.floor(maxChars))
+    : agentConfig().catalogMaxChars;
 
-  const cap = Math.max(1, Math.floor(maxChars));
+  // 전부 실패한 것과 정말 비어 있는 것은 다르다. 후자일 때만 "없다"고 말한다.
+  if (rows.length === 0 && failed.length === 0) {
+    if (EMPTY.length <= cap) return EMPTY;
+    return EMPTY_SHORT.length <= cap ? EMPTY_SHORT : ""; // 안내 문구도 상한을 넘지 않는다
+  }
+
   const alert = failed.length > 0 ? failNotice(failed, cap, rows.length) : null;
+  // 실패를 알릴 자리조차 없으면(상한이 한 줌일 때) 완전한 목록인 척하지 않는다.
+  if (failed.length > 0 && !alert) return "…";
   return layout(rows, alert, cap);
 }
 
@@ -142,13 +158,17 @@ function omitNotice(kinds: number): string {
 }
 
 /**
- * 불러오지 못한 리소스 알림. 이름을 남기되 길면 개수만 남긴다.
- * 에이전트가 "없다"가 아니라 "확인이 안 된다"고 답할 수 있게 하는 줄이다.
+ * 불러오지 못한 리소스 알림. 에이전트가 "없다"가 아니라 "확인이 안 된다"고 답하게 하는 줄이다.
+ * 자리에 따라 이름 전부 → 이름 일부+개수 → 개수만 → 최소 표시 순으로 줄인다.
+ * 상한보다 길어지진 않으므로, 상한이 최소 표시보다도 작을 때만 null 이다.
  */
 function failNotice(labels: string[], maxChars: number, rowCount: number): string | null {
   const head = rowCount > 0 ? FAIL_SOME : FAIL_ALL;
   const brief = `${head}(${labels.length}종)`;
   // 줄 하나 몫을 쓰되, 개수만이라도 남길 자리는 확보한다.
   const budget = Math.max(Math.floor(maxChars / (rowCount + 1)), Math.min(maxChars, brief.length));
-  return fold(`${head}: `, labels, budget, { unit: "종", bare: brief });
+  const named = fold(`${head}: `, labels, budget, { unit: "종", bare: brief });
+  if (named) return named;
+  // 문구가 통째로 안 들어가면 표시만이라도 남긴다(내용 줄을 밀어내서라도).
+  return FAIL_MARK.length <= maxChars ? FAIL_MARK : null;
 }
