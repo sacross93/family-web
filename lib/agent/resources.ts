@@ -98,6 +98,8 @@ async function memberIdByName(name: unknown): Promise<string | undefined> {
 /** 스티커를 붙일 수 있는 페이지 목록(상단 메뉴 + 모든 페이지). */
 const DECORATION_PAGES = [...NAV.map((n) => n.href), "global"];
 
+// 배열 순서가 의미를 갖는다: listPath 가 겹칠 때 resolvePath 는 먼저 나온 리소스를 고른다.
+// 따라서 부모(album·plan·baby)가 자식(photo·planItem·babyEntry …)보다 앞에 있어야 한다.
 export const RESOURCES: AgentResource[] = [
   {
     key: "album",

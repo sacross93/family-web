@@ -48,6 +48,13 @@ describe("RESOURCES 계약", () => {
     expect(resolvePath("/admin", RESOURCES)).toBeNull();
   });
 
+  it("목록 경로가 겹치면 부모 리소스로 해석된다", () => {
+    // 자식(photo·planItem·babyEntry …)이 부모보다 앞에 오면 이 테스트가 깨진다.
+    expect(resolvePath("/albums", RESOURCES)?.key).toBe("album");
+    expect(resolvePath("/plans", RESOURCES)?.key).toBe("plan");
+    expect(resolvePath("/baby", RESOURCES)?.key).toBe("baby");
+  });
+
   it("추가 스키마가 내부 식별자를 묻지 않는다", () => {
     for (const r of RESOURCES) {
       for (const prop of Object.keys(r.create?.schema.properties ?? {})) {
