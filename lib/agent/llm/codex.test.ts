@@ -317,6 +317,22 @@ describe("codex 공급자 — 토큰·재시도", () => {
     await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
     expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_1");
   });
+
+  it("access_token(JWT) 클레임에서 계정 id 를 꺼낸다 (환경변수 없이)", async () => {
+    const claims = { "https://api.openai.com/auth": { chatgpt_account_id: "acc_jwt" } };
+    const jwt = ["헤더", Buffer.from(JSON.stringify(claims)).toString("base64url"), "서명"].join(".");
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token: async () => jwt });
+    await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(headersOf(f, 0)["chatgpt-account-id"]).toBe("acc_jwt");
+  });
+
+  it("계정 id 를 알 수 없으면 헤더를 빼고 보낸다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(headersOf(f, 0)["chatgpt-account-id"]).toBeUndefined();
+  });
 });
 
 describe("codex 공급자 — auto 모드 강등 (실측으로는 안 밟히는 안전망)", () => {
