@@ -9,7 +9,13 @@ describe("secret 암호화", () => {
     expect(decryptSecret(encryptSecret(v))).toBe(v);
   });
   it("암호문에 평문이 남지 않는다", () => {
-    expect(encryptSecret("비밀값")).not.toContain("비밀값");
+    const plain = "비밀값";
+    const blob = encryptSecret(plain);
+    expect(blob).not.toContain(plain);
+    // base64url 문자열만 훑으면 단순 인코딩(암호화 없음)이어도 통과해 버립니다.
+    // 디코드한 바이트열에 평문의 UTF-8 바이트가 없는지까지 봅니다.
+    const bytes = Buffer.concat(blob.split(":").map((p) => Buffer.from(p, "base64url")));
+    expect(bytes.includes(Buffer.from(plain, "utf8"))).toBe(false);
   });
   it("같은 값도 매번 다른 암호문(IV 랜덤)", () => {
     expect(encryptSecret("x")).not.toBe(encryptSecret("x"));

@@ -57,6 +57,7 @@ async function main() {
       saved?.expiresAt.toISOString() ?? "?"
     }`
   );
+  console.log(`  원본 파일(${target})에는 평문 토큰이 그대로 남아 있어요. 더 쓸 일이 없으면 지워 주세요.`);
 }
 
 main()

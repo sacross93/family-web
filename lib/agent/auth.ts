@@ -9,10 +9,20 @@ const AUTH_ID = "main";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 
-const REFRESH_WINDOW_MS = 5 * 60 * 1000; // 만료 5분 전이면 미리 갱신
-const HTTP_TIMEOUT_MS = 15_000;
+// 만료 이틀 전부터 갱신합니다.
+// 상류 Codex CLI 는 "JWT exp 5분 전"에 갱신하지만, 그건 **계속 떠 있는 프로세스가 주기적으로**
+// 검사하기 때문에 가능한 값입니다(codex-rs …/auth/manager.rs 의 should_refresh_proactively).
+// 우리는 스케줄러 없이 **요청이 들어올 때만** 검사하므로, 창이 좁으면 하필 그 5분에
+// 아무도 에이전트를 쓰지 않았다는 이유로 access·refresh 가 같이 죽어 재주입이 필요해집니다.
+// 이틀은 상류가 JWT 를 못 읽을 때 쓰는 대체 규칙(8일마다 갱신 · 토큰 수명 10일)과 같은 지점입니다.
+const REFRESH_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+// 갱신 HTTP 는 트랜잭션·서버리스 함수 시간 안에서 끝나야 합니다. 형식 폴백까지 최대 2회(=16초).
+const HTTP_TIMEOUT_MS = 8_000;
 const TX_TIMEOUT_MS = 30_000; // 갱신 HTTP 요청이 트랜잭션 안에서 일어납니다
 const TX_MAX_WAIT_MS = 10_000;
+
+/** 토큰이 이미 죽은 경우. 본문 형식 문제가 아니므로 다른 형식으로 재시도해도 소용없습니다. */
+const DEAD_TOKEN_CODES = new Set(["invalid_grant", "invalid_client"]);
 
 /** 로컬에서 받은 `codex_auth.json` 의 모양. */
 export interface CodexAuthFile {
@@ -29,13 +39,23 @@ interface ExpiryHint {
   expires_at?: number | null;
 }
 
+/**
+ * 밀리초를 Date 로. 범위를 벗어나면 null.
+ * `new Date(NaN)`·`new Date(1e21)` 은 **Invalid Date 인데 객체라 truthy** 라서,
+ * 그대로 Prisma 에 넘어가면 validation 오류 메시지에 `data`(= 암호문)가 통째로 실립니다.
+ */
+function toDate(ms: number): Date | null {
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /** access_token(JWT) 의 exp 클레임. JWT 가 아니면 null. 값은 남기지 않습니다. */
 function jwtExpiry(accessToken: string): Date | null {
   const payload = accessToken.split(".")[1];
   if (!payload) return null;
   try {
     const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: unknown };
-    if (typeof claims.exp === "number" && Number.isFinite(claims.exp)) return new Date(claims.exp * 1000);
+    if (typeof claims.exp === "number" && Number.isFinite(claims.exp)) return toDate(claims.exp * 1000);
   } catch {
     // JWT 가 아니면 아래 힌트로 넘어갑니다.
   }
@@ -47,10 +67,30 @@ function resolveExpiry(accessToken: string, hint: ExpiryHint): Date {
   const fromToken = jwtExpiry(accessToken);
   if (fromToken) return fromToken;
   const at = hint.expires_at;
-  if (typeof at === "number" && Number.isFinite(at)) return new Date(at < 1e12 ? at * 1000 : at);
+  if (typeof at === "number" && Number.isFinite(at)) {
+    const d = toDate(at < 1e12 ? at * 1000 : at);
+    if (d) return d;
+  }
   const within = hint.expires_in;
-  if (typeof within === "number" && Number.isFinite(within)) return new Date(Date.now() + within * 1000);
+  if (typeof within === "number" && Number.isFinite(within)) {
+    const d = toDate(Date.now() + within * 1000);
+    if (d) return d;
+  }
   return new Date(Date.now() + 60 * 60 * 1000); // 알 수 없으면 1시간만 믿습니다.
+}
+
+/**
+ * 저장된 암호문을 풉니다. 실패하면 Node 의 `Unsupported state or unable to authenticate data`
+ * 대신 무엇을 해야 하는지 알려주는 문구로 바꿉니다(AUTH_SECRET 이 바뀐 경우가 대부분).
+ */
+function readSecret(blob: string): string {
+  try {
+    return decryptSecret(blob);
+  } catch {
+    throw new Error(
+      "저장된 토큰을 읽지 못했어요. AUTH_SECRET 이 바뀌었다면 `npm run agent:auth` 로 다시 넣어 주세요."
+    );
+  }
 }
 
 /** 토큰을 암호화해 싱글턴 행에 저장합니다. */
@@ -69,34 +109,38 @@ export async function saveAuth(data: CodexAuthFile): Promise<void> {
   });
 }
 
+/** 갱신 HTTP 를 대신 수행하는 함수. 테스트에서 주입합니다(네트워크를 타지 않게). */
+export type RefreshFn = (refreshToken: string) => Promise<RefreshResult>;
+
 /**
  * 쓸 수 있는 access_token 을 돌려줍니다.
- * 만료 5분 전이면 갱신하고, `force` 면 만료 여부와 상관없이 갱신합니다(401 재시도용).
+ * 만료가 REFRESH_WINDOW_MS 안으로 들어오면 갱신하고,
+ * `force` 면 만료 여부와 상관없이 갱신합니다(401 재시도용).
  */
-export async function getAccessToken(force = false): Promise<string> {
+export async function getAccessToken(force = false, refresh: RefreshFn = requestRefresh): Promise<string> {
   const row = await prisma.agentAuth.findUnique({ where: { id: AUTH_ID } });
   if (!row) {
     throw new Error("에이전트 토큰이 아직 없어요. `npm run agent:auth -- <codex_auth.json>` 로 넣어 주세요.");
   }
   if (!force && row.expiresAt.getTime() - REFRESH_WINDOW_MS > Date.now()) {
-    return decryptSecret(row.accessToken);
+    return readSecret(row.accessToken);
   }
-  return refreshAccessToken(row.accessToken);
+  return refreshAccessToken(row.accessToken, refresh);
 }
 
 /**
  * 행을 잠그고(SELECT … FOR UPDATE) 갱신합니다 — 동시에 들어온 요청 중 하나만 갱신하도록.
- * 갱신에 실패하면 예외를 던지고 기존 토큰은 그대로 둡니다.
+ * 갱신에 실패하면 예외를 던지고 기존 토큰은 그대로 둡니다(트랜잭션 롤백).
  */
-async function refreshAccessToken(staleAccessToken: string): Promise<string> {
+async function refreshAccessToken(staleAccessToken: string, refresh: RefreshFn): Promise<string> {
   return prisma.$transaction(
     async (tx) => {
       const locked = await lockRow(tx);
       // 잠금을 기다리는 사이 다른 요청이 이미 갱신했다면 그 토큰을 씁니다.
-      if (locked.accessToken !== staleAccessToken) return decryptSecret(locked.accessToken);
+      if (locked.accessToken !== staleAccessToken) return readSecret(locked.accessToken);
 
-      const previousRefreshToken = decryptSecret(locked.refreshToken);
-      const fresh = await requestRefresh(previousRefreshToken);
+      const previousRefreshToken = readSecret(locked.refreshToken);
+      const fresh = await refresh(previousRefreshToken);
       await tx.agentAuth.update({
         where: { id: AUTH_ID },
         data: {
@@ -158,7 +202,16 @@ export async function requestRefresh(
   }
 
   // 4xx 는 "형식이 마음에 안 든다"일 수 있으니 다른 형식으로 한 번 더. 5xx·네트워크 오류는 형식 문제가 아닙니다.
-  if (first.reason === "http" && first.status !== null && first.status >= 400 && first.status < 500) {
+  // 단 invalid_grant·invalid_client 는 토큰이 이미 죽은 것이라, 2차 시도는 확정적으로 실패하고
+  // refresh_token 만 한 번 더 밖으로 나갑니다 → 건너뜁니다.
+  const tokenIsDead = first.code !== null && DEAD_TOKEN_CODES.has(first.code);
+  if (
+    first.reason === "http" &&
+    first.status !== null &&
+    first.status >= 400 &&
+    first.status < 500 &&
+    !tokenIsDead
+  ) {
     const second = await attemptRefresh("form", refreshToken, fetchImpl);
     if (second.ok) {
       console.warn("refresh: form ok");
