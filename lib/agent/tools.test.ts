@@ -394,6 +394,13 @@ describe("read_url 보강", () => {
     expect(f).toHaveBeenCalledTimes(1); // 첫 요청만 나가고 메타데이터로는 가지 않았다
   });
 
+  it("http 가 아닌 곳으로 넘기는 리다이렉트도 거부한다", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 301, headers: { location: "file:///etc/passwd" } }));
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r).toEqual({ ok: false, error: "그 주소는 열 수 없어요." });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
   it("리다이렉트가 끝없이 이어지면 멈춘다", async () => {
     const f = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://example.com/again" } }));
     const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
