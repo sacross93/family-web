@@ -170,6 +170,47 @@ describe("runAgent", () => {
     expect(events.at(-1)!.type).toBe("done");
   });
 
+  // label 은 2단계에서 화면에 그대로 뜨는 한국어 한 줄이다. 그런데 도구 이름도 주소도
+  // 모델이 낸 문자열이고, JSON.parse 가 "\n" 같은 이스케이프를 진짜 제어문자로 되살린다.
+  const CONTROL = /[ --]/;
+
+  it("도구 이름에 개행·제어문자가 섞여도 문구는 한 줄로 남는다", async () => {
+    const p = createFakeProvider([
+      [
+        { type: "tool_call", id: "c1", name: "foo\nbar", args: {} },
+        { type: "tool_call", id: "c2", name: "a\tbc", args: {} },
+        { type: "tool_call", id: "c3", name: "   ", args: {} }, // 다듬으면 빈 문자열 → 폴백 문구
+        { type: "done" },
+      ],
+      [{ type: "text", delta: "그런 도구는 없어요" }, { type: "done" }],
+    ]);
+    const events = await drain(runAgent({ question: "x", provider: p, ctx, catalog: "" }));
+
+    const starts = events.filter((e) => e.type === "tool_start") as { label: string }[];
+    expect(starts).toHaveLength(3);
+    for (const s of starts) {
+      expect(typeof s.label).toBe("string");
+      expect(s.label).not.toMatch(CONTROL);
+      expect(s.label.split("\n")).toHaveLength(1);
+      expect(s.label).toContain("도구를 쓰는 중…");
+    }
+    expect(events.at(-1)!.type).toBe("done"); // 스트림은 끝까지 산다
+  });
+
+  it("주소가 주소답지 않아도 읽는 중 문구는 한 줄로 남는다", async () => {
+    // displayDomain 은 파싱에 실패하면 입력을 **그대로** 돌려준다 → 모델 문자열이 문구로 샌다.
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "c1", name: "read_url", args: { url: "ht tp://x\nbad" } }, { type: "done" }],
+      [{ type: "text", delta: "못 읽었어요" }, { type: "done" }],
+    ]);
+    const events = await drain(runAgent({ question: "x", provider: p, ctx, catalog: "" }));
+
+    const start = events.find((e) => e.type === "tool_start") as { label: string };
+    expect(start.label).not.toMatch(CONTROL);
+    expect(start.label.split("\n")).toHaveLength(1);
+    expect(start.label).toContain("읽는 중…");
+  });
+
   it("도구 결과는 내보내기 전에 모델 본문으로 굳힌다", async () => {
     const p = createFakeProvider([
       [{ type: "tool_call", id: "c1", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
