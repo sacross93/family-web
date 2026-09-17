@@ -45,7 +45,16 @@ describe("runAgent", () => {
     const p = createFakeProvider([loopTurn, loopTurn, loopTurn, loopTurn, loopTurn]);
     const events = await drain(runAgent({ question: "무한", provider: p, ctx, catalog: "", maxSteps: 2 }));
     expect(events.filter((e) => e.type === "tool_start")).toHaveLength(2);
+    // 상한의 목적은 사용량이다. "도구를 안 돌렸다"가 아니라 "공급자를 더 안 불렀다"를 본다.
+    expect(p.calls).toHaveLength(2);
     expect(events.at(-1)!.type).toBe("done");
+  });
+
+  it("maxSteps 가 0 이어도 최소 한 번은 묻는다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    const events = await drain(runAgent({ question: "x", provider: p, ctx, catalog: "", maxSteps: 0 }));
+    expect(p.calls).toHaveLength(1); // 0 을 그대로 받으면 한 번도 안 묻고 빈 답으로 끝난다
+    expect(events.map((e) => e.type)).toEqual(["text", "done"]);
   });
 
   it("도구 실패를 모델에 되돌려주고 계속 진행한다", async () => {
@@ -118,6 +127,7 @@ describe("runAgent", () => {
     expect(system).toContain("<fetched-content>"); // 가져온 글은 자료이지 지시가 아니다
     expect(system).toMatch(/수정/); // 추가는 되지만 수정·삭제는 할 수 없다
     expect(system).toMatch(/삭제/);
+    expect(system).toMatch(/아는 척/); // 모르면 지어내지 말고 어디를 볼지 알려준다
     expect(system).toMatch(/존댓말/);
   });
 
@@ -131,6 +141,48 @@ describe("runAgent", () => {
     expect(start.name).toBe("open_page");
     expect(start.label).toContain("계획"); // FAKE 리소스의 label 에서 나온 말
     expect(start.label).toContain("중…");
+  });
+
+  it("프로토타입 키를 도구 이름으로 보내도 스트림이 죽지 않는다", async () => {
+    // 진행 문구를 만드는 표를 객체로 인덱싱하면 이런 이름에서 Object.prototype 이 튀어나온다.
+    // 이 호출은 executeTool 보다 **앞**이라, 던지면 {ok:false} 로 처리될 기회조차 없이
+    // 제너레이터가 통째로 터진다(도구 층은 절대 안 던지는데 라벨에서 죽는 비대칭).
+    const p = createFakeProvider([
+      [
+        { type: "tool_call", id: "c1", name: "__proto__", args: {} },
+        { type: "tool_call", id: "c2", name: "constructor", args: {} },
+        { type: "tool_call", id: "c3", name: "hasOwnProperty", args: {} },
+        { type: "tool_call", id: "c4", name: "toString", args: {} },
+        { type: "done" },
+      ],
+      [{ type: "text", delta: "그런 도구는 없어요" }, { type: "done" }],
+    ]);
+    const events = await drain(runAgent({ question: "x", provider: p, ctx, catalog: "" }));
+
+    const starts = events.filter((e) => e.type === "tool_start") as { label: string }[];
+    expect(starts).toHaveLength(4);
+    for (const s of starts) expect(typeof s.label).toBe("string"); // 객체가 새어나오면 안 된다
+
+    // 라벨을 넘긴 뒤에는 평소대로 도구 층이 {ok:false} 로 거절하고 대화가 이어진다.
+    const results = events.filter((e) => e.type === "tool_result") as { result: { ok: boolean } }[];
+    expect(results).toHaveLength(4);
+    expect(results.every((r) => r.result.ok === false)).toBe(true);
+    expect(events.at(-1)!.type).toBe("done");
+  });
+
+  it("도구 결과는 내보내기 전에 모델 본문으로 굳힌다", async () => {
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "c1", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
+      [{ type: "text", delta: "네" }, { type: "done" }],
+    ]);
+    // 소비자(SSE 라우트)가 화면용으로 결과를 줄이는 상황. yield 에서 제너레이터가 멈춰 있으므로
+    // 나중에 stringify 하면 이 손질이 모델이 보는 내용까지 바꿔 버린다.
+    for await (const e of runAgent({ question: "발리 며칠?", provider: p, ctx, catalog: "" })) {
+      if (e.type === "tool_result") (e.result as { data: unknown }).data = "…화면용으로 줄임…";
+    }
+    const toolMessage = p.calls[1].messages.find((m) => m.role === "tool");
+    expect(toolMessage!.content).toContain("발리");
+    expect(toolMessage!.content).not.toContain("줄임");
   });
 
   it("대화 기록은 최근 것만 보낸다", async () => {

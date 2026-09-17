@@ -94,22 +94,32 @@ function keySubject(args: Record<string, unknown>, resources: AgentResource[], f
  * 도구별 한 줄 문구. 주어는 **레지스트리에서** 가져온다(리소스별 분기를 두지 않는다 —
  * 리소스가 늘어도 이 표는 그대로다).
  */
-const PHRASES: Record<string, (args: Record<string, unknown>, resources: AgentResource[]) => string> = {
-  open_page: (args, resources) => `${withJosa(pathSubject(args, resources), "을", "를")} 열어보는 중…`,
-  list_resource: (args, resources) => `${withJosa(keySubject(args, resources, "목록"), "을", "를")} 살펴보는 중…`,
-  create_item: (args, resources) => `${withJosa(keySubject(args, resources, "항목"), "을", "를")} 추가하는 중…`,
-  read_url: (args) => `${withJosa(clip(displayDomain(str(args.url))) || "링크", "을", "를")} 읽는 중…`,
-  view_screen: () => "화면을 보는 중…",
-};
+type Phrase = (args: Record<string, unknown>, resources: AgentResource[]) => string;
 
-/** 사용자 화면에 뜨는 한국어 한 줄. 모르는 도구도 문장은 만든다. */
+/**
+ * 이름은 모델이 지어 보낸 것이라 `__proto__`·`constructor` 같은 것도 온다.
+ * 객체로 인덱싱하면 그때 Object.prototype 이 튀어나와 호출하다 죽으므로 Map 을 쓴다.
+ */
+const PHRASES = new Map<string, Phrase>([
+  ["open_page", (args, resources) => `${withJosa(pathSubject(args, resources), "을", "를")} 열어보는 중…`],
+  ["list_resource", (args, resources) => `${withJosa(keySubject(args, resources, "목록"), "을", "를")} 살펴보는 중…`],
+  ["create_item", (args, resources) => `${withJosa(keySubject(args, resources, "항목"), "을", "를")} 추가하는 중…`],
+  ["read_url", (args) => `${withJosa(clip(displayDomain(str(args.url))) || "링크", "을", "를")} 읽는 중…`],
+  ["view_screen", () => "화면을 보는 중…"],
+]);
+
+/**
+ * 사용자 화면에 뜨는 한국어 한 줄. 모르는 도구도 문장은 만든다.
+ * 이 함수는 executeTool 보다 **먼저** 불린다. 여기서 던지면 도구 층이 실패를
+ * {ok:false} 로 돌려줄 기회조차 없이 스트림이 통째로 끊기므로, 절대 던지지 않는다.
+ */
 export function toolLabel(
   name: string,
   args: Record<string, unknown>,
   resources: AgentResource[]
 ): string {
-  const phrase = PHRASES[name];
-  return phrase ? phrase(args, resources) : `${name} 도구를 쓰는 중…`;
+  const phrase = PHRASES.get(name);
+  return phrase ? phrase(args, resources) : `${clip(name, 20) || "알 수 없는"} 도구를 쓰는 중…`;
 }
 
 // ── 대화 기록 ─────────────────────────────────────────────────
@@ -134,7 +144,9 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
   const catalog = input.catalog ?? (await buildCatalog(resources));
   const system = buildSystemPrompt(catalog);
   const tools = toolSchemas(resources);
-  const maxSteps = input.maxSteps ?? config.maxSteps;
+  // 0 은 nullish 가 아니라 그냥 통과한다 — 그러면 한 번도 묻지 않고 빈 답으로 끝난다.
+  // 라우트가 남은 예산 따위를 계산해 넘길 수 있으므로 여기서 바닥을 받쳐 둔다.
+  const maxSteps = Math.max(1, input.maxSteps ?? config.maxSteps);
 
   const messages: AgentMessage[] = [
     ...recentHistory(input.history ?? [], config.history),
@@ -158,9 +170,11 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
         yield { type: "tool_start", name: event.name, label: toolLabel(event.name, event.args, resources) };
         // executeTool 은 던지지 않는다. 실패도 결과로 받아 모델에게 그대로 돌려준다.
         const result = await executeTool(event.name, event.args, ctx);
-        yield { type: "tool_result", result };
+        // 모델에게 보낼 본문을 먼저 굳힌다. yield 에서 제너레이터가 멈춰 있는 동안
+        // 소비자가 result 를 화면용으로 손대도(길이 줄이기 등) 모델이 보는 것은 그대로다.
         calls.push({ id: event.id, name: event.name, args: event.args });
         results.push({ role: "tool", content: JSON.stringify(result), toolCallId: event.id });
+        yield { type: "tool_result", result };
         continue;
       }
       if (event.type === "error") {
