@@ -159,7 +159,9 @@ export interface CatalogEntry {
 
 ### 5.5 `화면보기()` — 1단계는 스텁
 
-`{ available: false, reason: "아직 지원하지 않습니다" }`를 반환한다. 루프와 도구 목록은 지금 모양을 갖추되, 클라이언트 캡처는 2단계. 엔드포인트의 이미지 입력 지원 여부가 미확인이기 때문(§12).
+`{ ok: true, data: { available: false, reason: "아직 지원하지 않습니다" } }`를 반환한다. 루프와 도구 목록은 지금 모양을 갖추되, 클라이언트 캡처는 2단계다.
+
+> 원래는 "엔드포인트의 이미지 입력 지원 여부가 미확인이라서"가 이유였지만, 2026-09-18 실측으로 **이미지 입력은 지원됨이 확인됐다**(§16). 남은 일은 클라이언트 캡처를 붙이는 것뿐이다.
 
 ---
 
@@ -343,16 +345,32 @@ model AgentRun {
 
 ---
 
-## 16. 미확인 (쿼터 풀린 뒤 실측)
+## 16. 실측 결과와 남은 미확인
 
-| 항목 | 확인 방법 | 안 될 때 |
+### 실측 완료 (2026-09-18, `POST https://chatgpt.com/backend-api/codex/responses`)
+
+탐침 4회 모두 HTTP 200. 원시 덤프는 `.superpowers/sdd/2026-09-17-site-agent-engine/probe-1..4` 와 `WIRE-FINDINGS.md`(저장소 밖, 로컬 작업 폴더).
+
+| 항목 | 결과 |
+|---|---|
+| 모델 ID `gpt-5.6-terra` | ✅ **유효** |
+| 네이티브 function calling | ✅ **지원** — `tools` 필드가 그대로 통과. `AGENT_TOOL_MODE` 기본값은 `auto` 로 두되 `native` 가 실제로 동작함이 확인됐다 |
+| `{type:"object"}`(properties 없음) 인자 스키마 | ✅ **통과** — 그래서 `strict` 를 **켜면 안 된다**(켜면 4xx → 헛된 json 강등) |
+| 이미지 입력 | ✅ **지원** — `content` 가 `[{type:"input_text"},{type:"input_image"}]` 파트 배열을 받는다 → 3층(화면보기)이 기술적으로 가능 |
+| 스트림 종료 | ✅ **`response.completed`**. `[DONE]` 센티널은 **오지 않는다**(계획서 픽스처가 틀렸다 — 와도 무해하게 받아만 둔다) |
+| 도구 호출 식별자 | ✅ `response.output_item.done` 의 `item.call_id`(`call_…`). `item.id`(`fc_…`)와 **다르며**, 결과 짝짓기는 `call_id` 쪽 |
+
+부수 사실: `type:"reasoning"` 항목(`encrypted_content` 수 KB)과 모든 data 줄의 `obfuscation` 필드는 조용히 무시한다. 모르는 `type` 때문에 스트림 전체가 죽으면 안 된다.
+
+### 아직 미확인
+
+| 항목 | 지금 대응 | 확인되는 시점 |
 |---|---|---|
-| function calling 지원 | `tools` 넣고 호출 | `AGENT_TOOL_MODE=json` |
-| 모델 ID `gpt-5.6-terra` | 호출 후 에러 메시지 | `AGENT_MODEL` 교체 |
-| 이미지 입력 | base64 이미지 1장 | 화면보기(3층) 보류 |
-| 스트리밍 이벤트 형태 | 원문 SSE 덤프 | `codex.ts` 파서만 수정 |
+| 토큰 갱신 본문 형식 (JSON vs form-encoded) | 양쪽 폴백 — JSON 먼저, 4xx 면 form-encoded 1회 재시도 | 첫 갱신(2026-09-27 즈음) 로그에 `refresh: json ok` / `refresh: form ok` 로 드러난다 |
+| 2턴째 도구 결과 되돌려주기 | 실측이 단일 턴뿐이라 미검증 | 2단계에서 실제 왕복을 태울 때 |
+| `function_call_output`·`role:"tool"` 아이템 수용 여부 | 받아 준다는 보장이 없어 `toInputItems()` 가 전부 사람이 읽는 텍스트로 평탄화한다 | 위와 같음. 받아 준다면 그 함수 하나만 고치면 된다 |
 
-**네 가지 모두 `lib/agent/llm/codex.ts` 한 파일 안에서 흡수된다.** 루프·도구·화면은 바뀌지 않는다.
+**전부 `lib/agent/llm/codex.ts` 한 파일 안에서 흡수된다.** 루프·도구·화면은 바뀌지 않는다.
 
 ---
 
