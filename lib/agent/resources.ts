@@ -1,10 +1,10 @@
-// 에이전트가 다루는 리소스 15종. 목차(catalog)·상세(detail)·추가(create)가 모두 여기서 파생된다.
+// 에이전트가 다루는 리소스 16종. 목차(catalog)·상세(detail)·추가(create)가 모두 여기서 파생된다.
 // 규칙: LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범/계획은 제목으로, 아기는 1명으로,
 // 가족 구성원은 이름(또는 역할)으로 찾아 toBody 가 채운다.
 // 값 검증은 기존 API 라우트가 하므로 여기서 중복하지 않는다(빈 값은 undefined 로 넘겨 기본값을 살린다).
 
 import { prisma } from "@/lib/prisma";
-import { kDateShort, startOfDay } from "@/lib/date";
+import { dday, kDateShort, kTime, startOfDay } from "@/lib/date";
 import { NAV } from "@/lib/nav";
 import type { AgentResource, CatalogEntry } from "./registry";
 
@@ -101,6 +101,28 @@ const DECORATION_PAGES = [...NAV.map((n) => n.href), "global"];
 // 배열 순서가 의미를 갖는다: listPath 가 겹칠 때 resolvePath 는 먼저 나온 리소스를 고른다.
 // 따라서 부모(album·plan·baby)가 자식(photo·planItem·babyEntry …)보다 앞에 있어야 한다.
 export const RESOURCES: AgentResource[] = [
+  {
+    key: "familyMember",
+    label: "가족",
+    // 가족만 모아 보는 페이지는 없다. 겹치지 않게 둔 가상 경로다.
+    // 목차에 올리는 이유: todo·anniversary·board·shopping·babyEntry 가 이름/역할로 사람을 찾는데,
+    // 이름을 모르면 LLM 이 지어내고 memberIdByName 이 throw 해서 추가가 통째로 실패한다.
+    listPath: "/family",
+    async catalog() {
+      const rows = await prisma.familyMember.findMany({
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, role: true },
+      });
+      // 역할이 이름과 같으면("아빠"/"아빠") 굳이 두 번 적지 않는다.
+      return rows.map((m) => ({
+        id: m.id,
+        title: m.name,
+        hint: m.role && m.role !== m.name ? m.role : undefined,
+      }));
+    },
+    // 읽기 전용. 가족 구성원은 에이전트가 만들지 않는다.
+  },
+
   {
     key: "album",
     label: "앨범",
@@ -370,7 +392,10 @@ export const RESOURCES: AgentResource[] = [
             description: "중요도(선택). 비우면 보통",
             enum: ["low", "normal", "high"],
           },
-          memberName: { type: "string", description: "맡을 가족 구성원의 이름이나 역할(선택). 예: 엄마" },
+          memberName: {
+            type: "string",
+            description: "맡을 사람(선택). 목차의 가족에 있는 이름이나 역할 그대로. 예: 엄마",
+          },
         },
         required: ["title"],
       },
@@ -401,18 +426,23 @@ export const RESOURCES: AgentResource[] = [
         select,
         take: 20,
       });
+      // 폴백으로 지난 일정을 싣는 경우, 표시가 없으면 "다음 일정"을 지난 일로 답하게 된다.
+      let past = false;
       if (rows.length === 0) {
-        const past = await prisma.calendarEvent.findMany({
-          orderBy: { start: "desc" },
-          select,
-          take: 10,
-        });
-        rows = past.reverse();
+        rows = (
+          await prisma.calendarEvent.findMany({ orderBy: { start: "desc" }, select, take: 10 })
+        ).reverse();
+        past = true;
       }
       return rows.map((e) => ({
         id: e.id,
         title: e.title,
-        hint: hintOf([kDateShort(e.start), e.allDay ? "하루 종일" : null, e.location]),
+        hint: hintOf([
+          past ? "지난 일정" : null,
+          kDateShort(e.start),
+          e.allDay ? "하루 종일" : kTime(e.start),
+          e.location,
+        ]),
       }));
     },
     create: {
@@ -456,11 +486,28 @@ export const RESOURCES: AgentResource[] = [
         select: { id: true, title: true, date: true, type: true, recurring: true },
         take: 30,
       });
-      return rows.map((a) => ({
-        id: a.id,
-        title: a.title,
-        hint: hintOf([kDateShort(a.date), a.recurring ? "매년" : null]),
-      }));
+      // 저장된 원본 날짜를 그대로 쓰면 반복 기념일의 요일이 수십 년 전 요일이 된다.
+      // 화면들과 똑같이 dday 의 nextDate 를 쓴다(반복이 아니면 원본 날짜와 같다).
+      return rows
+        .map((a) => ({ ...a, d: dday(a.date, { recurring: a.recurring }) }))
+        // 다가오는 것을 가까운 순으로 앞에, 이미 지난 것(반복이 아닌 기념일)은 최근 순으로 뒤에.
+        // 지난 것이 앞에 오면 "다음 기념일"을 지난 일로 답하게 된다.
+        .sort((x, y) => {
+          const xPast = x.d.days < 0 ? 1 : 0;
+          const yPast = y.d.days < 0 ? 1 : 0;
+          if (xPast !== yPast) return xPast - yPast;
+          return xPast ? y.d.days - x.d.days : x.d.days - y.d.days;
+        })
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          hint: hintOf([
+            a.d.days < 0 ? "지난 기념일" : null,
+            kDateShort(a.d.nextDate),
+            a.d.label,
+            a.recurring ? "매년" : null,
+          ]),
+        }));
     },
     create: {
       api: "/api/anniversaries",
@@ -477,7 +524,10 @@ export const RESOURCES: AgentResource[] = [
           },
           recurring: { type: "boolean", description: "매년 반복하면 true(선택). 비우면 매년 반복" },
           note: { type: "string", description: "메모(선택)" },
-          memberName: { type: "string", description: "관련된 가족 구성원의 이름이나 역할(선택)" },
+          memberName: {
+            type: "string",
+            description: "관련된 사람(선택). 목차의 가족에 있는 이름이나 역할 그대로",
+          },
         },
         required: ["title", "date"],
       },
@@ -519,7 +569,10 @@ export const RESOURCES: AgentResource[] = [
         properties: {
           content: { type: "string", description: "글 내용(마크다운)" },
           pinned: { type: "boolean", description: "맨 위에 고정하려면 true(선택)" },
-          authorName: { type: "string", description: "쓴 사람(가족 구성원)의 이름이나 역할(선택)" },
+          authorName: {
+            type: "string",
+            description: "쓴 사람(선택). 목차의 가족에 있는 이름이나 역할 그대로",
+          },
         },
         required: ["content"],
       },
@@ -558,7 +611,10 @@ export const RESOURCES: AgentResource[] = [
         properties: {
           name: { type: "string", description: "살 것. 예: 우유" },
           quantity: { type: "string", description: "수량(선택). 예: 2개, 1L" },
-          memberName: { type: "string", description: "담은 가족 구성원의 이름이나 역할(선택)" },
+          memberName: {
+            type: "string",
+            description: "담은 사람(선택). 목차의 가족에 있는 이름이나 역할 그대로",
+          },
         },
         required: ["name"],
       },
@@ -627,7 +683,10 @@ export const RESOURCES: AgentResource[] = [
             enum: ["diary", "checkup", "letter"],
           },
           mood: { type: "string", description: "그날 컨디션 이모지 하나(선택). 예: 😊" },
-          authorName: { type: "string", description: "쓴 사람(가족 구성원)의 이름이나 역할(선택)" },
+          authorName: {
+            type: "string",
+            description: "쓴 사람(선택). 목차의 가족에 있는 이름이나 역할 그대로",
+          },
         },
         required: ["content"],
       },

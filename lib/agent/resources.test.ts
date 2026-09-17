@@ -57,6 +57,12 @@ describe("RESOURCES 계약", () => {
     expect(resolvePath("/baby", RESOURCES)?.key).toBe("baby");
   });
 
+  it("가족은 목차에만 있고 에이전트가 만들 수 없다", () => {
+    const family = RESOURCES.find((r) => r.key === "familyMember");
+    expect(family, "familyMember").toBeDefined();
+    expect(family!.create, "familyMember.create").toBeUndefined();
+  });
+
   it("추가 스키마가 내부 식별자를 묻지 않는다", () => {
     for (const r of RESOURCES) {
       for (const prop of Object.keys(r.create?.schema.properties ?? {})) {
