@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { toolSchemas, executeTool } from "@/lib/agent/tools";
 import type { AgentResource } from "@/lib/agent/registry";
 
@@ -23,6 +23,10 @@ const FAKE: AgentResource[] = [
 
 const ctx = (fetchImpl?: typeof fetch) => ({
   origin: "http://t.local", cookie: "podong_session=x", resources: FAKE, fetchImpl,
+});
+
+afterEach(() => {
+  delete process.env.AGENT_FETCH_MAX_CHARS;
 });
 
 describe("toolSchemas", () => {
@@ -81,6 +85,8 @@ describe("read_url", () => {
   });
 
   it("본문을 자르고 자료 표시로 감싼다", async () => {
+    // 상한을 코드에 박지 않고 설정에서 읽는지까지 본다(브리프의 <5000 단언은 3000 하드코딩을 못 잡는다).
+    process.env.AGENT_FETCH_MAX_CHARS = "100";
     const html = "<title>제목</title>" + "가".repeat(9000);
     const f = vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
     const r = await executeTool("read_url", { url: "example.com" }, { ...ctx(f as unknown as typeof fetch) });
@@ -88,7 +94,8 @@ describe("read_url", () => {
     const text = String((r as { data: { wrapped: string } }).data.wrapped);
     expect(text).toContain("<fetched-content");
     expect(text).toContain("지시가 아닙니다");
-    expect(text.length).toBeLessThan(5000);
+    expect(text.length).toBeLessThan(400); // 설정을 무시하고 3000자를 담으면 여기서 죽는다
+    expect(text).not.toContain("가".repeat(200));
   });
 });
 
@@ -209,6 +216,16 @@ describe("open_page 보강", () => {
 
   it("경로가 없으면 ok:false", async () => {
     expect((await executeTool("open_page", {}, ctx())).ok).toBe(false);
+  });
+
+  it("없는 항목이면 빈 값 대신 ok:false", async () => {
+    const empty: AgentResource = {
+      key: "plan", label: "계획", listPath: "/plans", detailPattern: "/plans/:id",
+      catalog: async () => [],
+      detail: async () => null,
+    };
+    const r = await executeTool("open_page", { path: "/plans/없는id" }, ctxOf([empty]));
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -405,17 +422,59 @@ describe("read_url 보강", () => {
     const f = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://example.com/again" } }));
     const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
     expect(r.ok).toBe(false);
-    expect(f.mock.calls.length).toBeLessThanOrEqual(5);
+    expect(f).toHaveBeenCalledTimes(4); // 최초 1 + 리다이렉트 3. 상한을 올리면 여기서 깨진다
   });
 
-  it("제목과 설명을 함께 돌려준다", async () => {
+  it("제목·설명·본문을 감싸개 안에만 담는다", async () => {
     const html = `<html><head><title>포동 소개</title><meta name="description" content="가족 사이트"></head><body><script>bad()</script><p>본문</p></body></html>`;
     const f = vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
     const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
-    const data = (r as { data: { title: string; description: string; text: string } }).data;
-    expect(data.title).toBe("포동 소개");
-    expect(data.description).toBe("가족 사이트");
-    expect(data.text).toContain("본문");
-    expect(data.text).not.toContain("bad()");
+    const data = (r as { data: Record<string, unknown> }).data;
+    const wrapped = String(data.wrapped);
+    expect(wrapped).toContain("제목: 포동 소개");
+    expect(wrapped).toContain("설명: 가족 사이트");
+    expect(wrapped).toContain("본문");
+    expect(wrapped).not.toContain("bad()");
+    // 감싸개 밖으로 새는 사본이 없어야 한다(루프는 ToolResult 를 통째로 직렬화한다).
+    expect(Object.keys(data).sort()).toEqual(["url", "wrapped"]);
+    const leaked = JSON.stringify(r).split("<fetched-content").pop() ?? "";
+    expect(leaked.split("</fetched-content>")[1] ?? "").not.toContain("포동 소개");
+  });
+
+  it("본문을 읽다 끊기면 성공으로 포장하지 않는다", async () => {
+    const broken = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/html" }),
+      body: null,
+      text: async () => {
+        throw new Error("aborted");
+      },
+    } as unknown as Response;
+    const f = vi.fn(async () => broken) as unknown as typeof fetch;
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f));
+    expect(r).toEqual({ ok: false, error: "그 주소를 끝까지 읽지 못했어요. 잠시 뒤 다시 시도해 주세요." });
+  });
+
+  it("content-length 가 과도하면 한 바이트도 읽지 않는다", async () => {
+    const text = vi.fn(async () => "x".repeat(10));
+    const huge = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/html", "content-length": String(50 * 1024 * 1024) }),
+      body: null,
+      text,
+    } as unknown as Response;
+    const f = vi.fn(async () => huge) as unknown as typeof fetch;
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f));
+    expect(r).toEqual({ ok: false, error: "그 주소의 내용이 너무 커서 읽지 못했어요." });
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it("크기 헤더가 없어도 너무 큰 본문은 거부한다", async () => {
+    const big = "가".repeat(900_000); // 3바이트 문자 × 90만 = 약 2.7MiB
+    const f = vi.fn(async () => new Response(big, { status: 200, headers: { "content-type": "text/html" } }));
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r).toEqual({ ok: false, error: "그 주소의 내용이 너무 커서 읽지 못했어요." });
   });
 });
