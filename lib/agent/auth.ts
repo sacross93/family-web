@@ -109,6 +109,20 @@ export async function saveAuth(data: CodexAuthFile): Promise<void> {
   });
 }
 
+/**
+ * `chatgpt-account-id` 헤더에 쓰는 계정 식별자(UUID). **비밀이 아닙니다.**
+ * 주입할 때 access_token(JWT)의 `https://api.openai.com/auth` → `chatgpt_account_id`
+ * 클레임에서 뽑아 평문 컬럼에 저장해 둔 값이라, 요청마다 토큰을 다시 파싱할 필요가 없습니다.
+ * 행이 없거나 저장돼 있지 않으면 `null` — 이 헤더는 없어도 요청이 나가므로 예외를 던지지 않습니다.
+ */
+export async function getAccountId(): Promise<string | null> {
+  const row = await prisma.agentAuth.findUnique({
+    where: { id: AUTH_ID },
+    select: { accountId: true },
+  });
+  return row?.accountId ?? null;
+}
+
 /** 갱신 HTTP 를 대신 수행하는 함수. 테스트에서 주입합니다(네트워크를 타지 않게). */
 export type RefreshFn = (refreshToken: string) => Promise<RefreshResult>;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { requestRefresh, getAccessToken, saveAuth, type RefreshResult } from "@/lib/agent/auth";
+import { requestRefresh, getAccessToken, getAccountId, saveAuth, type RefreshResult } from "@/lib/agent/auth";
 import { decryptSecret } from "@/lib/agent/crypto";
 import { prisma } from "@/lib/prisma";
 
@@ -264,6 +264,15 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
     expect(after.accessToken).toBe(before.accessToken);
     expect(after.refreshToken).toBe(before.refreshToken);
     expect(after.expiresAt.getTime()).toBe(before.expiresAt.getTime());
+  });
+
+  it("accountId 는 복호화 없이 평문 그대로 돌려준다", async () => {
+    await expect(getAccountId()).resolves.toBe("test-account");
+  });
+
+  it("행이 없으면 accountId 는 예외가 아니라 null (헤더를 생략할 수 있게)", async () => {
+    await prisma.agentAuth.deleteMany({ where: { id: "main" } });
+    await expect(getAccountId()).resolves.toBeNull();
   });
 
   it("AUTH_SECRET 이 바뀌어 복호화가 안 되면 안내 문구로 바꿔 던진다", async () => {
