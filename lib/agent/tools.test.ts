@@ -341,6 +341,7 @@ describe("read_url 보강", () => {
       "http://nas.home.arpa/",
       "http://intranet/", // 점 없는 한 토막 이름 = 내부 서비스
       "http://redis:6379/",
+      "http://db/",
     ];
     const f = vi.fn(async () => new Response("secret", { status: 200 }));
     for (const url of blocked) {
