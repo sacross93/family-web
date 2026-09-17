@@ -46,6 +46,8 @@ describe("RESOURCES 계약", () => {
     expect(resolvePath("/albums/abc", RESOURCES)?.key).toBe("album");
     expect(resolvePath("/plans/xyz", RESOURCES)?.key).toBe("plan");
     expect(resolvePath("/admin", RESOURCES)).toBeNull();
+    // 홈은 여러 리소스를 모아 보여주는 대시보드라 어떤 리소스에도 매이지 않는다.
+    expect(resolvePath("/", RESOURCES)).toBeNull();
   });
 
   it("목록 경로가 겹치면 부모 리소스로 해석된다", () => {

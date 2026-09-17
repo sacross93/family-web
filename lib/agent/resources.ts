@@ -6,7 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import { kDateShort, startOfDay } from "@/lib/date";
 import { NAV } from "@/lib/nav";
-import type { AgentResource } from "./registry";
+import type { AgentResource, CatalogEntry } from "./registry";
 
 /** 빈 문자열·공백은 "값 없음"으로 본다. */
 function optStr(v: unknown): string | undefined {
@@ -337,16 +337,24 @@ export const RESOURCES: AgentResource[] = [
     label: "할일",
     listPath: "/todos",
     async catalog() {
-      const rows = await prisma.todo.findMany({
-        orderBy: [{ date: "asc" }, { sortOrder: "asc" }],
-        select: { id: true, title: true, date: true, done: true },
-        take: 20,
-      });
-      return rows.map((t) => ({
+      // 끝난 할일이 목차를 차지하면 "할일 뭐 있어?"에 이미 끝난 것을 읊게 된다.
+      // 남은 할일을 먼저 싣고, 끝난 것은 개수만 덧붙인다.
+      const [rows, doneCount] = await Promise.all([
+        prisma.todo.findMany({
+          where: { done: false },
+          orderBy: [{ date: "asc" }, { sortOrder: "asc" }],
+          select: { id: true, title: true, date: true },
+          take: 20,
+        }),
+        prisma.todo.count({ where: { done: true } }),
+      ]);
+      const entries: CatalogEntry[] = rows.map((t) => ({
         id: t.id,
         title: t.title,
-        hint: `${kDateShort(t.date)}${t.done ? " · 완료" : ""}`,
+        hint: kDateShort(t.date),
       }));
+      if (doneCount) entries.push({ title: `완료한 할일 ${doneCount}개` });
+      return entries;
     },
     create: {
       api: "/api/todos",
@@ -695,8 +703,10 @@ export const RESOURCES: AgentResource[] = [
 
   {
     key: "decoration",
+    // 스티커만 모아 보는 페이지는 없다. 목록 경로는 다른 리소스와 겹치지 않게 둔 가상 경로다.
+    // ("/" 를 쓰면 홈이 "스티커 목록"으로 해석되어 홈 질문에 엉뚱하게 답한다.)
     label: "꾸미기 스티커",
-    listPath: "/",
+    listPath: "/decorations",
     async catalog() {
       const count = await prisma.decoration.count();
       return count ? [{ title: `스티커 ${count}개` }] : [];
