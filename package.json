@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:lan": "next dev -H 0.0.0.0",
-    "build": "next build",
+    "build": "tsx scripts/seed-agent-auth.ts && next build",
     "start": "next start",
     "start:lan": "next start -H 0.0.0.0",
     "lint": "eslint",
