@@ -1,6 +1,14 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { createChat, appendMessages, loadHistory, listChats, deleteChat, titleFrom } from "@/lib/agent/chat-store";
+import {
+  createChat,
+  appendMessages,
+  chatExists,
+  loadHistory,
+  listChats,
+  deleteChat,
+  titleFrom,
+} from "@/lib/agent/chat-store";
 
 const made: string[] = [];
 async function newChat(first = "안녕") {
@@ -72,5 +80,15 @@ describe("대화 저장", () => {
     await appendMessages(id, [{ role: "user", content: "x" }]);
     await deleteChat(id);
     expect(await prisma.agentChatMessage.count({ where: { chatId: id } })).toBe(0);
+  });
+
+  it("chatExists 는 있는 대화만 참", async () => {
+    // 라우트가 쓰기 전에 이걸로 거른다 — 지워진 대화에 이어 쓰면 외래키로 저장이 통째로 실패한다.
+    const id = await createChat("있다가 없어질 것");
+    expect(await chatExists(id)).toBe(true);
+    await deleteChat(id);
+    expect(await chatExists(id)).toBe(false);
+    expect(await chatExists("")).toBe(false);
+    expect(await chatExists("없는-id")).toBe(false);
   });
 });

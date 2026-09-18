@@ -24,10 +24,16 @@ export interface RunInput {
   maxSteps?: number;
 }
 
-/** 화면으로 흘려보내는 이벤트. 공급자 이벤트와 달리 도구 "결과"까지 담는다. */
+/**
+ * 화면으로 흘려보내는 이벤트. 공급자 이벤트와 달리 도구 "결과"까지 담는다.
+ *
+ * `tool_start` 는 화면용 label 뿐 아니라 **원본 id·args** 도 같이 낸다. 라우트가 이 턴을
+ * 기록으로 되짚어야 하는데, id 를 지어내고 args 를 버리면 다음 턴에 모델이 히스토리에서
+ * `open_page({})` 를 보게 된다 — 자기가 뭘 열어봤는지 모르니 같은 것을 또 열어 사용량이 샌다.
+ */
 export type LoopEvent =
   | { type: "text"; delta: string }
-  | { type: "tool_start"; name: string; label: string }
+  | { type: "tool_start"; id: string; name: string; args: Record<string, unknown>; label: string }
   | { type: "tool_result"; result: ToolResult }
   | { type: "done" }
   | { type: "error"; message: string; status?: number };
@@ -178,7 +184,13 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
         continue;
       }
       if (event.type === "tool_call") {
-        yield { type: "tool_start", name: event.name, label: toolLabel(event.name, event.args, resources) };
+        yield {
+          type: "tool_start",
+          id: event.id,
+          name: event.name,
+          args: event.args,
+          label: toolLabel(event.name, event.args, resources),
+        };
         // executeTool 은 던지지 않는다. 실패도 결과로 받아 모델에게 그대로 돌려준다.
         const result = await executeTool(event.name, event.args, ctx);
         // 모델에게 보낼 본문을 먼저 굳힌다. yield 에서 제너레이터가 멈춰 있는 동안

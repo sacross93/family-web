@@ -2,27 +2,25 @@
 //
 // 이 라우트가 혼자 책임지는 것 셋:
 //  ① 기능 스위치(AGENT_ENABLED) — 엔진 어디에도 이 값을 보는 곳이 없습니다. 여기서 지킵니다.
-//  ② 내부 API 주소 — 요청 헤더가 아니라 환경변수에서 만듭니다(아래 agentOrigin 주석).
+//  ② 내부 API 주소 — 요청 헤더가 아니라 환경변수에서 만듭니다(lib/agent/origin.ts 주석).
 //  ③ 도구 호출의 짝 — runAgent 는 최종 messages 를 돌려주지 않으므로 이벤트를 보며 되짚습니다.
 //
 // 오류는 상태코드·원문 그대로 내보내지 않고 사람 말로 번역합니다. 화면에 뜨는 문장이고,
 // 공급자 원문에는 사용자 본인의 ChatGPT 세션 사정이 섞여 있습니다.
 
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { appendMessages, createChat, loadHistory } from "@/lib/agent/chat-store";
+import { appendMessages, chatExists, createChat, loadHistory } from "@/lib/agent/chat-store";
 import { agentConfig } from "@/lib/agent/config";
 import { createCodexProvider } from "@/lib/agent/llm/codex";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import { runAgent } from "@/lib/agent/loop";
-import { prisma } from "@/lib/prisma";
+import { agentOrigin } from "@/lib/agent/origin";
 
 // 토큰 갱신 HTTP 타임아웃 8초 × 2회 + 도구 왕복 여유.
 // 갱신은 트랜잭션 안에서 일어나므로 도중에 함수가 죽으면 refresh_token 이 영구히 죽습니다.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const DEV_ORIGIN = "http://localhost:3000";
 const GENERIC_ERROR = "잠깐 문제가 생겼어요. 다시 해볼까요?";
 
 /** 공급자 오류 → 화면 문장. 상태코드도 원문도 문장에 넣지 않습니다. */
@@ -33,24 +31,12 @@ function humanError(status?: number): string {
 }
 
 /**
- * 도구가 내부 API 를 부를 때 쓸 주소.
- *
- * **Host·X-Forwarded-Host 에서 만들면 안 됩니다.** 그 헤더는 요청자가 정하는 값이라
- * 조작하면 도구가 요청자의 세션 쿠키를 그대로 들고 남의 서버로 찾아갑니다.
- * 서버가 아는 값(환경변수)만 씁니다.
- */
-function agentOrigin(): string {
-  const raw = process.env.AGENT_ORIGIN || process.env.AUTH_URL || DEV_ORIGIN;
-  return raw.trim().replace(/\/+$/, "");
-}
-
-/**
  * 이벤트를 보며 이번 턴의 대화 기록을 되짚습니다.
  *
- * 지켜야 할 것은 단 하나 — assistant 의 `toolCalls` 와 tool 의 `toolCallId` 가 **짝을 이룰 것**.
- * 짝이 깨진 채 저장되면 다음 턴에 네이티브 도구 모드가 요청 자체를 거절합니다.
+ * 지켜야 할 것은 둘 — assistant 의 `toolCalls` 와 tool 의 `toolCallId` 가 **짝을 이룰 것**,
+ * 그리고 호출의 **id·args 가 공급자가 낸 원본일 것**. 짝이 깨지면 다음 턴에 네이티브 도구
+ * 모드가 요청 자체를 거절하고, args 가 비면 모델이 자기가 뭘 열어봤는지 몰라 또 엽니다.
  *
- * `tool_start` 에는 id 도 args 도 없으므로(LoopEvent 계약) 짝지을 id 는 여기서 새로 만들고,
  * 결과는 **나온 순서대로** 짝짓습니다. 도중에 끊겨 결과를 못 받은 호출은 버립니다 —
  * 짝 없는 호출 하나가 남는 것이 그 왕복을 통째로 잃는 것보다 나쁩니다.
  */
@@ -80,8 +66,8 @@ function createTurnLog() {
       if (calls.length > 0) flush();
       said += delta;
     },
-    call(name: string) {
-      calls.push({ id: `call_${randomUUID().replace(/-/g, "")}`, name, args: {} });
+    call(id: string, name: string, args: Record<string, unknown>) {
+      calls.push({ id, name, args });
     },
     result(content: string) {
       const call = calls[results.length];
@@ -126,8 +112,9 @@ export async function POST(request: NextRequest) {
   try {
     if (given) {
       // 지워진 대화에 이어 쓰면 저장이 통째로 실패합니다(외래키). 미리 확인해 알려 줍니다.
-      const found = await prisma.agentChat.findUnique({ where: { id: given }, select: { id: true } });
-      if (!found) return NextResponse.json({ error: "그 대화를 찾지 못했어요." }, { status: 404 });
+      if (!(await chatExists(given))) {
+        return NextResponse.json({ error: "그 대화를 찾지 못했어요." }, { status: 404 });
+      }
       chatId = given;
     } else {
       // createChat 은 첫 메시지를 제목에만 씁니다. 본문 저장은 아래 appendMessages 가 합니다.
@@ -169,8 +156,9 @@ export async function POST(request: NextRequest) {
             log.text(event.delta);
             send(event);
           } else if (event.type === "tool_start") {
-            log.call(event.name);
-            send(event);
+            log.call(event.id, event.name, event.args);
+            // 화면에는 계약대로 name·label 만. id·args 는 기록용이라 브라우저로 내보내지 않습니다.
+            send({ type: "tool_start", name: event.name, label: event.label });
           } else if (event.type === "tool_result") {
             log.result(JSON.stringify(event.result));
             send(event);

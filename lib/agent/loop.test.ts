@@ -143,6 +143,28 @@ describe("runAgent", () => {
     expect(start.label).toContain("중…");
   });
 
+  it("tool_start 는 공급자의 id 와 args 를 그대로 싣는다", async () => {
+    // 라우트는 이 두 값으로 기록을 되짚는다. label 만 나가면 라우트가 id 를 지어내고
+    // args 를 {} 로 저장하게 되어, 다음 턴에 모델이 뭘 열어봤는지 모른 채 또 연다.
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "call_abc", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
+      [{ type: "text", delta: "네" }, { type: "done" }],
+    ]);
+    const events = await drain(runAgent({ question: "발리 봐줘", provider: p, ctx, catalog: "" }));
+    const start = events.find((e) => e.type === "tool_start") as {
+      id: string;
+      args: Record<string, unknown>;
+    };
+    expect(start.id).toBe("call_abc");
+    expect(start.args).toEqual({ path: "/plans/p1" });
+
+    // 루프가 모델에게 되돌려 주는 히스토리도 같은 값이어야 짝이 산다(라우트가 이 모양을 저장한다).
+    const sent = p.calls[1].messages;
+    const assistant = sent.find((m) => m.role === "assistant" && m.toolCalls?.length);
+    expect(assistant?.toolCalls).toEqual([{ id: "call_abc", name: "open_page", args: { path: "/plans/p1" } }]);
+    expect(sent.find((m) => m.role === "tool")?.toolCallId).toBe("call_abc");
+  });
+
   it("프로토타입 키를 도구 이름으로 보내도 스트림이 죽지 않는다", async () => {
     // 진행 문구를 만드는 표를 객체로 인덱싱하면 이런 이름에서 Object.prototype 이 튀어나온다.
     // 이 호출은 executeTool 보다 **앞**이라, 던지면 {ok:false} 로 처리될 기회조차 없이

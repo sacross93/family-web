@@ -4,6 +4,7 @@
 // 그래서 **클라이언트는 경로를 보내지 않는다.** {resource, id} 만 받고 지울 주소는 서버가 만든다.
 // 경로를 받아 주면 화이트리스트가 무의미해지고 임의 DELETE 가 열린다.
 import { NextRequest, NextResponse } from "next/server";
+import { agentOrigin } from "@/lib/agent/origin";
 import { findResource } from "@/lib/agent/registry";
 import { RESOURCES } from "@/lib/agent/resources";
 
@@ -16,15 +17,6 @@ const HTTP_TIMEOUT_MS = 10_000;
 
 /** id 는 경로 조각이 된다. cuid 밖의 글자(`/` `..` `?`)가 섞이면 클라이언트가 DELETE 목적지를 고르게 된다. */
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-
-/**
- * 내부 API 를 부를 주소. **요청 헤더(Host/X-Forwarded-Host)에서 만들지 않는다** —
- * 세션 쿠키를 그대로 붙여 보내므로 헤더를 믿으면 공격자 서버로 쿠키가 나간다.
- */
-function agentOrigin(): string {
-  const raw = process.env.AGENT_ORIGIN || process.env.AUTH_URL || "http://localhost:3000";
-  return raw.replace(/\/+$/, "");
-}
 
 function timeoutSignal(): AbortSignal | undefined {
   return typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
@@ -78,7 +70,11 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const error = await targetError(res);
-    return NextResponse.json({ error }, { status: res.status >= 400 ? res.status : 502 });
+    // 대상의 5xx 를 그대로 물려받으면 **우리 라우트가** 500 으로 로그에 남는다.
+    // 이미 지운 것을 또 되돌리면 대상이 P2025 로 500 을 내는데, 그건 우리 쪽 장애가 아니라
+    // 상류 응답 문제다 — 502 로 바꿔 내보낸다(사용자가 보는 문구는 그대로).
+    const status = res.status >= 500 ? 502 : res.status >= 400 ? res.status : 502;
+    return NextResponse.json({ error }, { status });
   }
 
   // 여기까지 오면 지워졌다. 본문 모양은 라우트마다 달라 읽지 않는다.
