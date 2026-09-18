@@ -1,0 +1,218 @@
+// 엔진(lib/agent)과 화면을 잇는 다리. 한 턴을 SSE 로 흘려보내고, 끝나면 기록으로 남깁니다.
+//
+// 이 라우트가 혼자 책임지는 것 셋:
+//  ① 기능 스위치(AGENT_ENABLED) — 엔진 어디에도 이 값을 보는 곳이 없습니다. 여기서 지킵니다.
+//  ② 내부 API 주소 — 요청 헤더가 아니라 환경변수에서 만듭니다(아래 agentOrigin 주석).
+//  ③ 도구 호출의 짝 — runAgent 는 최종 messages 를 돌려주지 않으므로 이벤트를 보며 되짚습니다.
+//
+// 오류는 상태코드·원문 그대로 내보내지 않고 사람 말로 번역합니다. 화면에 뜨는 문장이고,
+// 공급자 원문에는 사용자 본인의 ChatGPT 세션 사정이 섞여 있습니다.
+
+import { randomUUID } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { appendMessages, createChat, loadHistory } from "@/lib/agent/chat-store";
+import { agentConfig } from "@/lib/agent/config";
+import { createCodexProvider } from "@/lib/agent/llm/codex";
+import type { AgentMessage } from "@/lib/agent/llm/types";
+import { runAgent } from "@/lib/agent/loop";
+import { prisma } from "@/lib/prisma";
+
+// 토큰 갱신 HTTP 타임아웃 8초 × 2회 + 도구 왕복 여유.
+// 갱신은 트랜잭션 안에서 일어나므로 도중에 함수가 죽으면 refresh_token 이 영구히 죽습니다.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const DEV_ORIGIN = "http://localhost:3000";
+const GENERIC_ERROR = "잠깐 문제가 생겼어요. 다시 해볼까요?";
+
+/** 공급자 오류 → 화면 문장. 상태코드도 원문도 문장에 넣지 않습니다. */
+function humanError(status?: number): string {
+  if (status === 429) return "오늘 사용량을 다 썼어요. 잠시 뒤에 다시 해볼까요?";
+  if (status === 401) return "로그인이 풀렸어요. 새로고침해 주세요.";
+  return GENERIC_ERROR;
+}
+
+/**
+ * 도구가 내부 API 를 부를 때 쓸 주소.
+ *
+ * **Host·X-Forwarded-Host 에서 만들면 안 됩니다.** 그 헤더는 요청자가 정하는 값이라
+ * 조작하면 도구가 요청자의 세션 쿠키를 그대로 들고 남의 서버로 찾아갑니다.
+ * 서버가 아는 값(환경변수)만 씁니다.
+ */
+function agentOrigin(): string {
+  const raw = process.env.AGENT_ORIGIN || process.env.AUTH_URL || DEV_ORIGIN;
+  return raw.trim().replace(/\/+$/, "");
+}
+
+/**
+ * 이벤트를 보며 이번 턴의 대화 기록을 되짚습니다.
+ *
+ * 지켜야 할 것은 단 하나 — assistant 의 `toolCalls` 와 tool 의 `toolCallId` 가 **짝을 이룰 것**.
+ * 짝이 깨진 채 저장되면 다음 턴에 네이티브 도구 모드가 요청 자체를 거절합니다.
+ *
+ * `tool_start` 에는 id 도 args 도 없으므로(LoopEvent 계약) 짝지을 id 는 여기서 새로 만들고,
+ * 결과는 **나온 순서대로** 짝짓습니다. 도중에 끊겨 결과를 못 받은 호출은 버립니다 —
+ * 짝 없는 호출 하나가 남는 것이 그 왕복을 통째로 잃는 것보다 나쁩니다.
+ */
+function createTurnLog() {
+  const messages: AgentMessage[] = [];
+  let said = "";
+  let calls: NonNullable<AgentMessage["toolCalls"]> = [];
+  let results: AgentMessage[] = [];
+
+  function flush() {
+    const paired = calls.slice(0, results.length);
+    if (paired.length > 0) {
+      // "무엇을 불렀는지"와 "무엇을 돌려받았는지"는 반드시 붙어서 저장됩니다(loop.ts 와 같은 모양).
+      messages.push({ role: "assistant", content: said, toolCalls: paired });
+      messages.push(...results);
+    } else if (said) {
+      messages.push({ role: "assistant", content: said });
+    }
+    said = "";
+    calls = [];
+    results = [];
+  }
+
+  return {
+    text(delta: string) {
+      // 도구를 부른 뒤 다시 말을 시작했다 = 새 왕복. 앞 왕복을 먼저 닫습니다.
+      if (calls.length > 0) flush();
+      said += delta;
+    },
+    call(name: string) {
+      calls.push({ id: `call_${randomUUID().replace(/-/g, "")}`, name, args: {} });
+    },
+    result(content: string) {
+      const call = calls[results.length];
+      if (!call) return; // 짝지을 호출이 없는 결과는 버립니다.
+      results.push({ role: "tool", content, toolCallId: call.id });
+    },
+    /** 지금까지 쌓인 것을 닫아 돌려줍니다(중간에 끊겼어도 여기까지는 남습니다). */
+    close(): AgentMessage[] {
+      flush();
+      return messages;
+    },
+  };
+}
+
+interface AgentRequestBody {
+  chatId?: unknown;
+  message?: unknown;
+}
+
+export async function POST(request: NextRequest) {
+  const config = agentConfig();
+  if (!config.enabled) {
+    return NextResponse.json({ error: "아직 준비 중이에요." }, { status: 403 });
+  }
+
+  let body: AgentRequestBody | null = null;
+  try {
+    body = (await request.json()) as AgentRequestBody;
+  } catch {
+    return NextResponse.json({ error: "요청을 읽지 못했어요." }, { status: 400 });
+  }
+
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    return NextResponse.json({ error: "하고 싶은 말을 적어 주세요." }, { status: 400 });
+  }
+  const given = typeof body?.chatId === "string" ? body.chatId.trim() : "";
+
+  // 대화 준비는 스트림을 열기 **전에** 끝냅니다 — 여기서 실패하면 JSON 오류로 돌려줄 수 있습니다.
+  let chatId: string;
+  let history: AgentMessage[];
+  try {
+    if (given) {
+      // 지워진 대화에 이어 쓰면 저장이 통째로 실패합니다(외래키). 미리 확인해 알려 줍니다.
+      const found = await prisma.agentChat.findUnique({ where: { id: given }, select: { id: true } });
+      if (!found) return NextResponse.json({ error: "그 대화를 찾지 못했어요." }, { status: 404 });
+      chatId = given;
+    } else {
+      // createChat 은 첫 메시지를 제목에만 씁니다. 본문 저장은 아래 appendMessages 가 합니다.
+      chatId = await createChat(message);
+    }
+    // 최근 것만, 오래된 순으로. 선두에 남은 고아 tool 은 loop.ts 의 recentHistory 가 걷어냅니다.
+    history = await loadHistory(chatId, config.history);
+  } catch (error) {
+    console.error("[agent] 대화를 준비하지 못했습니다", error);
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
+  }
+
+  const encoder = new TextEncoder();
+  const disconnected = new AbortController();
+  const log = createTurnLog();
+  const ctx = { origin: agentOrigin(), cookie: request.headers.get("cookie") ?? "" };
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let open = true;
+      const send = (event: Record<string, unknown>) => {
+        if (!open) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          open = false; // 이미 끊긴 연결. 루프는 계속 돌다가 곧 멈추고 저장합니다.
+        }
+      };
+
+      // 클라이언트가 chatId 를 서버와 맞출 수 있도록 언제나 가장 먼저 한 번 보냅니다.
+      send({ type: "chat", chatId });
+
+      const run = runAgent({ question: message, provider: createCodexProvider(), ctx, history });
+      try {
+        for await (const event of run) {
+          // break 가 제너레이터의 return() 을 불러 공급자 쪽도 정리됩니다.
+          if (disconnected.signal.aborted || request.signal.aborted) break;
+          if (event.type === "text") {
+            log.text(event.delta);
+            send(event);
+          } else if (event.type === "tool_start") {
+            log.call(event.name);
+            send(event);
+          } else if (event.type === "tool_result") {
+            log.result(JSON.stringify(event.result));
+            send(event);
+          } else if (event.type === "error") {
+            // 원문(event.message)은 서버 로그에만 남기고, 화면에는 번역한 문장만 보냅니다.
+            console.error("[agent] 공급자 오류", event.status ?? "", event.message);
+            send({ type: "error", message: humanError(event.status), status: event.status });
+          } else {
+            send({ type: "done" });
+          }
+        }
+      } catch (error) {
+        console.error("[agent] 턴이 중단되었습니다", error);
+        send({ type: "error", message: GENERIC_ERROR });
+      } finally {
+        // 끊겼어도 사용자가 읽던 것은 기록에 남아야 합니다. 저장 실패가 응답을 죽이지는 않습니다.
+        try {
+          await appendMessages(chatId, [{ role: "user", content: message }, ...log.close()]);
+        } catch (error) {
+          console.error("[agent] 대화를 저장하지 못했습니다", error);
+        }
+        if (open) {
+          try {
+            controller.close();
+          } catch {
+            // 이미 닫힌 스트림.
+          }
+        }
+      }
+    },
+    cancel() {
+      disconnected.abort();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      // no-transform·X-Accel-Buffering 이 없으면 중간 프록시가 스트림을 통째로 모았다 한 번에 줍니다.
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
