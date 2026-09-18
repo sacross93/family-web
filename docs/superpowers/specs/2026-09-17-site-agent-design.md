@@ -373,7 +373,7 @@ model AgentRun {
 
 ### 실측 완료 (2026-09-18, `POST https://chatgpt.com/backend-api/codex/responses`)
 
-탐침 6회 모두 HTTP 200. 원시 덤프는 `.superpowers/sdd/2026-09-17-site-agent-engine/probe-1..4` · `probe-5a-structured.txt` · `probe-5b-flattened.txt` 와 `WIRE-FINDINGS.md`(저장소 밖, 로컬 작업 폴더).
+탐침 6회 모두 HTTP 200. 실측 전문은 [2026-09-18-codex-wire-findings.md](2026-09-18-codex-wire-findings.md). 원시 SSE 덤프(`probe-1..4` · `probe-5a-structured.txt` · `probe-5b-flattened.txt`)는 용량 때문에 저장소에 넣지 않았다 — 필요하면 그 문서의 절차로 다시 뜰 수 있다.
 
 | 항목 | 결과 |
 |---|---|
