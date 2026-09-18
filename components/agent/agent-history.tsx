@@ -1,0 +1,174 @@
+"use client";
+
+// 지난 대화 목록. 별도 서랍이 아니라 같은 시트 안에서 화면만 바뀐다(스펙 §18.4) —
+// 폰에서 층이 늘면 길을 잃는다. 뒤로가기도 여기 두지 않는다(헤더의 ☰ 가 토글이다).
+//
+// 언제 다시 부르는가: 마운트할 때 한 번. 이 목록은 시트가 기록을 보여줄 때만 살아 있으므로
+// 그 "한 번"이 곧 "☰ 를 누를 때마다"다. 새 대화를 하고 다시 열었는데 옛날 목록이면
+// 방금 한 이야기가 없어진 것처럼 보인다.
+
+import { useCallback, useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
+
+import { IconButton, Spinner } from "@/components/ui";
+import { isToday, kDateShort, kTime } from "@/lib/date";
+import { cn } from "@/lib/utils";
+import type { AgentChatState } from "./use-agent-chat";
+
+const EMPTY = "아직 나눈 이야기가 없어요.";
+/** 목록 자체를 못 받았을 때. 빈 목록으로 그리면 "대화가 없다"는 거짓말이 된다. */
+const LIST_ERROR = "목록을 불러오지 못했어요.";
+const UNTITLED = "제목 없는 대화";
+
+interface ChatRow {
+  id: string;
+  title: string;
+  /** JSON 을 건너오면서 ISO 문자열이 된다. */
+  updatedAt: string;
+  count: number;
+}
+
+function isChatRow(value: unknown): value is ChatRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.id === "string" && row.id.length > 0;
+}
+
+/**
+ * 오늘 것은 시각으로, 어제 이전은 날짜로. 둘을 같이 쓰면 한 줄이 길어져 폰에서 개수가 밀려난다.
+ */
+function when(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return isToday(date) ? kTime(date) : kDateShort(date);
+}
+
+export function AgentHistory({
+  state,
+  onOpened,
+}: {
+  state: AgentChatState;
+  /** 대화 하나를 열었다. 어느 화면으로 갈지는 시트가 정한다 — 목록은 그 규칙을 모른다. */
+  onOpened: () => void;
+}) {
+  const { chatId, load, reset } = state;
+  // null = 아직 모른다(불러오는 중). 빈 배열 = 정말 없다.
+  const [chats, setChats] = useState<ChatRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true; // ☰ 를 빠르게 두 번 누르면 응답보다 먼저 사라진다.
+    void (async () => {
+      try {
+        const response = await fetch("/api/agent/chats");
+        if (!response.ok) throw new Error("list failed");
+        const body: unknown = await response.json();
+        if (!alive) return;
+        setChats(Array.isArray(body) ? body.filter(isChatRow) : []);
+      } catch {
+        if (!alive) return;
+        setChats([]);
+        setFailed(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const open = useCallback(
+    async (id: string) => {
+      if (openingId) return;
+      setOpeningId(id);
+      // load 는 실패해도 던지지 않고 state.error 에 문구를 남긴다(그 문구는 스레드가 보여준다).
+      // 그래서 성패를 가리지 않고 대화 화면으로 넘어간다 — 여기 남으면 눌러도 아무 일이 없어 보인다.
+      await load(id);
+      onOpened();
+    },
+    [load, onOpened, openingId],
+  );
+
+  const remove = useCallback(
+    async (id: string) => {
+      const before = chats;
+      if (!before) return;
+      // 먼저 지우고, 서버가 거절하면 되돌린다(이 저장소의 낙관적 업데이트 패턴).
+      setChats(before.filter((chat) => chat.id !== id));
+
+      let ok = false;
+      try {
+        const response = await fetch(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
+        ok = response.ok;
+      } catch {
+        ok = false;
+      }
+
+      if (!ok) {
+        setChats(before);
+        return;
+      }
+      // 지금 보고 있던 대화를 지웠다면 화면도 새 대화로 비운다. 그대로 두면 다음에 보내는 말이
+      // "그 대화를 찾지 못했어요"로 막힌다(지워진 chatId 로는 이어 쓸 수 없다).
+      // 되돌릴 일이 없는 것이 확실해진 뒤에만 한다 — 말풍선은 되살릴 수 없다.
+      if (id === chatId) reset();
+    },
+    [chatId, chats, reset],
+  );
+
+  if (chats === null) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (failed || chats.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-ink-soft">
+        {failed ? LIST_ERROR : EMPTY}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="scrollbar-thin flex-1 space-y-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {chats.map((chat) => {
+        const title = chat.title.trim() || UNTITLED;
+        const current = chat.id === chatId;
+        return (
+          <li key={chat.id} className="group relative">
+            <button
+              type="button"
+              onClick={() => void open(chat.id)}
+              aria-current={current ? "true" : undefined}
+              // 오른쪽은 지우기 단추 자리다. 겹치면 지우려다 대화가 열린다.
+              className={cn(
+                "flex w-full min-w-0 flex-col items-start gap-0.5 rounded-2xl py-2.5 pl-3.5 pr-12 text-left transition active:scale-[.99]",
+                current ? "bg-sunken" : "hover:bg-sunken/60",
+                openingId === chat.id && "opacity-60",
+              )}
+            >
+              <span className="w-full truncate text-[15px] font-semibold text-ink">{title}</span>
+              <span className="text-xs text-ink-faint">
+                {when(chat.updatedAt)} · 메시지 {chat.count}개
+              </span>
+            </button>
+            {/* 폰에는 hover 가 없다 — 항상 보이게 두고 데스크톱에서만 숨긴다(AGENTS.md). */}
+            <IconButton
+              type="button"
+              size="sm"
+              variant="danger"
+              aria-label={`${title} 지우기`}
+              onClick={() => void remove(chat.id)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+            >
+              <Trash2 className="h-4 w-4" />
+            </IconButton>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

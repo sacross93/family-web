@@ -17,6 +17,7 @@ import { ArrowUp, Menu, Plus, Square, X } from "lucide-react";
 
 import { IconButton, Textarea } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { AgentHistory } from "./agent-history";
 import { AgentThread } from "./agent-thread";
 import { useAgentChat } from "./use-agent-chat";
 
@@ -170,10 +171,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
         {/* 기록도 같은 시트 안에서 바뀐다 — 서랍을 또 열면 폰에서 길을 잃는다. */}
         {history ? (
-          // TODO(Task 7): <AgentHistory state={state} onOpened={() => setView("chat")} /> 로 바뀐다.
-          <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-ink-soft">
-            지난 대화 목록은 곧 여기에 담겨요.
-          </div>
+          <AgentHistory state={state} onOpened={() => setView("chat")} />
         ) : (
           <AgentThread
             state={state}
