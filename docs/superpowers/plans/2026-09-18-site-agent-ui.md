@@ -654,3 +654,303 @@ git commit -m "에이전트: 2단계 문서 갱신"
 ## 범위 밖
 
 화면 캡처(3층 `view_screen`) · 대화 검색 · 사용자별 기록 분리 · 예약 실행 · `AgentRun` 로그 기록(테이블만 있고 쓰는 코드는 여전히 없다).
+
+---
+
+### Task 9: 사진 첨부
+
+**Spec:** `docs/superpowers/specs/2026-09-17-site-agent-design.md` §19
+
+**Files:**
+- Create: `components/agent/image-attach.ts` (+ `image-attach.test.ts`)
+- Modify: `prisma/schema.prisma`, `lib/agent/llm/types.ts`, `lib/agent/llm/codex.ts` (+ `codex.test.ts`), `lib/agent/chat-store.ts` (+ `chat-store.test.ts`), `app/api/agent/route.ts`, `components/agent/use-agent-chat.ts`, `components/agent/agent-stream.ts` (+ `agent-stream.test.ts`), `components/agent/agent-sheet.tsx`, `components/agent/agent-thread.tsx`
+
+**Interfaces:**
+- Consumes: `AgentMessage`(Task 이전), `useAgentChat`(Task 5), `AgentSheet`/`AgentThread`(Task 6)
+- Produces: `shrinkImage(file: File): Promise<string>` — 축소본 data URL
+
+**왜 이렇게 나누는가 (읽고 시작해라)**
+
+사진은 두 벌로 갈라진다. **원본은 저장**되고(사진첩에 들어갈 것) **축소본은 모델에게만** 간다(보고 판단할 것). 이 둘을 한 벌로 합치려 들면 둘 중 하나가 망가진다 — 원본을 모델에 보내면 사용량이 한 번에 크게 빠지고, 축소본을 사진첩에 넣으면 흐린 사진이 남는다.
+
+축소는 **브라우저에서** 한다. 사진이 이미 거기 있고, `sharp` 같은 의존성이 늘지 않으며, 서버가 저장소에서 파일을 다시 읽어올 필요도 없다(개발은 `public/uploads` 상대경로, 운영은 Blob 절대주소라 서버에서 되읽는 길이 두 갈래로 갈린다 — 그 갈래를 아예 만들지 않는다).
+
+- [ ] **Step 1: 축소 함수 + 테스트**
+
+`components/agent/image-attach.ts`:
+
+```ts
+// 모델에게 보여줄 사본을 만든다. 원본은 건드리지 않는다 — 그건 /api/upload 로 따로 올라간다.
+
+/**
+ * 긴 변 상한. 이 크기면 "발리 해변 사진"인지 "영수증"인지 구분하기에 충분하고,
+ * 폰 원본(약 4000px)을 그대로 보낼 때보다 토큰이 한 자릿수 배 적다.
+ */
+const MAX_EDGE = 768;
+
+/** JPEG 품질. 0.75 아래로 내리면 글자가 섞인 사진에서 읽기가 나빠진다. */
+const QUALITY = 0.75;
+
+/** 긴 변이 MAX_EDGE 를 넘지 않도록 줄인 크기. 원본이 이미 작으면 그대로 둔다(늘리지 않는다). */
+export function fitWithin(
+  width: number,
+  height: number,
+  maxEdge: number = MAX_EDGE,
+): { width: number; height: number } {
+  const longest = Math.max(width, height);
+  if (longest <= maxEdge || longest === 0) return { width, height };
+  const ratio = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(width * ratio)),
+    height: Math.max(1, Math.round(height * ratio)),
+  };
+}
+
+/** 사진 파일 → 모델에게 보낼 축소본 data URL. 브라우저에서만 쓴다. */
+export async function shrinkImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const { width, height } = fitWithin(bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("캔버스를 쓸 수 없어요.");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", QUALITY);
+  } finally {
+    bitmap.close();
+  }
+}
+```
+
+`components/agent/image-attach.test.ts` — `fitWithin` 만 시험한다(`shrinkImage` 는 캔버스라 jsdom 에서 의미 있는 검증이 안 된다. 없는 검증력을 있는 척하지 마라):
+
+```ts
+import { describe, expect, it } from "vitest";
+import { fitWithin } from "./image-attach";
+
+describe("fitWithin", () => {
+  it("긴 변을 상한에 맞추고 비율을 지킨다", () => {
+    expect(fitWithin(4032, 3024, 768)).toEqual({ width: 768, height: 576 });
+  });
+
+  it("세로가 길면 세로를 기준으로 줄인다", () => {
+    expect(fitWithin(3024, 4032, 768)).toEqual({ width: 576, height: 768 });
+  });
+
+  it("이미 작은 사진은 늘리지 않는다", () => {
+    expect(fitWithin(320, 240, 768)).toEqual({ width: 320, height: 240 });
+  });
+
+  it("아주 납작한 사진도 최소 1px 은 남긴다", () => {
+    expect(fitWithin(5000, 3, 768)).toEqual({ width: 768, height: 1 });
+  });
+
+  it("크기를 모르면(0) 그대로 둔다", () => {
+    expect(fitWithin(0, 0, 768)).toEqual({ width: 0, height: 0 });
+  });
+});
+```
+
+- [ ] **Step 2: 시험해서 실패를 본다**
+
+Run: `npx vitest run components/agent/image-attach.test.ts`
+Expected: 5개 통과 (구현을 함께 썼으므로 여기서는 통과가 정상이다. 실패하면 `fitWithin` 이 틀린 것이다)
+
+- [ ] **Step 3: 경계 타입에 사진 자리를 낸다**
+
+`lib/agent/llm/types.ts` 의 `AgentMessage` 에 두 줄을 더한다. **역할이 다르니 이름도 다르다:**
+
+```ts
+  /** role:"user" — 함께 보낸 사진의 주소. 저장되고, 다시 열 때 화면에 보인다. */
+  imageUrl?: string;
+  /** role:"user" — 이번 턴에 모델에게 보여줄 축소본(data URL). **저장하지 않는다.**
+   *  기록에서 되살린 메시지에는 없다 — 사진을 두고 이어서 묻는 건 이번 턴 안에서만 된다. */
+  imageData?: string;
+```
+
+- [ ] **Step 4: 와이어에 싣는다**
+
+`lib/agent/llm/codex.ts` 의 `nativeItems` 마지막 줄(`return textItem("user", message.content);`)과 `jsonItems` 의 같은 자리를 **둘 다** 아래 헬퍼로 바꾼다. 실측(§16 5절)에서 `content` 가 파트 배열을 받는 것이 확인됐다:
+
+```ts
+/**
+ * 사진이 붙은 사용자 메시지는 파트 배열로 나간다(실측 probe-4: 200).
+ * 사진이 없으면 지금까지처럼 문자열 하나다 — 모양을 바꾸지 않는다.
+ */
+function userItem(message: AgentMessage): InputItem[] {
+  if (!message.imageData) return textItem("user", message.content);
+  const text = message.content.trim();
+  return [
+    {
+      role: "user",
+      content: [
+        ...(text ? [{ type: "input_text", text }] : []),
+        { type: "input_image", image_url: message.imageData },
+      ],
+    },
+  ];
+}
+```
+
+`InputItem` 의 첫 갈래를 넓혀라: `{ role: "user" | "assistant"; content: string | { type: string; text?: string; image_url?: string }[] }`.
+
+`lib/agent/llm/codex.test.ts` 에 두 개를 더한다:
+
+```ts
+it("사진이 붙으면 input_image 파트로 나간다", () => {
+  const body = buildBodyForTest({
+    system: "s",
+    tools: [],
+    messages: [{ role: "user", content: "이거 뭐야?", imageData: "data:image/jpeg;base64,AAA" }],
+  });
+  expect(body.input).toEqual([
+    {
+      role: "user",
+      content: [
+        { type: "input_text", text: "이거 뭐야?" },
+        { type: "input_image", image_url: "data:image/jpeg;base64,AAA" },
+      ],
+    },
+  ]);
+});
+
+it("사진이 없으면 지금까지처럼 문자열 하나다", () => {
+  const body = buildBodyForTest({ system: "s", tools: [], messages: [{ role: "user", content: "안녕" }] });
+  expect(body.input).toEqual([{ role: "user", content: "안녕" }]);
+});
+```
+
+`buildBodyForTest` 라는 이름의 도우미가 없으면 그 파일이 이미 `buildBody` 를 어떻게 시험하는지 보고 **그 방식을 따라라.** 새 수출을 만들지 마라.
+
+두 번째 시험이 중요하다 — 사진 없는 경우가 예전 모양 그대로임을 못 박는다. 이게 없으면 파트 배열로 통일해 버리는 회귀를 아무도 못 잡는다.
+
+- [ ] **Step 5: 시험**
+
+Run: `npx vitest run lib/agent/llm/codex.test.ts`
+Expected: 전부 통과
+
+- [ ] **Step 6: 저장 — 스키마와 chat-store**
+
+`prisma/schema.prisma` 의 `AgentChatMessage` 에 한 줄:
+
+```prisma
+  imageUrl   String?
+```
+
+Run: `npm run db:push`
+
+`lib/agent/chat-store.ts`:
+- `appendMessages` 가 쓰는 행에 `imageUrl: message.imageUrl ?? null` 을 더한다. **`imageData` 는 쓰지 마라** — 축소본을 DB 에 넣으면 대화 한 줄이 수십 KB가 되고, 다시 열 때 원본이 아니라 흐린 사본이 보인다.
+- `loadHistory` 의 `select` 에 `imageUrl: true` 를 더하고, 돌려주는 `AgentMessage` 에 `...(row.imageUrl ? { imageUrl: row.imageUrl } : {})` 로 실어라. **`null` 을 그대로 넘기지 마라** — `imageUrl?: string` 과 어긋난다.
+
+`lib/agent/chat-store.test.ts` 에 하나 더:
+
+```ts
+it("사진 주소는 저장되고 다시 읽힌다", async () => {
+  const chat = await createChat("사진");
+  await appendMessages(chat.id, [
+    { role: "user", content: "이거 발리 사진이야", imageUrl: "/uploads/a.jpg" },
+  ]);
+  const [first] = await loadHistory(chat.id, 10);
+  expect(first.imageUrl).toBe("/uploads/a.jpg");
+});
+
+it("사진이 없으면 imageUrl 자체가 없다", async () => {
+  const chat = await createChat("맨몸");
+  await appendMessages(chat.id, [{ role: "user", content: "안녕" }]);
+  const [first] = await loadHistory(chat.id, 10);
+  expect(first).not.toHaveProperty("imageUrl");
+});
+```
+
+- [ ] **Step 7: 시험**
+
+Run: `npx vitest run lib/agent/chat-store.test.ts`
+Expected: 전부 통과 (기존 10 + 2)
+
+- [ ] **Step 8: 라우트가 사진을 받는다**
+
+`app/api/agent/route.ts`:
+- 본문에서 `imageUrl`·`imageData` 를 읽는다. 둘 다 `string` 일 때만 쓴다.
+- **`imageUrl` 은 우리 저장소 주소만 받는다.** 임의 주소를 받으면 이 라우트가 남의 서버를 가리키는 통로가 된다:
+
+  ```ts
+  /** /api/upload 가 돌려주는 두 모양만 통과시킨다 — 로컬 `/uploads/…`, Blob `https://….blob.vercel-storage.com/…`. */
+  function ownImageUrl(value: unknown): string | undefined {
+    if (typeof value !== "string" || !value) return undefined;
+    if (value.startsWith("/uploads/") && !value.includes("..")) return value;
+    try {
+      const url = new URL(value);
+      if (url.protocol === "https:" && url.hostname.endsWith(".blob.vercel-storage.com")) return value;
+    } catch {
+      // 주소가 아니면 버린다
+    }
+    return undefined;
+  }
+  ```
+
+- **`imageData` 는 크기를 본다.** 클라이언트가 줄여서 보내기로 돼 있지만, 라우트는 클라이언트를 믿지 않는다:
+
+  ```ts
+  /** 축소본 상한. 768px JPEG 는 보통 200KB 아래다 — 그보다 훨씬 크면 줄이지 않고 보낸 것이다. */
+  const MAX_IMAGE_DATA = 1_500_000;
+
+  function modelImage(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    if (!value.startsWith("data:image/")) return undefined;
+    if (value.length > MAX_IMAGE_DATA) return undefined;
+    return value;
+  }
+  ```
+
+  넘치면 **조용히 버린다**(사진 없이 대화는 계속된다). 여기서 400 을 내면 사용자는 아무것도 못 하고 멈춘다.
+
+- 사용자 메시지를 만들 때 두 값을 함께 싣는다. `appendMessages` 로 저장할 때도 같은 객체를 쓰면 `imageUrl` 만 남는다(chat-store 가 `imageData` 를 무시하므로).
+- 제목은 지금처럼 글로 만든다. 사진만 보낸 경우는 화면이 막으므로(Step 9) 여기서 따로 다루지 않는다.
+
+- [ ] **Step 9: 화면 — 고르기·미리보기·보내기**
+
+`components/agent/use-agent-chat.ts`:
+- `send(message: string, image?: { url: string; data: string }): Promise<void>` 로 넓힌다. `AgentChatState` 의 선언도 함께.
+- POST 본문에 `imageUrl: image?.url`·`imageData: image?.data` 를 더한다.
+- 낙관적으로 그리는 사용자 말풍선에 `imageUrl` 을 실어라 — 보내자마자 자기 사진이 보여야 한다.
+
+`components/agent/agent-stream.ts`:
+- `Bubble` 의 user 갈래를 `{ kind: "user"; text: string; imageUrl?: string }` 로.
+- `foldMessages` 의 `bubbles.push({ kind: "user", text: message.content })` 에 `...(message.imageUrl ? { imageUrl: message.imageUrl } : {})` 를 더한다.
+- 사용자 말풍선을 만드는 리듀서(`pushUser` 류)도 `imageUrl` 을 받아 넘기도록 한다.
+- `agent-stream.test.ts` 에 한 줄짜리 시험: `foldMessages` 가 `imageUrl` 을 말풍선까지 옮기는가.
+
+`components/agent/agent-sheet.tsx` — 입력줄 **왼쪽**에 `📎`:
+- `import { Paperclip } from "lucide-react"`, 숨긴 `<input type="file" accept="image/*" />` 를 `ref` 로 연다.
+- 상태: `const [attach, setAttach] = useState<{ preview: string; url: string; data: string } | null>(null)` 와 `const [attaching, setAttaching] = useState(false)`.
+- 고르면: `setAttaching(true)` → `shrinkImage(file)` 과 `/api/upload`(FormData 에 `file`) 를 **함께**(`Promise.all`) → `{ preview: URL.createObjectURL(file), url: urls[0], data }`. 실패하면 `사진을 올리지 못했어요. 다시 해볼까요?` 를 그 자리에 한 줄로.
+- **`URL.createObjectURL` 은 반드시 짝이 있다** — 첨부를 지우거나 보낸 뒤 `URL.revokeObjectURL` 로 놓아줘라. 안 그러면 사진을 고를 때마다 메모리에 쌓인다.
+- 미리보기: 입력줄 **위**에 64px 정사각 썸네일 + 오른쪽 위 `✕`. 올리는 중에는 썸네일 위에 `Spinner`.
+- `submit` 은 `attach` 가 있으면 `state.send(message, { url: attach.url, data: attach.data })` 를 부르고 `setAttach(null)`.
+- **첨부만 있고 글이 없으면 보내지 않는다**(§19.5). 보내기 버튼은 `!draft.trim()` 일 때 이미 잠겨 있다 — 대신 미리보기 아래에 `무엇을 할지도 알려주세요` 를 한 줄 띄워라. 잠긴 버튼만 있고 이유가 없으면 고장으로 보인다.
+- `newChat` 에서도 첨부를 비워라(objectURL 해제 포함).
+
+`components/agent/agent-thread.tsx` — 사용자 말풍선:
+- `bubble.imageUrl` 이 있으면 글 **위**에 `<img loading="lazy" className="mb-2 max-h-56 w-full rounded-2xl object-cover" alt="" />`. `<img>` 를 쓰는 건 이 저장소 규칙이다(AGENTS.md).
+- 글이 없는 경우는 없다(화면이 막았다). 그래도 `bubble.text &&` 로 감싸 두면 기록이 이상해도 깨지지 않는다.
+
+- [ ] **Step 10: 브라우저 확인 (390px)**
+
+`AGENT_ENABLED=true npm run dev` — 폰 폭에서:
+- `📎` → 사진 고르기 → 썸네일이 뜨고 `✕` 로 지워진다
+- 글 없이 보내기가 안 되고 이유가 보인다
+- "이거 발리 사진인데 사진첩에 넣어줘" → 없는 앨범이면 만들고 넣는다. 결과 카드의 `보러가기` 로 `/albums/<id>` 가 열리고 사진이 실제로 있다
+- 창을 닫았다 열어도 사진이 말풍선에 그대로 있다
+- 가로 스크롤 없음
+
+**실호출은 3회를 넘기지 마라** — 사용자 개인 사용량이다.
+
+- [ ] **Step 11: 커밋**
+
+```bash
+git add -A
+git commit -m "에이전트: 사진 첨부"
+```
