@@ -283,6 +283,31 @@ model AgentRun {
   @@index([createdAt])
 }
 
+// 대화 기록. 공용 계정이므로 가족이 함께 본다(스펙 §18.2).
+model AgentChat {
+  id        String   @id @default(cuid())
+  title     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AgentChatMessage[]
+
+  @@index([updatedAt])
+}
+
+model AgentChatMessage {
+  id         String    @id @default(cuid())
+  chatId     String
+  chat       AgentChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role       String
+  content    String
+  toolCalls  String?
+  toolCallId String?
+  createdAt  DateTime  @default(now())
+
+  @@index([chatId, createdAt])
+}
+
 // ─────────────────────────────────────────────
 // 꾸미기 스티커 — 관리자가 각 페이지 아무 위치에나 놓는 사진
 // page: 경로("/", "/albums" …) 또는 "global"(모든 페이지)
