@@ -16,35 +16,42 @@ export type AssistantBubble = Extract<Bubble, { kind: "assistant" }>;
 export type OkResult = Extract<ToolResult, { ok: true }>;
 
 /**
- * 한 말풍선이 보여줄 카드 수 상한. 왕복이 6번까지 허용되므로(lib/agent/loop.ts) 그대로 두면
- * 390px 화면이 카드로 가득 찬다.
+ * "찾아준 곳" 카드의 상한. 왕복이 6번까지 허용되므로(lib/agent/loop.ts) 그대로 두면
+ * 390px 화면이 거쳐 간 페이지들로 가득 찬다. **만든 것에는 적용하지 않는다** — 아래 참고.
  */
-const MAX_CARDS = 3;
+const MAX_PLACE_CARDS = 2;
 
 /**
  * 말풍선 하나에 실제로 그릴 결과들.
  *
- * 도구는 목록을 보거나 페이지를 열 때도 `label`·`path` 를 돌려주므로(lib/agent/tools.ts)
- * "찾아준 곳"에도 카드가 생긴다 — 그건 유용하다(폰에서 답 아래 바로 [보러가기]).
- * 다만 **같은 곳을 두 번 보여주지 않고**, **만든 것을 먼저** 남긴다.
- * 만든 것(`undo` 가 있는 것)은 되돌리기를 품고 있어 잘리면 되돌릴 방법이 사라진다.
+ * 카드는 두 종류다.
+ *
+ * - **만든 것**(`undo` 가 있다): 되돌리기를 품고 있는 **유일한 자리**다. 그래서 하나도 접지 않고
+ *   합치지도 않는다. 리소스 16종 중 14종은 `detailPattern` 이 없어 만든 항목의 `path` 가
+ *   목록 경로로 **모두 같아진다**(`lib/agent/registry.ts` 의 `detailPath`). 경로로 중복을 지우면
+ *   "장보기에 우유·계란·빵 넣어줘" 의 두 번째·세 번째가 통째로 사라지고, 되돌릴 방법도 함께 사라진다.
+ * - **찾아준 곳**(`undo` 가 없다): 목록을 보거나 페이지를 열었을 때 생긴다. 유용하지만(폰에서 답 아래
+ *   바로 [보러가기]) 거쳐 간 곳이 다 쌓이면 방해가 된다. 같은 곳은 한 번만, 그리고 상한을 둔다.
+ *   만든 카드가 이미 가리키는 곳도 빼 준다 — 같은 곳으로 가는 버튼이 둘일 이유가 없다.
  */
 export function visibleResults(results: ToolResult[]): OkResult[] {
   const ok = results.filter((r): r is OkResult => r.ok && Boolean(r.label));
-  // 만든 것을 앞으로. 그 안에서는 원래 순서를 지킨다(안정 정렬).
-  const ordered = [...ok.filter((r) => r.undo), ...ok.filter((r) => !r.undo)];
 
-  const seen = new Set<string>();
-  const kept: OkResult[] = [];
-  for (const result of ordered) {
+  const made = ok.filter((r) => r.undo);
+  const seen = new Set(made.map((r) => r.path).filter((p): p is string => Boolean(p)));
+
+  const places: OkResult[] = [];
+  for (const result of ok) {
+    if (result.undo) continue;
+    if (places.length === MAX_PLACE_CARDS) break;
     // 경로가 없는 결과(read_url 등)는 서로 겹칠 일이 없으니 라벨로 가른다.
     const at = result.path ?? `label:${result.label}`;
     if (seen.has(at)) continue;
     seen.add(at);
-    kept.push(result);
-    if (kept.length === MAX_CARDS) break;
+    places.push(result);
   }
-  return kept;
+
+  return [...made, ...places];
 }
 
 /**

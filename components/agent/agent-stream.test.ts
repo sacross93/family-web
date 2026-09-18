@@ -184,27 +184,46 @@ describe("visibleResults", () => {
     const kept = visibleResults([
       found("사진첩", "/albums"),
       found("계획", "/plans"),
-      found("할일", "/todos"),
       made("할일 · 우유 사기", "/todos/abc", "abc"),
     ]);
     expect(kept[0]?.label).toBe("할일 · 우유 사기");
-    expect(kept.map((r) => r.label)).toContain("할일 · 우유 사기");
   });
 
-  it("같은 곳을 두 번 보여주지 않는다", () => {
+  it("같은 경로로 만든 것 여럿을 하나로 합치지 않는다", () => {
+    // 16종 중 14종은 detailPattern 이 없어 만든 항목의 path 가 목록 경로로 전부 같다.
+    // 여기서 접으면 "장보기에 우유·계란·빵" 의 둘째·셋째가 되돌리기와 함께 사라진다.
+    const kept = visibleResults([
+      made("장보기 · 우유", "/shopping", "a"),
+      made("장보기 · 계란", "/shopping", "b"),
+      made("장보기 · 빵", "/shopping", "c"),
+    ]);
+    expect(kept.map((r) => r.undo?.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("만든 것에는 장수 상한이 없다", () => {
+    const kept = visibleResults([
+      made("가", "/todos", "1"),
+      made("나", "/todos", "2"),
+      made("다", "/todos", "3"),
+      made("라", "/todos", "4"),
+      made("마", "/todos", "5"),
+    ]);
+    expect(kept).toHaveLength(5);
+  });
+
+  it("찾아준 곳은 같은 곳을 두 번 보여주지 않는다", () => {
     const kept = visibleResults([found("사진첩", "/albums"), found("사진첩", "/albums")]);
     expect(kept).toHaveLength(1);
   });
 
-  it("세 장을 넘기지 않는다", () => {
-    const kept = visibleResults([
-      found("가", "/a"),
-      found("나", "/b"),
-      found("다", "/c"),
-      found("라", "/d"),
-      found("마", "/e"),
-    ]);
-    expect(kept).toHaveLength(3);
+  it("찾아준 곳은 두 장까지만", () => {
+    const kept = visibleResults([found("가", "/a"), found("나", "/b"), found("다", "/c")]);
+    expect(kept.map((r) => r.label)).toEqual(["가", "나"]);
+  });
+
+  it("만든 카드가 이미 가리키는 곳은 또 보여주지 않는다", () => {
+    const kept = visibleResults([found("할일", "/todos"), made("할일 · 우유 사기", "/todos", "a")]);
+    expect(kept).toEqual([made("할일 · 우유 사기", "/todos", "a")]);
   });
 
   it("실패한 결과와 라벨 없는 결과는 카드가 되지 않는다", () => {
@@ -220,8 +239,7 @@ describe("visibleResults", () => {
     const kept = visibleResults([
       { ok: true, data: null, label: "example.com" },
       { ok: true, data: null, label: "example.com" },
-      { ok: true, data: null, label: "other.com" },
     ]);
-    expect(kept).toHaveLength(2);
+    expect(kept).toHaveLength(1);
   });
 });
