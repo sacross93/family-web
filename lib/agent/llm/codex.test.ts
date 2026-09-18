@@ -54,6 +54,9 @@ const W = {
     `event: response.content_part.done\ndata: {"type":"response.content_part.done","content_index":0,"item_id":"${MSG}","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"${text}"},"sequence_number":7}`,
   msgDone: (text: string) =>
     `event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"id":"${MSG}","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"${text}"}],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":8}`,
+  /** 출력 상한 등으로 잘린 응답. 실측 덤프에는 없지만 표준 API 가 쓰는 형태다. */
+  incomplete:
+    'event: response.incomplete\ndata: {"type":"response.incomplete","response":{"id":"resp_0998","object":"response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[]},"sequence_number":9}',
   /** 실측: 종료는 이것뿐이다. `data: [DONE]` 센티널은 오지 않는다. output 은 빈 배열이었다. */
   completed:
     'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_0998","object":"response","status":"completed","model":"gpt-5.6-terra","output":[],"usage":{"input_tokens":20,"output_tokens":5}},"sequence_number":9}',
@@ -125,6 +128,8 @@ describe("codex 공급자 — 스트림 파싱", () => {
     expect(h.Authorization).toBe("Bearer tok");
     expect(h.Accept).toBe("text/event-stream");
     expect(h.originator).toBe("codex_cli_rs");
+    expect(h["Content-Type"]).toBe("application/json");
+    expect(h.session_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("429 는 status 를 담은 error 이벤트", async () => {
@@ -202,10 +207,45 @@ describe("codex 공급자 — 실측 스트림 형태", () => {
     expect(ev.map((e) => e.type)).toEqual(["text", "done"]);
   });
 
-  it("스트림이 종료 이벤트 없이 닫혀도 done 으로 마무리한다", async () => {
-    const f = vi.fn(async () => sse([W.delta("끊김")]));
+  it("종료 이벤트 없이 닫히면 done 이 아니라 error 다 (잘린 답을 완성으로 위장하지 않는다)", async () => {
+    const f = vi.fn(async () => sse([W.delta("끊")]));
     const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
-    expect((await drain(p.sendTurn({ system: "s", messages: [], tools: [] }))).at(-1)!.type).toBe("done");
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(texts(ev)).toEqual(["끊"]); // 이미 흘린 글자는 남는다
+    expect(ev.at(-1)!.type).toBe("error");
+    expect(ev.some((e) => e.type === "done")).toBe(false);
+  });
+
+  it("인자를 받다 끊긴 도구 호출은 빈 인자로 실행되지 않는다", async () => {
+    const f = vi.fn(async () => sse([W.fcAdded, W.fcArgDelta('{\\"', 5), W.fcArgDelta("path", 6)]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [OPEN_PAGE] }));
+    expect(ev.filter((e) => e.type === "tool_call")).toHaveLength(0);
+    expect(ev.at(-1)!.type).toBe("error");
+  });
+
+  it("response.incomplete 는 잘린 응답이므로 error 로 올린다", async () => {
+    const f = vi.fn(async () => sse([W.delta("길게 쓰다가"), W.incomplete]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(texts(ev)).toEqual(["길게 쓰다가"]);
+    expect(ev.at(-1)!.type).toBe("error");
+    expect((ev.at(-1) as { message: string }).message).toContain("max_output_tokens");
+  });
+
+  it("본문 없는 200 은 status 를 싣지 않는다", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 200 }));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [] }));
+    expect(ev.at(-1)!.type).toBe("error");
+    expect(ev.at(-1)).not.toHaveProperty("status");
+  });
+
+  it("한 아이템이 델타를 흘려도 다른 아이템의 완성본은 살린다", async () => {
+    const other = 'event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"id":"msg_둘째","type":"message","status":"completed","content":[{"type":"output_text","text":"둘째 답"}],"role":"assistant"},"output_index":1,"sequence_number":9}';
+    const f = vi.fn(async () => sse([W.delta("첫째 답"), W.msgDone("첫째 답"), other, W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    expect(texts(await drain(p.sendTurn({ system: "s", messages: [], tools: [] })))).toEqual(["첫째 답", "둘째 답"]);
   });
 
   it("reasoning 항목·모르는 타입·깨진 프레임에도 죽지 않는다", async () => {
@@ -242,6 +282,35 @@ describe("codex 공급자 — 네이티브 도구 호출 (실측 순서)", () =>
     expect(calls).toHaveLength(1);
     // id 는 item.id(fc_…)가 아니라 call_id(call_…) — 결과를 되돌려줄 때 짝이 되는 값
     expect(calls[0]).toMatchObject({ id: CALL_ID, name: "open_page", args: { path: "/plans/bali" } });
+    expect(ev.at(-1)!.type).toBe("done");
+  });
+
+  it("call_id 가 늦게 와도 호출은 한 번만, id 는 call_… 이다", async () => {
+    // probe-2 원본에서 output_item.added 의 call_id 만 뺀 변형.
+    // 인자 확정 시점에 미리 내보내면 fc_… 로 한 번, call_… 로 또 한 번 — 도구가 두 번 실행된다.
+    const addedWithoutCallId = W.fcAdded.replace(`,"call_id":"${CALL_ID}"`, "");
+    expect(addedWithoutCallId).not.toContain("call_id"); // 변형이 실제로 만들어졌는지
+    const f = vi.fn(async () => sse([
+      addedWithoutCallId,
+      W.fcArgDelta('{\\"', 5),
+      W.fcArgDelta('path\\":\\"/plans/bali\\"}', 6),
+      W.fcArgDone,
+      W.fcDone,
+      W.completed,
+    ]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [OPEN_PAGE] }));
+    const calls = ev.filter((e) => e.type === "tool_call");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ id: CALL_ID, name: "open_page", args: { path: "/plans/bali" } });
+  });
+
+  it("완성 신호 없이 끝난 호출은 스트림이 정상 종료돼도 flush 하지 않는다", async () => {
+    // 인자가 오다 말았는데 response.completed 만 온 경우 — args:{} 로 도구를 실행하면 안 된다.
+    const f = vi.fn(async () => sse([W.fcAdded, W.fcArgDelta('{\\"pa', 5), W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    const ev = await drain(p.sendTurn({ system: "s", messages: [], tools: [OPEN_PAGE] }));
+    expect(ev.filter((e) => e.type === "tool_call")).toHaveLength(0);
     expect(ev.at(-1)!.type).toBe("done");
   });
 
@@ -417,32 +486,68 @@ describe("codex 공급자 — 액션 블록 파싱 (json 모드 전용)", () => 
   });
 });
 
-describe("codex 공급자 — 히스토리 평탄화", () => {
+describe("codex 공급자 — 히스토리 전달", () => {
   const history = [
     { role: "user" as const, content: "발리 계획 좀 열어줘" },
     { role: "assistant" as const, content: "", toolCalls: [{ id: CALL_ID, name: "open_page", args: { path: "/plans/bali" } }] },
     { role: "tool" as const, content: '{"ok":true,"title":"발리"}', toolCallId: CALL_ID },
   ];
 
-  it("tool 역할은 user 로 평탄화하고 표식을 붙인다", async () => {
+  it("native 모드는 call_id 로 묶은 구조화 아이템을 보낸다 (probe-5a)", async () => {
     const f = vi.fn(async () => sse([W.completed]));
     const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
     await drain(p.sendTurn({ system: "s", messages: history, tools: [OPEN_PAGE] }));
-    const input = bodyOf(f, 0).input as { role: string; content: string }[];
-    expect(input).toHaveLength(3);
-    expect(input.map((i) => i.role)).toEqual(["user", "assistant", "user"]);
-    expect(input[2].content).toContain("[도구 결과]");
-    expect(input[2].content).toContain("발리");
-    expect(input[1].content).toContain("[도구 호출] open_page");
+    expect(bodyOf(f, 0).input).toEqual([
+      { role: "user", content: "발리 계획 좀 열어줘" },
+      { type: "function_call", call_id: CALL_ID, name: "open_page", arguments: '{"path":"/plans/bali"}' },
+      { type: "function_call_output", call_id: CALL_ID, output: '{"ok":true,"title":"발리"}' },
+    ]);
   });
 
-  it("json 모드에서는 지난 도구 호출을 action 블록으로 되돌린다", async () => {
+  it("도구 호출이 2개면 결과도 각자의 call_id 로 묶인다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({
+      system: "s",
+      tools: [OPEN_PAGE],
+      messages: [
+        { role: "user", content: "둘 다 열어줘" },
+        { role: "assistant", content: "", toolCalls: [
+          { id: "call_a", name: "open_page", args: { path: "/a" } },
+          { id: "call_b", name: "open_page", args: { path: "/b" } },
+        ] },
+        { role: "tool", content: "A 결과", toolCallId: "call_a" },
+        { role: "tool", content: "B 결과", toolCallId: "call_b" },
+      ],
+    }));
+    const input = bodyOf(f, 0).input as { type?: string; call_id?: string; output?: string }[];
+    expect(input.filter((i) => i.type === "function_call").map((i) => i.call_id)).toEqual(["call_a", "call_b"]);
+    expect(input.filter((i) => i.type === "function_call_output")).toEqual([
+      { type: "function_call_output", call_id: "call_a", output: "A 결과" },
+      { type: "function_call_output", call_id: "call_b", output: "B 결과" },
+    ]);
+  });
+
+  it("toolCallId 가 없는 도구 결과는 텍스트로 눌러 담는다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({
+      system: "s",
+      tools: [OPEN_PAGE],
+      messages: [{ role: "tool", content: '{"ok":true}' }],
+    }));
+    expect(bodyOf(f, 0).input).toEqual([{ role: "user", content: '[도구 결과] {"ok":true}' }]);
+  });
+
+  it("json 모드는 tools 를 안 보내므로 평탄화한다 (지난 호출은 action 블록)", async () => {
     process.env.AGENT_TOOL_MODE = "json";
     const f = vi.fn(async () => sse([W.completed]));
     const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
     await drain(p.sendTurn({ system: "s", messages: history, tools: [OPEN_PAGE] }));
-    const input = bodyOf(f, 0).input as { content: string }[];
+    const input = bodyOf(f, 0).input as { role: string; content: string }[];
+    expect(input.map((i) => i.role)).toEqual(["user", "assistant", "user"]);
     expect(input[1].content).toContain("```action");
     expect(input[1].content).toContain("open_page");
+    expect(input[2].content).toContain("[도구 결과]");
   });
 });

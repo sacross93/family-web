@@ -16,9 +16,8 @@ import type { AgentEvent, AgentMessage, LlmProvider, SendTurnInput, ToolSchema }
 const ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const ORIGINATOR = "codex_cli_rs";
 
-/** 평탄화한 도구 결과·도구 호출에 붙는 표식. json 모드 안내문과 짝을 이룹니다. */
+/** 평탄화한 도구 결과에 붙는 표식. json 모드 안내문과 짝을 이룹니다. */
 const TOOL_RESULT_PREFIX = "[도구 결과]";
-const TOOL_CALL_PREFIX = "[도구 호출]";
 
 /** 이 파일 안에서만 쓰는 실제 전송 모드. `auto` 는 native 로 시작해 필요하면 json 으로 내려갑니다. */
 type WireToolMode = "native" | "json";
@@ -56,46 +55,67 @@ function parseArgs(raw: string | null | undefined): Record<string, unknown> {
 
 // ── 요청 만들기 ──────────────────────────────────────────────────────────────
 
-interface InputItem {
-  role: "user" | "assistant";
-  content: string;
-}
+type InputItem =
+  | { role: "user" | "assistant"; content: string }
+  | { type: "function_call"; call_id: string; name: string; arguments: string }
+  | { type: "function_call_output"; call_id: string; output: string };
 
 /**
- * 대화 기록 → 요청 본문의 `input` 배열. **평탄화 규칙은 전부 여기 모여 있습니다.**
+ * 대화 기록 → 요청 본문의 `input` 배열. **와이어로 나가는 형태는 전부 여기서 결정합니다.**
  *
- * 백엔드가 `role:"tool"` 과 네이티브 function_call/`function_call_output` 아이템을 받는지는
- * 아직 확인하지 않았으므로(실측은 단일 턴만 했습니다), 지금은 전부 사람이 읽는 텍스트로 눌러 담습니다.
- * 나중에 바꿀 곳도 이 함수 하나입니다 — tool 역할을 그대로 받는다면 아래 user 평탄화만 걷어내면 됩니다.
+ * - native: 도구 호출·결과를 `call_id` 로 묶은 **구조화 아이템**으로 보냅니다(probe-5a, HTTP 200).
+ *   한 턴에 도구가 여러 번 불려도 짝이 순서가 아니라 id 로 정해집니다.
+ * - json: `tools` 를 보내지 않는 모드라 구조화 아이템을 쓸 수 없습니다 → 텍스트 평탄화(probe-5b, HTTP 200).
+ *
+ * 되돌려야 하면 native 도 `flattenMessage` 로 보내면 됩니다 — 그것도 200 임이 실측돼 있습니다.
  */
 function toInputItems(messages: AgentMessage[], mode: WireToolMode): InputItem[] {
-  return messages.flatMap((message) => {
-    const text = renderMessage(message, mode);
-    return text.trim() ? [item(message.role === "assistant" ? "assistant" : "user", text)] : [];
-  });
+  return messages.flatMap((message) =>
+    mode === "json" ? flattenMessage(message) : structureMessage(message)
+  );
+}
+
+/** native 전용. 도구 호출·결과를 `call_id` 로 명시적으로 묶습니다. */
+function structureMessage(message: AgentMessage): InputItem[] {
+  if (message.role === "tool") {
+    // 짝지을 id 가 없으면 구조화할 수 없습니다 — 그때만 텍스트로 눌러 담습니다.
+    if (!message.toolCallId) return flattenMessage(message);
+    return [{ type: "function_call_output", call_id: message.toolCallId, output: message.content }];
+  }
+  if (message.role === "assistant") {
+    const items: InputItem[] = [];
+    if (message.content.trim()) items.push({ role: "assistant", content: message.content });
+    for (const call of message.toolCalls ?? []) {
+      items.push({
+        type: "function_call",
+        call_id: call.id,
+        name: call.name,
+        arguments: JSON.stringify(call.args ?? {}),
+      });
+    }
+    return items;
+  }
+  return textItem("user", message.content);
 }
 
 /**
- * 실측(probe-1)에서 200 을 받은 모양: `{role, content: "…"}`.
+ * json 모드(그리고 짝을 못 지은 도구 결과)용 평탄화. 사람이 읽는 텍스트 한 덩이로 만듭니다.
+ * 실측(probe-1)에서 200 을 받은 모양: `{role, content:"…"}`.
  * content 는 파트 배열(`[{type:"input_text"|"input_image", …}]`)도 받습니다(probe-4) —
  * 2단계에서 화면 캡처를 붙일 때 이미지가 그 자리로 들어옵니다.
  */
-function item(role: "user" | "assistant", text: string): InputItem {
-  return { role, content: text };
+function flattenMessage(message: AgentMessage): InputItem[] {
+  if (message.role === "tool") return textItem("user", `${TOOL_RESULT_PREFIX} ${message.content}`);
+  if (message.role === "assistant") {
+    // 이전 턴의 도구 호출도 모델이 쓸 형식(액션 블록)으로 되돌려 줘야 말투가 이어집니다.
+    const calls = (message.toolCalls ?? []).map((call) => actionBlock(call.name, call.args));
+    return textItem("assistant", [message.content, ...calls].filter((p) => p && p.trim()).join("\n"));
+  }
+  return textItem("user", message.content);
 }
 
-function renderMessage(message: AgentMessage, mode: WireToolMode): string {
-  if (message.role === "tool") return `${TOOL_RESULT_PREFIX} ${message.content}`.trim();
-  if (message.role === "assistant" && message.toolCalls?.length) {
-    // 이전 턴의 도구 호출도 지금 모드와 같은 모양으로 되돌려 줘야 모델이 자기 말투를 이어갑니다.
-    const calls = message.toolCalls.map((call) =>
-      mode === "json"
-        ? actionBlock(call.name, call.args)
-        : `${TOOL_CALL_PREFIX} ${call.name}(${JSON.stringify(call.args ?? {})})`
-    );
-    return [message.content, ...calls].filter((part) => part && part.trim()).join("\n");
-  }
-  return message.content;
+function textItem(role: "user" | "assistant", text: string): InputItem[] {
+  return text.trim() ? [{ role, content: text.trim() }] : [];
 }
 
 function actionBlock(name: string, args: Record<string, unknown>): string {
@@ -104,8 +124,9 @@ function actionBlock(name: string, args: Record<string, unknown>): string {
 
 /**
  * 네이티브 도구 스키마. Responses API 는 function 필드를 감싸지 않는 **평평한** 모양입니다.
- * ⚠️ `strict` 는 일부러 보내지 않습니다(비엄격 기본값). `create_item` 의 `args` 는 properties 가 없는
- *    `{type:"object"}` 라서 strict 모드가 스키마를 거부합니다 — 켜면 4xx 를 맞고 json 모드로 헛되이 강등됩니다.
+ * ⚠️ `strict` 는 일부러 보내지 않습니다. 실측에서 서버가 스키마를 보고 알아서 정했습니다 —
+ *    엄격하게 쓸 수 있는 스키마는 `strict:true` 로, `create_item` 의 `args` 처럼 properties 가 없는
+ *    `{type:"object"}` 는 `strict:false` 로 에코됐습니다(probe-2·3·5). 우리가 정할 이유가 없습니다.
  */
 function toolsField(tools: ToolSchema[]) {
   return tools.map((tool) => ({
@@ -387,6 +408,8 @@ interface PartialCall {
   callId: string | null;
   name: string | null;
   args: string;
+  /** 인자가 끝났다는 신호(`arguments.done` 또는 완성된 아이템)를 본 적이 있는가. */
+  complete: boolean;
 }
 
 /**
@@ -400,24 +423,24 @@ class CallAssembler {
   private slot(itemId: string): PartialCall {
     let call = this.partials.get(itemId);
     if (!call) {
-      call = { callId: null, name: null, args: "" };
+      call = { callId: null, name: null, args: "", complete: false };
       this.partials.set(itemId, call);
     }
     return call;
   }
 
-  /** `output_item.added` — 이름만 기억하고 내보내지 않습니다(인자가 아직 안 왔을 수 있으므로). */
+  /** `output_item.added` — 이름·call_id 만 기억합니다. 인자가 아직 안 왔으므로 내보내지 않습니다. */
   register(rawItem: unknown, fallbackKey: string): void {
-    this.mergeItem(rawItem, fallbackKey);
+    this.mergeItem(rawItem, fallbackKey, false);
   }
 
-  /** `output_item.done`·`response.completed` 안의 아이템 — 합치고 바로 내보냅니다. */
+  /** `output_item.done`·`response.completed` 안의 완성된 아이템 — 합치고 바로 내보냅니다. */
   absorb(rawItem: unknown, fallbackKey: string): AgentEvent[] {
-    const itemId = this.mergeItem(rawItem, fallbackKey);
+    const itemId = this.mergeItem(rawItem, fallbackKey, true);
     return itemId ? this.tryEmit(itemId) : [];
   }
 
-  private mergeItem(rawItem: unknown, fallbackKey: string): string | null {
+  private mergeItem(rawItem: unknown, fallbackKey: string, complete: boolean): string | null {
     const item = asObject(rawItem);
     if (!item) return null;
     if (!/function[_-]?call/i.test(asString(item.type) ?? "")) return null;
@@ -427,6 +450,7 @@ class CallAssembler {
     call.name = asString(item.name) ?? call.name;
     const args = asString(item.arguments);
     if (args) call.args = args;
+    if (complete) call.complete = true;
     return itemId;
   }
 
@@ -434,14 +458,22 @@ class CallAssembler {
     this.slot(itemId).args += chunk;
   }
 
+  /**
+   * `function_call_arguments.done` — 인자를 확정만 하고 **내보내지 않습니다.**
+   * 여기서 내보내면 `call_id` 가 아직 안 들어온 변형에서 `item.id`(fc_…)로 한 번,
+   * 나중에 `output_item.done` 의 `call_id`(call_…)로 또 한 번, **같은 호출이 두 번** 나갑니다
+   * (루프는 tool_call 마다 도구를 실행하므로 추가가 중복됩니다). 방출 지점은 `absorb` 와 `flush` 뿐입니다.
+   */
   setArgs(itemId: string, args: string): AgentEvent[] {
-    this.slot(itemId).args = args;
-    return this.tryEmit(itemId);
+    const call = this.slot(itemId);
+    call.args = args;
+    call.complete = true;
+    return [];
   }
 
   private tryEmit(itemId: string): AgentEvent[] {
     const call = this.partials.get(itemId);
-    if (!call?.name) return [];
+    if (!call?.name || !call.complete) return [];
     const id = call.callId ?? itemId;
     this.partials.delete(itemId);
     if (this.emitted.has(id)) return []; // 같은 호출이 여러 이벤트로 다시 와도 한 번만.
@@ -449,7 +481,10 @@ class CallAssembler {
     return [{ type: "tool_call", id, name: call.name, args: parseArgs(call.args) }];
   }
 
-  /** 스트림이 끝났을 때 아직 못 내보낸 호출을 모두 털어냅니다. */
+  /**
+   * 스트림이 끝났을 때 **인자가 끝났다는 신호를 본** 호출만 털어냅니다.
+   * 인자를 받다 만 호출(중간 절단)을 `args:{}` 로 내보내면 도구가 빈 인자로 실행됩니다.
+   */
   flush(): AgentEvent[] {
     const events: AgentEvent[] = [];
     for (const itemId of [...this.partials.keys()]) events.push(...this.tryEmit(itemId));
@@ -463,10 +498,12 @@ interface StreamState {
   mode: WireToolMode;
   filter: ActionFilter;
   calls: CallAssembler;
-  /** 델타를 한 번이라도 준 아이템. done 이벤트로 같은 문장이 두 번 나오지 않게 합니다. */
+  /** 델타를 한 번이라도 준 아이템. done 이벤트로 같은 문장이 두 번 나오지 않게 합니다(아이템별). */
   deltaSeen: Set<string>;
-  anyDelta: boolean;
 }
+
+/** 아이템 id 가 없는 이벤트끼리도 짝이 맞도록 같은 대체 키를 씁니다. */
+const NO_ITEM_ID = "item";
 
 /** 실측: 스트림은 `[DONE]` 센티널 없이 `response.completed` 로 끝난다. */
 const TERMINAL = /response\.(completed|incomplete)$/;
@@ -504,15 +541,20 @@ function translate(event: Json, state: StreamState): AgentEvent[] {
     if (events.length) return events;
     // 사고 과정 항목(encrypted_content 수 KB)은 통째로 버립니다.
     if (/reasoning/i.test(asString(item?.type) ?? "")) return [];
-    // 델타 없이 완성본만 주는 경우 대비 — 델타를 한 번도 못 봤을 때만 본문을 꺼냅니다.
-    const itemId = asString(item?.id) ?? "item";
-    if (item && !state.deltaSeen.has(itemId) && !state.anyDelta) {
-      return emitText(state, textOfItem(item));
-    }
+    // 델타 없이 완성본만 주는 경우 대비 — **이 아이템의** 델타를 한 번도 못 봤을 때만 본문을 꺼냅니다.
+    const itemId = asString(item?.id) ?? NO_ITEM_ID;
+    if (item && !state.deltaSeen.has(itemId)) return emitText(state, textOfItem(item));
     return [];
   }
 
-  if (TERMINAL.test(type)) {
+  if (type.endsWith("response.incomplete")) {
+    // 출력 상한 등으로 잘린 응답. 조용히 done 으로 끝내면 사용자는 답이 잘린 줄 모릅니다.
+    const reason = asString(asObject(asObject(event.response)?.incomplete_details)?.reason);
+    const tail = reason && /^[a-z0-9_.-]{1,40}$/i.test(reason) ? ` (${reason})` : "";
+    return [{ type: "error", message: `답변이 끝까지 오지 못하고 잘렸어요${tail}. 다시 시도해 주세요.` }];
+  }
+
+  if (type.endsWith("response.completed")) {
     // 실측에선 `response.completed` 의 output 이 빈 배열이었지만, 채워 오는 경우도 받아 둡니다.
     const output = asObject(event.response)?.output;
     if (!Array.isArray(output)) return [];
@@ -529,15 +571,13 @@ function translate(event: Json, state: StreamState): AgentEvent[] {
   if (type.endsWith(".delta")) {
     const delta = asString(event.delta) ?? asString(event.text) ?? "";
     if (!delta) return [];
-    const itemId = asString(event.item_id) ?? asString(event.id);
-    if (itemId) state.deltaSeen.add(itemId);
-    state.anyDelta = true;
+    state.deltaSeen.add(asString(event.item_id) ?? asString(event.id) ?? NO_ITEM_ID);
     return emitText(state, delta);
   }
 
   if (type.endsWith("output_text.done") || type.endsWith("text.done")) {
-    const itemId = asString(event.item_id) ?? asString(event.id);
-    if (state.anyDelta || (itemId && state.deltaSeen.has(itemId))) return [];
+    const itemId = asString(event.item_id) ?? asString(event.id) ?? NO_ITEM_ID;
+    if (state.deltaSeen.has(itemId)) return [];
     return emitText(state, asString(event.text) ?? "");
   }
 
@@ -558,7 +598,8 @@ function textOfItem(item: Json): string {
 
 async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<AgentEvent> {
   if (!res.body) {
-    yield { type: "error", message: "모델 응답이 비어 있어요. 잠시 뒤에 다시 시도해 주세요.", status: res.status };
+    // 200 인데 본문이 없는 경우. status 를 실으면 화면이 "HTTP 200 오류" 같은 문구를 고르게 됩니다.
+    yield { type: "error", message: "모델 응답이 비어 있어요. 잠시 뒤에 다시 시도해 주세요." };
     return;
   }
   const state: StreamState = {
@@ -566,13 +607,16 @@ async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<
     filter: new ActionFilter(),
     calls: new CallAssembler(),
     deltaSeen: new Set(),
-    anyDelta: false,
   };
 
+  let ended = false;
   try {
     for await (const data of sseFrames(res.body)) {
       // 실측에선 오지 않지만(종료는 response.completed), 와도 무해하게 받아 둡니다.
-      if (data === "[DONE]") break;
+      if (data === "[DONE]") {
+        ended = true;
+        break;
+      }
       let event: Json | null = null;
       try {
         event = asObject(JSON.parse(data));
@@ -585,10 +629,20 @@ async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<
         if (out.type === "error") return;
       }
       // 종료 신호를 받으면 더 기다리지 않고 상류 연결을 끊습니다.
-      if (TERMINAL.test(asString(event.type) ?? "")) break;
+      if (TERMINAL.test(asString(event.type) ?? "")) {
+        ended = true;
+        break;
+      }
     }
   } catch {
     yield { type: "error", message: "모델 응답을 받는 중에 연결이 끊겼어요. 다시 시도해 주세요." };
+    return;
+  }
+
+  if (!ended) {
+    // 종료 이벤트 없이 닫힌 스트림 = 중간에 끊긴 응답입니다. done 으로 위장하면 루프는 잘린 답을
+    // 완성된 답으로 여기고, 받다 만 도구 호출이 빈 인자로 실행될 수 있습니다. 명시적 오류로 올립니다.
+    yield { type: "error", message: "답변을 받다가 연결이 끊겼어요. 다시 시도해 주세요." };
     return;
   }
 
@@ -611,9 +665,12 @@ export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvide
   const readAccountId: () => Promise<string | null> =
     opts.accountId ?? (async () => (await import("../auth")).getAccountId());
 
+  // 계정 id 는 턴마다 바뀌지 않습니다 — 공급자 인스턴스 수명 동안 한 번만 읽습니다.
+  let accountIdOnce: Promise<string | null> | null = null;
+
   async function* sendTurn(input: SendTurnInput): AsyncGenerator<AgentEvent> {
     const configured = agentConfig().toolMode;
-    const accountId = await resolveAccountId(readAccountId); // 재시도해도 같은 값입니다.
+    const accountId = await (accountIdOnce ??= resolveAccountId(readAccountId));
     let mode: WireToolMode = configured === "json" ? "json" : "native";
     let refreshed = false;
     let downgraded = false;
@@ -624,6 +681,7 @@ export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvide
       let accessToken: string;
       try {
         accessToken = await getToken(force);
+        force = false; // 강제 갱신은 401 직후 한 번만. json 강등 재시도까지 끌고 가지 않습니다.
       } catch (error) {
         // auth.ts 의 메시지는 사용자용 한국어이고 토큰 값을 담지 않습니다.
         const message = error instanceof Error ? error.message : "에이전트 토큰을 읽지 못했어요.";
