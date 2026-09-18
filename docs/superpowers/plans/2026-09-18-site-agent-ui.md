@@ -228,7 +228,7 @@ Expected: FAIL — `Cannot find module '@/lib/agent/chat-store'`
 
 `lib/agent/chat-store.ts` 요구사항:
 
-- `titleFrom`: 제어문자(`[ -]`)를 공백으로 바꾸고 연속 공백을 접고 `trim`. 빈 문자열이면 `"새 대화"`. 40자 초과면 40자 + `…`.
+- `titleFrom`: 제어문자(`[\x00-\x1f]`)를 공백으로 바꾸고 연속 공백을 접고 `trim`. 빈 문자열이면 `"새 대화"`. 40자 초과면 40자 + `…`.
 - `appendMessages`: `createMany` 로 한 번에. `toolCalls` 는 `JSON.stringify`, 없으면 `null`. 같은 트랜잭션에서 `AgentChat.updatedAt` 을 갱신한다(Prisma 의 `@updatedAt` 은 부모를 건드려야 움직인다).
 - `loadHistory`: `createdAt desc` 로 `take: limit` 한 뒤 **뒤집어서** 반환. `toolCalls` 는 `JSON.parse`, 실패하면 `undefined`(던지지 마라 — 오래된 행이 깨져 있어도 대화는 살아야 한다).
 - `listChats`: `updatedAt desc`, 기본 `limit = 30`, `_count.messages` 를 `count` 로.
@@ -778,21 +778,35 @@ Expected: 5개 통과 (구현을 함께 썼으므로 여기서는 통과가 정�
 /**
  * 사진이 붙은 사용자 메시지는 파트 배열로 나간다(실측 probe-4: 200).
  * 사진이 없으면 지금까지처럼 문자열 하나다 — 모양을 바꾸지 않는다.
+ *
+ * **주소도 함께 나간다.** 이게 빠지면 모델은 사진을 보고도 `create_item("photo", {url})`
+ * 에 넣을 값이 없어, 손에 쥔 `data:` URL 을 그대로 박는다 — 앨범에 15만 자짜리 흐린
+ * 사본이 저장된다. 보는 것(imageData)과 넣는 것(imageUrl)은 다른 값이다.
  */
 function userItem(message: AgentMessage): InputItem[] {
-  if (!message.imageData) return textItem("user", message.content);
+  if (!message.imageUrl && !message.imageData) return textItem("user", message.content);
   const text = message.content.trim();
   return [
     {
       role: "user",
       content: [
         ...(text ? [{ type: "input_text", text }] : []),
-        { type: "input_image", image_url: message.imageData },
+        ...(message.imageUrl
+          ? [
+              {
+                type: "input_text",
+                text: `(첨부한 사진의 저장 주소: ${message.imageUrl} — 이 사진을 어딘가에 넣을 때 url 인자에 이 값을 그대로 쓰세요)`,
+              },
+            ]
+          : []),
+        ...(message.imageData ? [{ type: "input_image", image_url: message.imageData }] : []),
       ],
     },
   ];
 }
 ```
+
+`message.content` 는 **사용자가 친 글 그대로** 둔다 — 주소 안내를 거기 끼워 넣으면 말풍선과 대화 기록에 그 문장이 그대로 보인다.
 
 `InputItem` 의 첫 갈래를 넓혀라: `{ role: "user" | "assistant"; content: string | { type: string; text?: string; image_url?: string }[] }`.
 
@@ -828,6 +842,21 @@ describe("codex 공급자 — 사진 첨부", () => {
     const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
     await drain(p.sendTurn({ system: "s", tools: [], messages: [{ role: "user", content: "안녕" }] }));
     expect(bodyOf(f, 0).input).toEqual([{ role: "user", content: "안녕" }]);
+  });
+
+  it("기록에서 되살린 메시지는 주소만 나간다 — 사진은 그 턴에만 있었다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [{ role: "user", content: "사진첩에 넣어줘", imageUrl: "/uploads/a.jpg" }],
+      }),
+    );
+    const [item] = bodyOf(f, 0).input as { content: { type: string; text?: string }[] }[];
+    expect(item.content.map((c) => c.type)).toEqual(["input_text", "input_text"]);
+    expect(item.content[1].text).toContain("/uploads/a.jpg");
   });
 
   it("사진만 있고 글이 없으면 input_image 파트만 나간다", async () => {
@@ -936,7 +965,7 @@ Expected: 전부 통과 (기존 10 + 2)
 - [ ] **Step 9: 화면 — 고르기·미리보기·보내기**
 
 `components/agent/use-agent-chat.ts`:
-- `send(message: string, image?: { url: string; data: string }): Promise<void>` 로 넓힌다. `AgentChatState` 의 선언도 함께.
+- `send(message: string, image?: { url: string; data?: string }): Promise<void>` 로 넓힌다. `AgentChatState` 의 선언도 함께.
 - POST 본문에 `imageUrl: image?.url`·`imageData: image?.data` 를 더한다.
 - 낙관적으로 그리는 사용자 말풍선에 `imageUrl` 을 실어라 — 보내자마자 자기 사진이 보여야 한다.
 
@@ -949,10 +978,13 @@ Expected: 전부 통과 (기존 10 + 2)
 `components/agent/agent-sheet.tsx` — 입력줄 **왼쪽**에 `📎`:
 - `import { Paperclip } from "lucide-react"`, 숨긴 `<input type="file" accept="image/*" />` 를 `ref` 로 연다.
 - 상태: `const [attach, setAttach] = useState<{ preview: string; url: string; data: string } | null>(null)` 와 `const [attaching, setAttaching] = useState(false)`.
-- 고르면: `setAttaching(true)` → `shrinkImage(file)` 과 `/api/upload`(FormData 에 `file`) 를 **함께**(`Promise.all`) → `{ preview: URL.createObjectURL(file), url: urls[0], data }`. 실패하면 `사진을 올리지 못했어요. 다시 해볼까요?` 를 그 자리에 한 줄로.
+- 고르면: `setAttaching(true)` → `shrinkImage(file)` 과 `/api/upload`(FormData 에 `file`) 를 **함께**(`Promise.allSettled`) 돌린다.
+  - **업로드가 실패하면** 첨부가 없다 → `사진을 올리지 못했어요. 다시 해볼까요?`
+  - **축소만 실패하면 그대로 보낸다**(`data` 없이). `createImageBitmap` 은 HEIC 에서 던진다(맥 사진 앱이 그대로 내보낸다). 여기서 함께 실패로 처리하면 **이미 올라간 파일은 저장소에 남고 사용자는 안 올라갔다는 말을 듣는다.** 모델이 사진을 못 볼 뿐, "발리 사진첩에 넣어줘"는 주소만으로 된다 — 위 `userItem` 이 주소를 싣는다.
+  - 상태: `{ preview: URL.createObjectURL(file), url: urls[0], data?: string }` (`data` 는 선택).
 - **`URL.createObjectURL` 은 반드시 짝이 있다** — 첨부를 지우거나 보낸 뒤 `URL.revokeObjectURL` 로 놓아줘라. 안 그러면 사진을 고를 때마다 메모리에 쌓인다.
 - 미리보기: 입력줄 **위**에 64px 정사각 썸네일 + 오른쪽 위 `✕`. 올리는 중에는 썸네일 위에 `Spinner`.
-- `submit` 은 `attach` 가 있으면 `state.send(message, { url: attach.url, data: attach.data })` 를 부르고 `setAttach(null)`.
+- `submit` 은 `attach` 가 있으면 `state.send(message, { url: attach.url, data: attach.data })` 를 부르고 `setAttach(null)`. `send` 의 두 번째 인자 타입은 `{ url: string; data?: string }` 이다 — **`data` 는 선택이다**(축소 실패).
 - **첨부만 있고 글이 없으면 보내지 않는다**(§19.5). 보내기 버튼은 `!draft.trim()` 일 때 이미 잠겨 있다 — 대신 미리보기 아래에 `무엇을 할지도 알려주세요` 를 한 줄 띄워라. 잠긴 버튼만 있고 이유가 없으면 고장으로 보인다.
 - `newChat` 에서도 첨부를 비워라(objectURL 해제 포함).
 
