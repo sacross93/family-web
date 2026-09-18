@@ -138,10 +138,15 @@ describe("토큰 갱신 — 비밀 비노출", () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// 여기부터는 로컬 Postgres 의 AgentAuth 싱글턴 행을 실제로 씁니다.
+// 여기부터는 로컬 Postgres 를 실제로 씁니다(행 잠금·트랜잭션·롤백을 진짜로 검증하려고).
 // 갱신 HTTP 는 주입한 스텁으로 대체하므로 네트워크는 타지 않습니다.
-// ⚠️ 실제 토큰 행을 보존하기 위해 시작 전에 원본을 떠 두고 각 테스트 뒤·전체 종료 뒤 되돌립니다.
+//
+// ⚠️ 사용자의 진짜 토큰 행("main")은 **절대 건드리지 않습니다.**
+//    AGENT_AUTH_ROW_ID 로 별도 행을 쓰게 하고, 끝나면 그 행만 지웁니다.
+//    (예전에는 "main" 을 백업·복원했는데, 중간에 죽으면 평문이 DB 에만 있어 복구가 불가능했습니다.)
 // ─────────────────────────────────────────────────────────────
+const TEST_ROW_ID = "test-agent-auth";
+
 describe("토큰 저장소 — 저장·갱신·롤백", () => {
   type Snapshot = {
     provider: string;
@@ -151,11 +156,12 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
     expiresAt: Date;
   };
 
-  let backup: Snapshot | null = null;
+  /** 진짜 행이 움직이지 않았는지 마지막에 확인하려고 기록해 둡니다. */
+  let realRowStamp: number | null = null;
 
   async function currentRow(): Promise<Snapshot> {
-    const r = await prisma.agentAuth.findUnique({ where: { id: "main" } });
-    if (!r) throw new Error("테스트 준비 실패: AgentAuth 행이 없습니다.");
+    const r = await prisma.agentAuth.findUnique({ where: { id: TEST_ROW_ID } });
+    if (!r) throw new Error("테스트 준비 실패: 테스트용 AgentAuth 행이 없습니다.");
     return {
       provider: r.provider,
       accessToken: r.accessToken,
@@ -163,18 +169,6 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
       accountId: r.accountId,
       expiresAt: r.expiresAt,
     };
-  }
-
-  async function restore() {
-    if (backup) {
-      await prisma.agentAuth.upsert({
-        where: { id: "main" },
-        update: backup,
-        create: { id: "main", ...backup },
-      });
-    } else {
-      await prisma.agentAuth.deleteMany({ where: { id: "main" } });
-    }
   }
 
   /** 갱신 창(2일) 밖에 있는 더미 토큰을 넣습니다. */
@@ -189,21 +183,17 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
   }
 
   beforeAll(async () => {
-    const existing = await prisma.agentAuth.findUnique({ where: { id: "main" } });
-    backup = existing
-      ? {
-          provider: existing.provider,
-          accessToken: existing.accessToken,
-          refreshToken: existing.refreshToken,
-          accountId: existing.accountId,
-          expiresAt: existing.expiresAt,
-        }
-      : null;
+    process.env.AGENT_AUTH_ROW_ID = TEST_ROW_ID;
+    const real = await prisma.agentAuth.findUnique({ where: { id: "main" } });
+    realRowStamp = real ? real.updatedAt.getTime() : null;
   });
 
   beforeEach(async () => { await seed(); });
-  afterEach(async () => { await restore(); });
-  afterAll(async () => { await restore(); });
+
+  afterAll(async () => {
+    await prisma.agentAuth.deleteMany({ where: { id: TEST_ROW_ID } });
+    delete process.env.AGENT_AUTH_ROW_ID;
+  });
 
   it("저장하면 평문이 아니라 암호문이 들어간다", async () => {
     const row = await currentRow();
@@ -271,7 +261,7 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
   });
 
   it("행이 없으면 accountId 는 예외가 아니라 null (헤더를 생략할 수 있게)", async () => {
-    await prisma.agentAuth.deleteMany({ where: { id: "main" } });
+    await prisma.agentAuth.deleteMany({ where: { id: TEST_ROW_ID } });
     await expect(getAccountId()).resolves.toBeNull();
   });
 
@@ -283,5 +273,16 @@ describe("토큰 저장소 — 저장·갱신·롤백", () => {
     } finally {
       process.env.AUTH_SECRET = keep;
     }
+  });
+
+  // 이 테스트가 깨지면 위 테스트들이 사용자의 진짜 토큰을 건드리고 있다는 뜻입니다.
+  it("사용자의 진짜 토큰 행(main)은 전혀 건드리지 않는다", async () => {
+    const real = await prisma.agentAuth.findUnique({ where: { id: "main" } });
+    if (realRowStamp === null) {
+      expect(real).toBeNull(); // 처음부터 없었으면 지금도 없어야 합니다
+      return;
+    }
+    expect(real).not.toBeNull();
+    expect(real!.updatedAt.getTime()).toBe(realRowStamp);
   });
 });

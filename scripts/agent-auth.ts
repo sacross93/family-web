@@ -12,7 +12,7 @@ import path from "node:path";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { prisma } from "../lib/prisma";
-import { saveAuth, type CodexAuthFile } from "../lib/agent/auth";
+import { saveAuth, authRowId, type CodexAuthFile } from "../lib/agent/auth";
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
@@ -57,10 +57,9 @@ export function normalizeAuthFile(raw: unknown): CodexAuthFile {
 
 async function main() {
   const [target] = process.argv.slice(2);
+  // process.exit() 를 바로 부르면 아래 finally 의 $disconnect() 를 건너뛰므로 던져서 내려보냅니다.
   if (!target) {
-    console.error("사용법: npm run agent:auth -- <토큰 json 경로>");
-    console.error("  파일이 없다면: npm run agent:login");
-    process.exit(1);
+    throw new Error("사용법: npm run agent:auth -- <토큰 json 경로>\n  파일이 없다면: npm run agent:login");
   }
 
   const raw = await readFile(path.resolve(target), "utf8");
@@ -70,14 +69,13 @@ async function main() {
     parsed = JSON.parse(raw);
   } catch {
     // SyntaxError 메시지에는 파일 일부가 실릴 수 있어 그대로 쓰지 않습니다.
-    console.error("JSON 파일을 읽지 못했어요. 파일이 깨지지 않았는지 확인해 주세요.");
-    process.exit(1);
+    throw new Error("JSON 파일을 읽지 못했어요. 파일이 깨지지 않았는지 확인해 주세요.");
   }
 
   await saveAuth(normalizeAuthFile(parsed));
 
   const saved = await prisma.agentAuth.findUnique({
-    where: { id: "main" },
+    where: { id: authRowId() },
     select: { provider: true, accountId: true, expiresAt: true },
   });
   console.log(
@@ -104,7 +102,7 @@ if (isEntrypoint(import.meta.url)) {
     .catch((e) => {
       // 토큰은 암호화된 뒤에야 prisma 로 넘어가므로 메시지에 평문이 실릴 일은 없습니다.
       console.error(e instanceof Error ? e.message : "알 수 없는 오류가 났어요.");
-      process.exit(1);
+      process.exitCode = 1;
     })
     .finally(() => prisma.$disconnect());
 }

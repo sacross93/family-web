@@ -5,7 +5,19 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret } from "@/lib/agent/crypto";
 
-const AUTH_ID = "main";
+/**
+ * 토큰이 들어 있는 싱글턴 행의 id. 기본은 `"main"` 입니다.
+ *
+ * `AGENT_AUTH_ROW_ID` 로 바꿀 수 있는 이유는 **테스트 때문**입니다 — 자동 테스트가
+ * 실제 토큰 행을 덮어썼다가 중간에 죽으면 평문이 DB 에만 있으므로 복구할 길이 없습니다.
+ * 테스트는 이 값을 별도 행으로 돌려 실제 행을 아예 건드리지 않습니다.
+ * (상수로 굳히지 않고 매번 읽습니다 — lib/agent/config.ts 의 agentConfig() 와 같은 이유)
+ * 운영에서는 설정하지 마세요.
+ */
+export function authRowId(): string {
+  return process.env.AGENT_AUTH_ROW_ID || "main";
+}
+
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 
@@ -103,9 +115,9 @@ export async function saveAuth(data: CodexAuthFile): Promise<void> {
     expiresAt: resolveExpiry(data.access_token, data),
   };
   await prisma.agentAuth.upsert({
-    where: { id: AUTH_ID },
+    where: { id: authRowId() },
     update: row,
-    create: { id: AUTH_ID, ...row },
+    create: { id: authRowId(), ...row },
   });
 }
 
@@ -117,7 +129,7 @@ export async function saveAuth(data: CodexAuthFile): Promise<void> {
  */
 export async function getAccountId(): Promise<string | null> {
   const row = await prisma.agentAuth.findUnique({
-    where: { id: AUTH_ID },
+    where: { id: authRowId() },
     select: { accountId: true },
   });
   return row?.accountId ?? null;
@@ -132,7 +144,7 @@ export type RefreshFn = (refreshToken: string) => Promise<RefreshResult>;
  * `force` 면 만료 여부와 상관없이 갱신합니다(401 재시도용).
  */
 export async function getAccessToken(force = false, refresh: RefreshFn = requestRefresh): Promise<string> {
-  const row = await prisma.agentAuth.findUnique({ where: { id: AUTH_ID } });
+  const row = await prisma.agentAuth.findUnique({ where: { id: authRowId() } });
   if (!row) {
     throw new Error("에이전트 토큰이 아직 없어요. `npm run agent:auth -- <codex_auth.json>` 로 넣어 주세요.");
   }
@@ -156,7 +168,7 @@ async function refreshAccessToken(staleAccessToken: string, refresh: RefreshFn):
       const previousRefreshToken = readSecret(locked.refreshToken);
       const fresh = await refresh(previousRefreshToken);
       await tx.agentAuth.update({
-        where: { id: AUTH_ID },
+        where: { id: authRowId() },
         data: {
           accessToken: encryptSecret(fresh.access_token),
           // 새 refresh_token 이 오면 이전 것은 못 쓰게 되므로 반드시 갈아끼웁니다.
@@ -172,7 +184,7 @@ async function refreshAccessToken(staleAccessToken: string, refresh: RefreshFn):
 
 async function lockRow(tx: Prisma.TransactionClient): Promise<{ accessToken: string; refreshToken: string }> {
   const rows = await tx.$queryRaw<Array<{ accessToken: string; refreshToken: string }>>`
-    SELECT "accessToken", "refreshToken" FROM "AgentAuth" WHERE "id" = ${AUTH_ID} FOR UPDATE
+    SELECT "accessToken", "refreshToken" FROM "AgentAuth" WHERE "id" = ${authRowId()} FOR UPDATE
   `;
   const row = rows[0];
   if (!row) throw new Error("에이전트 토큰이 사라졌어요. `npm run agent:auth` 로 다시 넣어 주세요.");

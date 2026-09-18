@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   createPkce,
   buildAuthorizeUrl,
   readCallback,
   exchangeCode,
   extractAccountId,
+  waitForCallbackOnServer,
 } from "./codex-login";
 import { normalizeAuthFile } from "./agent-auth";
 
@@ -107,6 +110,22 @@ describe("토큰 교환", () => {
     const f = vi.fn(async () => ok({ token_type: "Bearer" }));
     await expect(exchangeCode("CODE", "VERIFIER", f as unknown as typeof fetch)).rejects.toThrow(/access_token/);
   });
+
+  // 빈 문자열도 string 이라 타입 검사만으로는 통과합니다. 그대로 저장하면 쓰던 토큰이 죽습니다.
+  it("빈 문자열 토큰은 거부한다 (기존 토큰을 덮어쓰지 못하게)", async () => {
+    const empty = vi.fn(async () => ok({ access_token: "", refresh_token: "" }));
+    await expect(exchangeCode("CODE", "V", empty as unknown as typeof fetch)).rejects.toThrow(/access_token/);
+
+    const halfEmpty = vi.fn(async () => ok({ access_token: "액세스", refresh_token: "" }));
+    await expect(exchangeCode("CODE", "V", halfEmpty as unknown as typeof fetch)).rejects.toThrow(/refresh_token/);
+  });
+
+  it("네트워크 오류 메시지에 code_verifier 가 실리지 않는다", async () => {
+    const f = vi.fn(async () => { throw new Error("보내려던 본문: code_verifier=VERIFIER-비밀"); });
+    const err = await exchangeCode("CODE", "VERIFIER-비밀", f as unknown as typeof fetch).catch((e: unknown) => e as Error);
+    expect((err as Error).message).toMatch(/네트워크 오류/);
+    expect((err as Error).message).not.toContain("VERIFIER-비밀");
+  });
 });
 
 describe("account_id 추출", () => {
@@ -127,6 +146,75 @@ describe("account_id 추출", () => {
   it("JWT 가 아니면 null", () => {
     expect(extractAccountId("그냥문자열")).toBeNull();
     expect(extractAccountId("a.b.c")).toBeNull();
+  });
+});
+
+describe("콜백 서버", () => {
+  const STATE = "aaaabbbbccccddddaaaabbbbccccdddd";
+
+  /** 임시 포트로 서버를 띄우고 실제 포트를 알려줍니다. */
+  function start(state: string) {
+    let announce!: (port: number) => void;
+    const port = new Promise<number>((r) => { announce = r; });
+    const code = waitForCallbackOnServer(state, 0, announce);
+    // 거부는 아래에서 단언하지만, 그 전에 거부가 나면 "미처리 거부" 경고가 뜨므로 미리 붙여 둡니다.
+    code.catch(() => {});
+    return { port, code };
+  }
+
+  it("state 가 안 맞는 요청은 400 을 주고 계속 기다린다", async () => {
+    const { port, code } = start(STATE);
+    const p = await port;
+
+    // 남이 보낸 요청(state 없음) — 여기서 로그인이 끝나 버리면 안 됩니다.
+    const stray = await fetch(`http://127.0.0.1:${p}/auth/callback?error=access_denied`);
+    expect(stray.status).toBe(400);
+
+    // 서버가 아직 살아 있어야 진짜 콜백을 받을 수 있습니다.
+    const real = await fetch(`http://127.0.0.1:${p}/auth/callback?code=CODE-9&state=${STATE}`);
+    expect(real.status).toBe(200);
+    await expect(code).resolves.toBe("CODE-9");
+  });
+
+  it("state 가 맞는 거부 응답은 로그인을 끝낸다", async () => {
+    const { port, code } = start(STATE);
+    const p = await port;
+    const res = await fetch(`http://127.0.0.1:${p}/auth/callback?error=access_denied&state=${STATE}`);
+    expect(res.status).toBe(400);
+    await expect(code).rejects.toThrow(/access_denied/);
+  });
+
+  it("콜백 경로가 아니면 404", async () => {
+    const { port, code } = start(STATE);
+    const p = await port;
+    const res = await fetch(`http://127.0.0.1:${p}/무관한경로`);
+    expect(res.status).toBe(404);
+    // 정리
+    await fetch(`http://127.0.0.1:${p}/auth/callback?code=CODE&state=${STATE}`);
+    await code;
+  });
+
+  it("완료 페이지는 사유를 HTML 이스케이프한다", async () => {
+    const { port, code } = start(STATE);
+    const p = await port;
+    const res = await fetch(`http://127.0.0.1:${p}/auth/callback?error=<script>`);
+    const html = await res.text();
+    expect(html).not.toContain("<script>");
+    await fetch(`http://127.0.0.1:${p}/auth/callback?code=CODE&state=${STATE}`);
+    await code;
+  });
+
+  it("포트를 못 잡으면 그 사실을 알린다", async () => {
+    const blocker = createServer();
+    await new Promise<void>((r) => blocker.listen(0, "127.0.0.1", r));
+    const taken = (blocker.address() as AddressInfo).port;
+    try {
+      await expect(waitForCallbackOnServer(STATE, taken)).rejects.toThrow(
+        new RegExp(`포트 ${taken} 를 열지 못했어요`)
+      );
+    } finally {
+      blocker.close();
+    }
   });
 });
 
