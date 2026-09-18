@@ -47,10 +47,10 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - LLM 와이어 포맷은 `lib/agent/llm/codex.ts` 안에서만 다룬다. 루프는 정규화 이벤트만 안다.
 - `read_url` 의 사설·내부망 차단은 **도구 층에만** 둔다 — `lib/url.ts` 는 아기 참고 사이트 카드가 공유하므로 거기를 조이면 무관한 기능이 깨진다.
 - 테스트는 `llm/fake.ts` 로 네트워크 없이 돈다. 스펙: `docs/superpowers/specs/2026-09-17-site-agent-design.md`(§16에 실측/미확인 구분).
-- 토큰은 `AgentAuth` 에 암호화 저장, 주입은 `npm run agent:auth`. **`AUTH_SECRET` 또는 `crypto.ts` 의 `KEY_DOMAIN` 이 바뀌면 기존 토큰을 못 읽는다** — 배포 전 [DEPLOY.md](DEPLOY.md) 6절 필독.
+- 토큰은 `AgentAuth` 에 암호화 저장. 재발급은 `npm run agent:login`(브라우저 로그인 → DB 직행, 평문 파일 없음), 파일이 있으면 `npm run agent:auth -- <경로>`. **`AUTH_SECRET` 또는 `crypto.ts` 의 `KEY_DOMAIN` 이 바뀌면 기존 토큰을 못 읽는다** — 배포 전 [DEPLOY.md](DEPLOY.md) 6절 필독.
 - **2단계(라우트·UI)가 지켜야 할 것** — 엔진이 강제하지 못하는 부분이라 여기 적어 둔다.
   - `ToolContext.origin` 을 `Host`/`X-Forwarded-Host` 헤더에서 만들지 말 것. 세션 쿠키가 공격자 서버로 나간다 — 환경변수나 고정 상수에서.
-  - `listPath` 중 `/decorations`(꾸미기)·`/family`(가족)는 **실재하지 않는 가상 경로**다(`app/decorations/`·`app/family/` 없음 — 리소스끼리 겹치지 않게 둔 자리표시자). 결과 카드에서 그리로 보내면 404.
+  - **가상 경로 2개를 링크로 만들지 말 것**: `/decorations`(꾸미기)·`/family`(가족)는 `listPath` 자리를 채우려고 둔 값이라 **그런 페이지가 없다**(`app/decorations/`·`app/family/` 부재). 리소스 경로로 링크·"보러가기" 버튼을 만들 땐 **화이트리스트로 거르거나 이 둘을 제외**해야 한다. 안 그러면 사용자가 404 를 본다. 타입으로는 못 막으니 이 규칙이 유일한 방어선이다.
   - `runAgent` 는 최종 `messages` 를 반환하지 않는다. 라우트가 대화 기록을 보관할 땐 assistant 의 `toolCalls` 와 tool 의 `toolCallId` 를 **짝째로** 저장해야 네이티브 도구 모드가 그 경계에서 안 깨진다.
   - `/api/agent` 의 `maxDuration` 은 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유보다 크게. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
 
