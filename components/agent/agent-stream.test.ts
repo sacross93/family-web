@@ -243,3 +243,25 @@ describe("visibleResults", () => {
     expect(kept).toHaveLength(1);
   });
 });
+
+describe("사진 첨부", () => {
+  it("foldMessages 가 사진 주소를 말풍선까지 옮긴다", () => {
+    const messages: AgentMessage[] = [
+      { role: "user", content: "이거 발리 사진인데 사진첩에 넣어줘", imageUrl: "/uploads/a.jpg" },
+    ];
+    expect(foldMessages(messages)).toEqual([
+      { kind: "user", text: "이거 발리 사진인데 사진첩에 넣어줘", imageUrl: "/uploads/a.jpg" },
+    ]);
+  });
+
+  it("사진이 없으면 말풍선에도 그 자리가 없다", () => {
+    expect(foldMessages([{ role: "user", content: "안녕" }])).toEqual([{ kind: "user", text: "안녕" }]);
+  });
+
+  it("보내자마자 그리는 말풍선에도 사진이 실린다 — 다시 열었을 때와 같은 모습", () => {
+    const live = pushUser(EMPTY_STREAM, "이거 넣어줘", "/uploads/a.jpg");
+    expect(live.bubbles).toEqual(
+      foldMessages([{ role: "user", content: "이거 넣어줘", imageUrl: "/uploads/a.jpg" }]),
+    );
+  });
+});

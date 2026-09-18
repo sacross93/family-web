@@ -551,3 +551,87 @@ describe("codex 공급자 — 히스토리 전달", () => {
     expect(input[2].content).toContain("[도구 결과]");
   });
 });
+
+describe("codex 공급자 — 사진 첨부", () => {
+  it("사진이 붙으면 input_image 파트로 나간다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [
+          { role: "user", content: "이거 뭐야?", imageData: "data:image/jpeg;base64,AAA" },
+        ],
+      }),
+    );
+    expect(bodyOf(f, 0).input).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "이거 뭐야?" },
+          { type: "input_image", image_url: "data:image/jpeg;base64,AAA" },
+        ],
+      },
+    ]);
+  });
+
+  it("사진이 없으면 지금까지처럼 문자열 하나다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", tools: [], messages: [{ role: "user", content: "안녕" }] }));
+    expect(bodyOf(f, 0).input).toEqual([{ role: "user", content: "안녕" }]);
+  });
+
+  it("기록에서 되살린 메시지는 주소만 나간다 — 사진은 그 턴에만 있었다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [{ role: "user", content: "사진첩에 넣어줘", imageUrl: "/uploads/a.jpg" }],
+      }),
+    );
+    const [item] = bodyOf(f, 0).input as { content: { type: string; text?: string }[] }[];
+    expect(item.content.map((c) => c.type)).toEqual(["input_text", "input_text"]);
+    expect(item.content[1].text).toContain("/uploads/a.jpg");
+  });
+
+  it("사진만 있고 글이 없으면 input_image 파트만 나간다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [{ role: "user", content: "  ", imageData: "data:image/jpeg;base64,AAA" }],
+      }),
+    );
+    expect(bodyOf(f, 0).input).toEqual([
+      { role: "user", content: [{ type: "input_image", image_url: "data:image/jpeg;base64,AAA" }] },
+    ]);
+  });
+
+  it("json 모드(도구 평탄화)에서도 사진은 그대로 실린다", async () => {
+    process.env.AGENT_TOOL_MODE = "json";
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [OPEN_PAGE],
+        messages: [
+          {
+            role: "user",
+            content: "사진첩에 넣어줘",
+            imageUrl: "/uploads/a.jpg",
+            imageData: "data:image/jpeg;base64,AAA",
+          },
+        ],
+      }),
+    );
+    const [item] = bodyOf(f, 0).input as { content: { type: string }[] }[];
+    expect(item.content.map((c) => c.type)).toEqual(["input_text", "input_text", "input_image"]);
+  });
+});

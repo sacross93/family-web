@@ -7,7 +7,7 @@ import type { ToolResult } from "@/lib/agent/tools";
 
 /** 화면에 보이는 말풍선. role:"tool" 은 여기 없다 — 성공한 결과만 assistant 말풍선이 품는다. */
 export type Bubble =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; imageUrl?: string }
   | { kind: "assistant"; text: string; results: ToolResult[] };
 
 export type AssistantBubble = Extract<Bubble, { kind: "assistant" }>;
@@ -165,9 +165,12 @@ export function fromMessages(messages: AgentMessage[]): StreamBubbles {
   return { bubbles: foldMessages(messages), pendingBreak: false };
 }
 
-/** 가족이 보낸 말. 새 턴이 시작되므로 미뤄 둔 빈 줄은 버린다. */
-export function pushUser(state: StreamBubbles, text: string): StreamBubbles {
-  return { bubbles: [...state.bubbles, { kind: "user", text }], pendingBreak: false };
+/** 가족이 보낸 말. 새 턴이 시작되므로 미뤄 둔 빈 줄은 버린다. 사진을 붙였으면 함께 보인다. */
+export function pushUser(state: StreamBubbles, text: string, imageUrl?: string): StreamBubbles {
+  return {
+    bubbles: [...state.bubbles, { kind: "user", text, ...(imageUrl ? { imageUrl } : {}) }],
+    pendingBreak: false,
+  };
 }
 
 /** 흘러온 글자를 마지막 포동이 말풍선에 잇는다. */
@@ -223,7 +226,12 @@ export function foldMessages(messages: AgentMessage[]): Bubble[] {
 
   for (const message of messages) {
     if (message.role === "user") {
-      bubbles.push({ kind: "user", text: message.content });
+      bubbles.push({
+        kind: "user",
+        text: message.content,
+        // 축소본(imageData)은 저장되지 않으므로 기록에서 되살아나는 것은 원본 주소뿐이다.
+        ...(message.imageUrl ? { imageUrl: message.imageUrl } : {}),
+      });
       continue;
     }
     if (message.role === "tool") {

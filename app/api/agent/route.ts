@@ -85,6 +85,39 @@ function createTurnLog() {
 interface AgentRequestBody {
   chatId?: unknown;
   message?: unknown;
+  imageUrl?: unknown;
+  imageData?: unknown;
+}
+
+/**
+ * 첨부한 사진의 주소. **우리 저장소 주소만 받습니다** — 임의 주소를 받으면 이 라우트가
+ * 남의 서버를 가리키는 통로가 됩니다. /api/upload 가 돌려주는 두 모양만 통과시킵니다:
+ * 로컬 `/uploads/…`, Blob `https://….blob.vercel-storage.com/…`.
+ */
+function ownImageUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  if (value.startsWith("/uploads/") && !value.includes("..")) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" && url.hostname.endsWith(".blob.vercel-storage.com")) return value;
+  } catch {
+    // 주소가 아니면 버립니다.
+  }
+  return undefined;
+}
+
+/** 축소본 상한. 768px JPEG 는 보통 200KB 아래다 — 그보다 훨씬 크면 줄이지 않고 보낸 것입니다. */
+const MAX_IMAGE_DATA = 1_500_000;
+
+/**
+ * 모델에게만 가는 축소본. 클라이언트가 줄여서 보내기로 돼 있지만 라우트는 클라이언트를 믿지 않습니다.
+ * 넘치면 **조용히 버립니다**(사진 없이 대화는 계속됩니다). 여기서 400 을 내면 사용자는 아무것도 못 하고 멈춥니다.
+ */
+function modelImage(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (!value.startsWith("data:image/")) return undefined;
+  if (value.length > MAX_IMAGE_DATA) return undefined;
+  return value;
 }
 
 export async function POST(request: NextRequest) {
@@ -105,6 +138,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "하고 싶은 말을 적어 주세요." }, { status: 400 });
   }
   const given = typeof body?.chatId === "string" ? body.chatId.trim() : "";
+  // 사진은 두 값이다 — 저장되는 주소와 이번 턴에만 모델에게 보이는 축소본(스펙 §19.3).
+  const imageUrl = ownImageUrl(body?.imageUrl);
+  const imageData = modelImage(body?.imageData);
 
   // 대화 준비는 스트림을 열기 **전에** 끝냅니다 — 여기서 실패하면 JSON 오류로 돌려줄 수 있습니다.
   let chatId: string;
@@ -147,7 +183,14 @@ export async function POST(request: NextRequest) {
       // 클라이언트가 chatId 를 서버와 맞출 수 있도록 언제나 가장 먼저 한 번 보냅니다.
       send({ type: "chat", chatId });
 
-      const run = runAgent({ question: message, provider: createCodexProvider(), ctx, history });
+      const run = runAgent({
+        question: message,
+        provider: createCodexProvider(),
+        ctx,
+        history,
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(imageData ? { imageData } : {}),
+      });
       try {
         for await (const event of run) {
           // break 가 제너레이터의 return() 을 불러 공급자 쪽도 정리됩니다.
@@ -176,7 +219,11 @@ export async function POST(request: NextRequest) {
       } finally {
         // 끊겼어도 사용자가 읽던 것은 기록에 남아야 합니다. 저장 실패가 응답을 죽이지는 않습니다.
         try {
-          await appendMessages(chatId, [{ role: "user", content: message }, ...log.close()]);
+          // 같은 객체를 그대로 넘겨도 imageUrl 만 남습니다 — chat-store 가 imageData 를 저장하지 않습니다.
+          await appendMessages(chatId, [
+            { role: "user", content: message, ...(imageUrl ? { imageUrl } : {}) },
+            ...log.close(),
+          ]);
         } catch (error) {
           console.error("[agent] 대화를 저장하지 못했습니다", error);
         }

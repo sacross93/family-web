@@ -303,6 +303,8 @@ model AgentChatMessage {
   content    String
   toolCalls  String?
   toolCallId String?
+  // role:"user" 로 함께 보낸 사진의 주소(원본). 모델에게만 가는 축소본(imageData)은 저장하지 않는다.
+  imageUrl   String?
   createdAt  DateTime  @default(now())
 
   @@index([chatId, createdAt])

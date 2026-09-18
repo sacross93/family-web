@@ -197,6 +197,15 @@ export function AgentThread({
                     palette("lavender").chip,
                   )}
                 >
+                  {/* 붙인 사진은 글 위에. next/image 가 아니라 <img> 를 쓰는 건 이 저장소 규칙이다(AGENTS.md). */}
+                  {bubble.imageUrl && (
+                    <img
+                      src={bubble.imageUrl}
+                      loading="lazy"
+                      alt=""
+                      className="mb-2 max-h-56 w-full rounded-2xl object-cover"
+                    />
+                  )}
                   {bubble.text}
                 </div>
               </div>

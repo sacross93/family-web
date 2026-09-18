@@ -82,6 +82,37 @@ describe("대화 저장", () => {
     expect(await prisma.agentChatMessage.count({ where: { chatId: id } })).toBe(0);
   });
 
+  it("사진 주소는 저장되고 다시 읽힌다", async () => {
+    const id = await newChat("사진");
+    await appendMessages(id, [
+      { role: "user", content: "이거 발리 사진이야", imageUrl: "/uploads/a.jpg" },
+    ]);
+    const [first] = await loadHistory(id, 10);
+    expect(first.imageUrl).toBe("/uploads/a.jpg");
+  });
+
+  it("사진이 없으면 imageUrl 자체가 없다", async () => {
+    const id = await newChat("맨몸");
+    await appendMessages(id, [{ role: "user", content: "안녕" }]);
+    const [first] = await loadHistory(id, 10);
+    expect(first).not.toHaveProperty("imageUrl");
+  });
+
+  it("축소본(imageData)은 저장하지 않는다 — 다시 읽어도 없다", async () => {
+    const id = await newChat("축소본");
+    await appendMessages(id, [
+      {
+        role: "user",
+        content: "이거 뭐야?",
+        imageUrl: "/uploads/b.jpg",
+        imageData: "data:image/jpeg;base64,AAA",
+      },
+    ]);
+    const [first] = await loadHistory(id, 10);
+    expect(first.imageUrl).toBe("/uploads/b.jpg");
+    expect(first).not.toHaveProperty("imageData");
+  });
+
   it("chatExists 는 있는 대화만 참", async () => {
     // 라우트가 쓰기 전에 이걸로 거른다 — 지워진 대화에 이어 쓰면 외래키로 저장이 통째로 실패한다.
     const id = await createChat("있다가 없어질 것");

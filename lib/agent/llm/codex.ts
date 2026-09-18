@@ -55,8 +55,11 @@ function parseArgs(raw: string | null | undefined): Record<string, unknown> {
 
 // ── 요청 만들기 ──────────────────────────────────────────────────────────────
 
+/** 파트 하나. 실측(probe-4)에서 `content` 가 문자열뿐 아니라 이 배열도 받는 것이 확인됐습니다. */
+type ContentPart = { type: string; text?: string; image_url?: string };
+
 type InputItem =
-  | { role: "user" | "assistant"; content: string }
+  | { role: "user" | "assistant"; content: string | ContentPart[] }
   | { type: "function_call"; call_id: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: string };
 
@@ -95,7 +98,7 @@ function structureMessage(message: AgentMessage): InputItem[] {
     }
     return items;
   }
-  return textItem("user", message.content);
+  return userItem(message);
 }
 
 /**
@@ -111,11 +114,44 @@ function flattenMessage(message: AgentMessage): InputItem[] {
     const calls = (message.toolCalls ?? []).map((call) => actionBlock(call.name, call.args));
     return textItem("assistant", [message.content, ...calls].filter((p) => p && p.trim()).join("\n"));
   }
-  return textItem("user", message.content);
+  return userItem(message);
 }
 
 function textItem(role: "user" | "assistant", text: string): InputItem[] {
   return text.trim() ? [{ role, content: text.trim() }] : [];
+}
+
+/**
+ * 사진이 붙은 사용자 메시지는 파트 배열로 나갑니다(실측 probe-4: 200).
+ * 사진이 없으면 지금까지처럼 문자열 하나입니다 — 모양을 바꾸지 않습니다.
+ *
+ * **주소도 함께 나갑니다.** 이게 빠지면 모델은 사진을 보고도 `create_item("photo", {url})`
+ * 에 넣을 값이 없어, 손에 쥔 `data:` URL 을 그대로 박습니다 — 앨범에 15만 자짜리 흐린
+ * 사본이 저장됩니다. 보는 것(imageData)과 넣는 것(imageUrl)은 다른 값입니다.
+ *
+ * `message.content` 는 **사용자가 친 글 그대로** 둡니다 — 주소 안내를 거기 끼워 넣으면
+ * 말풍선과 대화 기록에 그 문장이 그대로 보입니다.
+ */
+function userItem(message: AgentMessage): InputItem[] {
+  if (!message.imageUrl && !message.imageData) return textItem("user", message.content);
+  const text = message.content.trim();
+  return [
+    {
+      role: "user",
+      content: [
+        ...(text ? [{ type: "input_text", text }] : []),
+        ...(message.imageUrl
+          ? [
+              {
+                type: "input_text",
+                text: `(첨부한 사진의 저장 주소: ${message.imageUrl} — 이 사진을 어딘가에 넣을 때 url 인자에 이 값을 그대로 쓰세요)`,
+              },
+            ]
+          : []),
+        ...(message.imageData ? [{ type: "input_image", image_url: message.imageData }] : []),
+      ],
+    },
+  ];
 }
 
 function actionBlock(name: string, args: Record<string, unknown>): string {

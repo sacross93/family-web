@@ -277,3 +277,42 @@ describe("runAgent", () => {
     expect(p.calls[0].messages.map((m) => m.content)).toEqual(["네 확인했어요", "또"]);
   });
 });
+
+describe("runAgent — 사진 첨부", () => {
+  it("주소와 축소본을 사용자 메시지에 함께 싣는다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "넣었어요" }, { type: "done" }]]);
+    await drain(
+      runAgent({
+        question: "사진첩에 넣어줘",
+        provider: p,
+        ctx,
+        catalog: "",
+        imageUrl: "/uploads/a.jpg",
+        imageData: "data:image/jpeg;base64,AAA",
+      }),
+    );
+    const asked = p.calls[0].messages.at(-1)!;
+    expect(asked.content).toBe("사진첩에 넣어줘"); // 사용자가 친 글은 그대로 둔다
+    expect(asked.imageUrl).toBe("/uploads/a.jpg");
+    expect(asked.imageData).toBe("data:image/jpeg;base64,AAA");
+  });
+
+  it("사진이 없으면 그 자리도 없다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({ question: "안녕", provider: p, ctx, catalog: "" }));
+    const asked = p.calls[0].messages.at(-1)!;
+    expect(asked).not.toHaveProperty("imageUrl");
+    expect(asked).not.toHaveProperty("imageData");
+  });
+
+  it("왕복해도 같은 사진이 따라간다 — 도구를 부른 뒤에도 모델이 그 사진을 본다", async () => {
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "c1", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
+      [{ type: "text", delta: "넣었어요" }, { type: "done" }],
+    ]);
+    await drain(
+      runAgent({ question: "이거 넣어줘", provider: p, ctx, catalog: "", imageUrl: "/uploads/a.jpg" }),
+    );
+    expect(p.calls[1].messages.find((m) => m.role === "user")?.imageUrl).toBe("/uploads/a.jpg");
+  });
+});

@@ -30,7 +30,8 @@ export interface AgentChatState {
   /** 진행 표시("계획을 열어보는 중…"). 끝나면 null. */
   toolLabel: string | null;
   error: string | null;
-  send(message: string): Promise<void>;
+  /** 사진은 두 값이다 — 저장되는 주소(url)와 이번 턴에만 모델에게 보이는 축소본(data, 선택). */
+  send(message: string, image?: { url: string; data?: string }): Promise<void>;
   stop(): void;
   /** 새 대화 */
   reset(): void;
@@ -141,7 +142,7 @@ export function useAgentChat(): AgentChatState {
   );
 
   const send = useCallback(
-    async (message: string) => {
+    async (message: string, image?: { url: string; data?: string }) => {
       const text = message.trim();
       if (!text || runningRef.current) return;
 
@@ -150,14 +151,20 @@ export function useAgentChat(): AgentChatState {
       setRunning(true);
       setToolLabel(null);
       setError(null);
-      setStream((prev) => pushUser(prev, text));
+      // 보내자마자 자기 사진이 보여야 한다 — 올라간 주소를 그대로 말풍선에 싣는다.
+      setStream((prev) => pushUser(prev, text, image?.url));
 
       let closed = false; // done 이나 error 를 보았는가
       try {
         const response = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatId: chatIdRef.current, message: text }),
+          body: JSON.stringify({
+            chatId: chatIdRef.current,
+            message: text,
+            imageUrl: image?.url,
+            imageData: image?.data,
+          }),
           signal: controller.signal,
         });
 

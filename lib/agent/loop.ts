@@ -17,6 +17,10 @@ export interface RunInput {
   question: string;
   provider: LlmProvider;
   ctx: ToolContext;
+  /** 함께 붙인 사진의 저장 주소(원본). 모델이 `create_item("photo", {url})` 에 그대로 쓴다. */
+  imageUrl?: string;
+  /** 이번 턴에만 모델에게 보여줄 축소본(data URL). 기록에 남지 않는다 — 다음 턴에는 주소만 남는다. */
+  imageData?: string;
   /** 이전 대화. 최근 agentConfig().history 개만 보낸다. */
   history?: AgentMessage[];
   /** 없으면 이 자리에서 만든다(라우트가 미리 만들어 두면 그걸 쓴다). */
@@ -165,10 +169,16 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
   // 라우트가 남은 예산 따위를 계산해 넘길 수 있으므로 여기서 바닥을 받쳐 둔다.
   const maxSteps = Math.max(1, input.maxSteps ?? config.maxSteps);
 
-  const messages: AgentMessage[] = [
-    ...recentHistory(input.history ?? [], config.history),
-    { role: "user", content: question },
-  ];
+  // 사진은 두 값이다 — 저장되는 주소(imageUrl)와 이번 턴에만 보이는 축소본(imageData).
+  // 합치면 앨범에 흐린 data: 사본이 박히거나 원본이 통째로 모델에게 나간다(스펙 §19.3).
+  const asked: AgentMessage = {
+    role: "user",
+    content: question,
+    ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
+    ...(input.imageData ? { imageData: input.imageData } : {}),
+  };
+
+  const messages: AgentMessage[] = [...recentHistory(input.history ?? [], config.history), asked];
 
   for (let step = 0; step < maxSteps; step += 1) {
     let said = "";

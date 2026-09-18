@@ -18,6 +18,11 @@ export interface AgentMessage {
   content: string;
   /** role:"tool" 일 때, 이 결과가 어느 호출에 대한 것인지 */
   toolCallId?: string;
+  /** role:"user" — 함께 보낸 사진의 주소. 저장되고, 다시 열 때 화면에 보인다. */
+  imageUrl?: string;
+  /** role:"user" — 이번 턴에 모델에게 보여줄 축소본(data URL). **저장하지 않는다.**
+   *  기록에서 되살린 메시지에는 없다 — 사진을 두고 이어서 묻는 건 이번 턴 안에서만 된다. */
+  imageData?: string;
   /** role:"assistant" 일 때, 이 턴에 모델이 요청한 도구 호출들.
    *  네이티브 도구 모드에서 히스토리를 원형대로 되돌리기 위해 필요하다.
    *  args 모양은 위 tool_call 이벤트와 동일해야 한다(그래야 루프가 캐스팅 없이 옮겨 담는다). */
