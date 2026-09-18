@@ -102,15 +102,55 @@ function change(bubbles: Bubble[], edit: (bubble: AssistantBubble) => AssistantB
   return [...bubbles, edit({ kind: "assistant", text: "", results: [] })];
 }
 
+/**
+ * 흘러나오는 동안의 말풍선.
+ *
+ * `pendingBreak` 가 있는 이유: 모델은 도구를 부르기 전과 후에 각각 말하는데, 그 둘은 기록에
+ * **별개의 assistant 행**으로 남는다(lib/agent/loop.ts). 그래서 `foldMessages` 는 둘 사이를
+ * 빈 줄로 띄운다. 흘러나올 때도 똑같이 띄워야 **같은 대화가 새로고침 전후로 같아 보인다.**
+ */
+export interface StreamBubbles {
+  bubbles: Bubble[];
+  /** 도구 결과가 끼어든 뒤 아직 새 글자가 안 왔다 → 다음 글자 앞에 빈 줄이 필요하다. */
+  pendingBreak: boolean;
+}
+
+/** 빈 대화. 안의 것을 고치는 함수가 없으므로(전부 새로 만들어 돌려준다) 그대로 나눠 써도 된다. */
+export const EMPTY_STREAM: StreamBubbles = { bubbles: [], pendingBreak: false };
+
+/** 기록에서 불러온 대화로 시작한다. */
+export function fromMessages(messages: AgentMessage[]): StreamBubbles {
+  return { bubbles: foldMessages(messages), pendingBreak: false };
+}
+
+/** 가족이 보낸 말. 새 턴이 시작되므로 미뤄 둔 빈 줄은 버린다. */
+export function pushUser(state: StreamBubbles, text: string): StreamBubbles {
+  return { bubbles: [...state.bubbles, { kind: "user", text }], pendingBreak: false };
+}
+
 /** 흘러온 글자를 마지막 포동이 말풍선에 잇는다. */
-export function appendDelta(bubbles: Bubble[], delta: string): Bubble[] {
-  if (!delta) return bubbles;
-  return change(bubbles, (bubble) => ({ ...bubble, text: bubble.text + delta }));
+export function pushDelta(state: StreamBubbles, delta: string): StreamBubbles {
+  if (!delta) return state;
+
+  if (!state.pendingBreak) {
+    return { bubbles: change(state.bubbles, (b) => ({ ...b, text: b.text + delta })), pendingBreak: false };
+  }
+
+  // 도구를 거쳐 다시 말하기 시작했다. foldMessages 가 마디마다 trim 하고 "\n\n" 로 잇는 것과 똑같이 맞춘다.
+  const head = delta.replace(/^\s+/, "");
+  if (!head) return state; // 아직 공백뿐이다 — 빈 줄은 진짜 글자가 올 때 넣는다
+
+  const bubbles = change(state.bubbles, (bubble) => {
+    const said = bubble.text.replace(/\s+$/, "");
+    return { ...bubble, text: said ? `${said}\n\n${head}` : head };
+  });
+  return { bubbles, pendingBreak: false };
 }
 
 /** 도구 결과 카드를 마지막 포동이 말풍선에 붙인다. */
-export function appendResult(bubbles: Bubble[], result: ToolResult): Bubble[] {
-  return change(bubbles, (bubble) => ({ ...bubble, results: [...bubble.results, result] }));
+export function pushResult(state: StreamBubbles, result: ToolResult): StreamBubbles {
+  const bubbles = change(state.bubbles, (b) => ({ ...b, results: [...b.results, result] }));
+  return { bubbles, pendingBreak: true };
 }
 
 /** role:"tool" 의 content 는 ToolResult 를 JSON.stringify 한 문자열이다(lib/agent/loop.ts). */

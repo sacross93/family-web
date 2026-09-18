@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { appendDelta, appendResult, createSseParser, foldMessages } from "./agent-stream";
-import type { Bubble } from "./agent-stream";
+import { createSseParser, EMPTY_STREAM, foldMessages, pushDelta, pushResult, pushUser } from "./agent-stream";
+import type { StreamBubbles } from "./agent-stream";
 import type { AgentMessage } from "@/lib/agent/llm/types";
+import type { ToolResult } from "@/lib/agent/tools";
 
 const encoder = new TextEncoder();
 
@@ -70,12 +71,18 @@ describe("createSseParser", () => {
   });
 });
 
+/** 이벤트를 차례로 흘려 넣는다 — 훅이 apply 에서 하는 것과 같은 순서. */
+function stream(...steps: ({ text: string } | { result: ToolResult })[]): StreamBubbles {
+  return steps.reduce<StreamBubbles>(
+    (state, step) => ("text" in step ? pushDelta(state, step.text) : pushResult(state, step.result)),
+    EMPTY_STREAM,
+  );
+}
+
 describe("말풍선 잇기", () => {
   it("첫 글자에 포동이 말풍선이 생기고 이어 붙는다", () => {
-    let bubbles: Bubble[] = [{ kind: "user", text: "안녕" }];
-    bubbles = appendDelta(bubbles, "네");
-    bubbles = appendDelta(bubbles, "!");
-    expect(bubbles).toEqual([
+    const state = pushDelta(pushDelta(pushUser(EMPTY_STREAM, "안녕"), "네"), "!");
+    expect(state.bubbles).toEqual([
       { kind: "user", text: "안녕" },
       { kind: "assistant", text: "네!", results: [] },
     ]);
@@ -83,7 +90,46 @@ describe("말풍선 잇기", () => {
 
   it("결과는 마지막 포동이 말풍선에 쌓인다", () => {
     const result = { ok: true as const, data: null, label: "계획 1개" };
-    expect(appendResult([], result)).toEqual([{ kind: "assistant", text: "", results: [result] }]);
+    expect(stream({ result }).bubbles).toEqual([{ kind: "assistant", text: "", results: [result] }]);
+  });
+
+  it("도구 앞에 한 말이 없으면 빈 줄을 넣지 않는다", () => {
+    const state = stream({ result: { ok: true, data: null } }, { text: "찾았어요." });
+    expect(state.bubbles[0]).toMatchObject({ kind: "assistant", text: "찾았어요." });
+  });
+
+  it("도구 뒤 첫 글자가 공백뿐이면 빈 줄을 미뤄 둔다", () => {
+    const state = stream({ text: "찾아볼게요." }, { result: { ok: true, data: null } }, { text: "\n" }, { text: "찾았어요." });
+    expect(state.bubbles[0]).toMatchObject({ text: "찾아볼게요.\n\n찾았어요." });
+  });
+});
+
+describe("흘러나올 때와 다시 열 때가 같다", () => {
+  // 같은 대화가 살아있을 때와 기록에서 열 때 다르게 보이면 사용자는 뭔가 잘못됐다고 느낀다.
+  // 두 경로가 갈라지면 이 테스트가 잡는다.
+  it("text → tool_result → text 가 foldMessages 와 글자까지 일치한다", () => {
+    const result = { ok: true as const, data: { count: 12 }, label: "발리 앨범", path: "/albums/a1" };
+
+    const live = pushDelta(
+      pushDelta(
+        pushResult(
+          pushDelta(pushDelta(pushUser(EMPTY_STREAM, "발리 사진 어디 있지?"), "잠깐 "), "찾아볼게요."),
+          result,
+        ),
+        "발리 사진은 ",
+      ),
+      "12장 있어요.",
+    );
+
+    // 같은 턴이 기록에 남는 모습 (lib/agent/loop.ts 가 쌓는 그대로)
+    const reopened = foldMessages([
+      { role: "user", content: "발리 사진 어디 있지?" },
+      { role: "assistant", content: "잠깐 찾아볼게요.", toolCalls: [{ id: "t1", name: "open_page", args: {} }] },
+      { role: "tool", content: JSON.stringify(result), toolCallId: "t1" },
+      { role: "assistant", content: "발리 사진은 12장 있어요." },
+    ]);
+
+    expect(live.bubbles).toEqual(reopened);
   });
 });
 

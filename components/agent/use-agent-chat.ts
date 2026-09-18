@@ -7,13 +7,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import {
-  appendDelta,
-  appendResult,
   asOkResult,
   createSseParser,
-  foldMessages,
+  EMPTY_STREAM,
+  fromMessages,
+  pushDelta,
+  pushResult,
+  pushUser,
 } from "./agent-stream";
-import type { Bubble, SseEvent } from "./agent-stream";
+import type { Bubble, SseEvent, StreamBubbles } from "./agent-stream";
 
 export type { Bubble, AssistantBubble } from "./agent-stream";
 
@@ -53,7 +55,8 @@ async function readError(response: Response, fallback: string): Promise<string> 
 
 export function useAgentChat(): AgentChatState {
   const [chatId, setChatId] = useState<string | null>(null);
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  // 말풍선과 "빈 줄을 미뤄 뒀는가"는 한 덩어리다 — 따로 두면 둘이 어긋난다.
+  const [stream, setStream] = useState<StreamBubbles>(EMPTY_STREAM);
   const [running, setRunning] = useState(false);
   const [toolLabel, setToolLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +112,7 @@ export function useAgentChat(): AgentChatState {
         }
         case "text": {
           const delta = event.delta;
-          if (typeof delta === "string" && delta) setBubbles((prev) => appendDelta(prev, delta));
+          if (typeof delta === "string" && delta) setStream((prev) => pushDelta(prev, delta));
           return false;
         }
         case "tool_start": {
@@ -120,7 +123,7 @@ export function useAgentChat(): AgentChatState {
         case "tool_result": {
           setToolLabel(null);
           const result = asOkResult(event.result);
-          if (result) setBubbles((prev) => appendResult(prev, result));
+          if (result) setStream((prev) => pushResult(prev, result));
           return false;
         }
         case "done":
@@ -147,7 +150,7 @@ export function useAgentChat(): AgentChatState {
       setRunning(true);
       setToolLabel(null);
       setError(null);
-      setBubbles((prev) => [...prev, { kind: "user", text }]);
+      setStream((prev) => pushUser(prev, text));
 
       let closed = false; // done 이나 error 를 보았는가
       try {
@@ -202,7 +205,7 @@ export function useAgentChat(): AgentChatState {
     abortRef.current?.abort();
     abortRef.current = null;
     rememberChat(null);
-    setBubbles([]);
+    setStream(EMPTY_STREAM);
     setError(null);
     idle();
   }, [idle, rememberChat]);
@@ -229,7 +232,7 @@ export function useAgentChat(): AgentChatState {
 
         const messages = Array.isArray(body.messages) ? (body.messages as AgentMessage[]) : [];
         rememberChat(typeof body.id === "string" && body.id ? body.id : id);
-        setBubbles(foldMessages(messages));
+        setStream(fromMessages(messages));
       } catch (thrown) {
         if (!isAbort(thrown)) setError(LOAD_ERROR);
       } finally {
@@ -240,7 +243,7 @@ export function useAgentChat(): AgentChatState {
   );
 
   return useMemo(
-    () => ({ chatId, bubbles, running, toolLabel, error, send, stop, reset, load }),
-    [chatId, bubbles, running, toolLabel, error, send, stop, reset, load],
+    () => ({ chatId, bubbles: stream.bubbles, running, toolLabel, error, send, stop, reset, load }),
+    [chatId, stream, running, toolLabel, error, send, stop, reset, load],
   );
 }
