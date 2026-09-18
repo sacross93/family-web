@@ -18,6 +18,8 @@
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "user:add": "tsx scripts/add-user.ts",
+    "agent:auth": "tsx scripts/agent-auth.ts",
+    "agent:login": "tsx scripts/codex-login.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

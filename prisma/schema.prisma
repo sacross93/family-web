@@ -255,6 +255,35 @@ model AppUser {
 }
 
 // ─────────────────────────────────────────────
+// 사이트 에이전트
+// ─────────────────────────────────────────────
+
+// Codex OAuth 토큰 (싱글턴 id="main"). accessToken·refreshToken 은 AES-256-GCM 암호문.
+model AgentAuth {
+  id           String   @id @default("main")
+  provider     String   @default("openai-codex")
+  accessToken  String
+  refreshToken String
+  accountId    String?
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+}
+
+// 에이전트 실행 로그 (디버깅용). 대용량 본문을 넣지 않는다.
+model AgentRun {
+  id        String   @id @default(cuid())
+  prompt    String
+  steps     String   @default("[]")
+  outcome   String   @default("ok")
+  error     String?
+  toolMode  String?
+  ms        Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
 // 꾸미기 스티커 — 관리자가 각 페이지 아무 위치에나 놓는 사진
 // page: 경로("/", "/albums" …) 또는 "global"(모든 페이지)
 // 좌표: xPct(콘텐츠 폭 대비 가로 %, 스티커 중심 기준), yPx(콘텐츠 상단에서 px, 중심 기준)
