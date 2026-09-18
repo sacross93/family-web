@@ -656,7 +656,10 @@ async function* streamEvents(res: Response, mode: WireToolMode): AsyncGenerator<
 export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvider {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const injected = opts.token;
-  const sessionId = randomUUID(); // 대화 하나에 하나. 재시도해도 같은 값을 씁니다.
+  // 공급자 인스턴스 하나에 하나. 한 요청 안에서는 재시도해도 같은 값을 씁니다.
+  // 지금 라우트(app/api/agent/route.ts)는 **요청마다** 공급자를 새로 만들므로 턴이 바뀌면 이 값도 바뀝니다.
+  // store:false 로 히스토리를 매번 다시 보내기 때문에 서버가 이어 붙일 것이 없어 문제되지 않습니다.
+  const sessionId = randomUUID();
 
   const getToken: (force: boolean) => Promise<string> = injected
     ? () => injected()

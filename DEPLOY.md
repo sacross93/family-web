@@ -49,7 +49,8 @@ DATABASE_URL="<Neon Direct>" npx prisma db push
 ```
 
 안 하면 새 테이블을 쓰는 페이지가 열리지 않아요. 예: 아기 페이지(`Baby`·`BabyEntry`·`BabyChecklistItem`).
-사이트 에이전트도 같습니다 — `AgentAuth`·`AgentRun` 두 테이블을 **코드 배포 전에** 먼저 만들어 주세요(6절).
+사이트 에이전트도 같습니다 — `AgentAuth`·`AgentRun`·`AgentChat`·`AgentChatMessage` **네 테이블**을 **코드 배포 전에** 먼저 만들어 주세요(6절).
+특히 `AgentChat`·`AgentChatMessage` 는 대화 기록을 담는 테이블이라, 코드가 먼저 올라가면 **첫 질문을 보내는 순간 500** 이 납니다.
 
 ---
 
@@ -65,12 +66,27 @@ DATABASE_URL="<Neon Direct>" npx prisma db push
    | `DATABASE_URL` | Neon **Pooled** 문자열 + 끝에 `&pgbouncer=true` 붙이기 |
    | `AUTH_SECRET` | 아래 명령으로 생성한 값 |
    | `TZ` | `Asia/Seoul` — 서버 "오늘" 계산(주차·D-day)을 한국 날짜 기준으로 |
-   | `AGENT_ENABLED` | (선택) 사이트 에이전트 스위치. 기본 `false` — 나머지 `AGENT_*` 는 [.env.example](.env.example) 참고 |
+   | `AGENT_ENABLED` | (선택) 사이트 에이전트 스위치. 켤 때 **정확히 `true`** — 그 밖의 값은 전부 "꺼짐"이고, 꺼지면 화면에 "물어보기" 버튼이 안 뜨고 `/api/agent` 는 403 |
+   | `AGENT_ORIGIN` | 에이전트를 켠다면 배포 주소로 채우세요(예: `https://family-web-xxxx.vercel.app`, 끝 `/` 없이). 아래 ⚠️ |
+   | `AGENT_MODEL` | (선택) 모델 ID. 비우면 코드 기본값(`gpt-5.6-terra`) — 나머지 `AGENT_*` 는 [.env.example](.env.example) 참고 |
 
    ```bash
    openssl rand -base64 32   # 나온 값을 AUTH_SECRET 에 붙여넣기
    ```
    > DATABASE_URL 예: `postgresql://...-pooler.../neondb?sslmode=require&pgbouncer=true`
+
+   > ⚠️ **`AGENT_ORIGIN` 은 에이전트가 이 사이트의 내부 API 를 부를 때 쓰는 주소입니다.**
+   > 보안상 요청 헤더에서 만들지 않습니다 — 헤더를 믿으면 그 주소로 나가는 요청에 가족의 세션 쿠키가
+   > 실려 남의 서버로 걸어 나가기 때문이에요(`lib/agent/origin.ts`).
+   > 그래서 **서버가 아는 값만** 씁니다. 사슬은 이렇습니다:
+   >
+   > ```
+   > AGENT_ORIGIN → AUTH_URL → http://localhost:3000
+   > ```
+   >
+   > 비워 두면 곧바로 깨지는 건 아니고 `AUTH_URL` 로 떨어집니다. 다만 `AUTH_URL` 이 없거나 로컬 주소를
+   > 가리키면 **배포 서버의 도구가 localhost 를 부르게 되어** 항목 추가와 되돌리기가 조용히 실패해요.
+   > `AUTH_URL` 은 5절에서 첫 배포 뒤에 넣으므로, 그때 `AGENT_ORIGIN` 도 같이 채워 두는 게 안전합니다.
 
    > ⚠️ **사이트 에이전트를 쓴다면 `AUTH_SECRET` 을 새로 만들면 안 됩니다.**
    > 이 값은 로그인 세션 서명뿐 아니라 에이전트 토큰 암호화 키(`lib/agent/crypto.ts`)의 재료입니다.
@@ -96,6 +112,7 @@ Vercel은 파일을 서버에 저장할 수 없어서 사진은 Blob에 저장�
 
 1. `AUTH_URL` 환경변수를 실제 주소로 추가 → 다시 Redeploy
    - `AUTH_URL = https://family-web-xxxx.vercel.app`
+   - 사이트 에이전트를 켰다면 **같은 주소를 `AGENT_ORIGIN` 에도** 넣어 주세요(3절 표의 ⚠️).
 2. 그 주소 접속 → 로그인 (`wlsdud022`/`wlsdud022` 또는 만든 계정)
 3. 이제 **`git push` 하면 자동으로 재배포**됩니다.
 
@@ -152,9 +169,17 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
   프로덕션을 고치는 거라면 **`DATABASE_URL`·`AUTH_SECRET` 을 프로덕션 값으로** 붙여서 실행하세요.
 - 첫 갱신 예상 시점은 **2026-09-27**(만료 이틀 전부터 갱신). 그때 Vercel 로그에 `refresh: json ok` 또는 `refresh: form ok` 중 하나가 찍힙니다 — 어느 본문 형식이 맞는지는 아직 실측 전이라 둘 다 시도하게 해 두었고, 이 한 줄이 답을 알려 줍니다.
 
-### ⚠️ 4. 테이블 2개를 먼저 만드세요
+### ⚠️ 4. 테이블 4개를 먼저 만드세요
 
-`AgentAuth`·`AgentRun` 은 **코드 배포 전에** `prisma db push` 로 프로덕션에 반영합니다(2절). 순서가 어긋나면 해당 기능이 500 을 냅니다 — 예전에 `/baby` 에서 한 번 겪었어요.
+`AgentAuth`·`AgentRun`·`AgentChat`·`AgentChatMessage` 를 **코드 배포 전에** `prisma db push` 로 프로덕션에 반영합니다(2절). 순서가 어긋나면 해당 기능이 500 을 냅니다 — 예전에 `/baby` 에서 한 번 겪었어요.
+
+- `AgentAuth` — 암호화된 토큰 한 줄. 이 절의 명령이 채웁니다.
+- `AgentChat`·`AgentChatMessage` — 대화 기록. 창을 여는 것만으로는 DB 를 건드리지 않지만, **질문을 보내면 쓰고 ☰ 기록을 열면 읽습니다.** 코드가 먼저 올라가면 그 두 자리에서 500 이 납니다.
+- `AgentRun` — 실행 로그용. 지금은 **테이블만 있고 쓰는 코드가 없습니다**(만들어는 두세요, 스키마에 있으니).
+
+### ⚠️ 5. 아직 확인하지 못한 것
+
+- **Vercel Hobby 요금제에서 `maxDuration = 60` 이 허용되는지 모릅니다.** `app/api/agent/route.ts` 가 60초로 선언해 두었는데(토큰 갱신 HTTP 타임아웃 8초 × 2 + 여유가 필요해서), Hobby 의 상한이 그보다 낮으면 빌드나 실행에서 거절될 수 있어요. **첫 배포 후 실제로 한 번 물어보고** 로그를 확인하세요. 거절되면 그때 상한에 맞춰 줄이되, **8초 × 2 아래로는 내리지 마세요** — 갱신이 트랜잭션 안에서 일어나서, 중간에 함수가 죽으면 refresh_token 이 영구히 죽습니다(그러면 `npm run agent:login` 으로 다시 로그인해야 합니다).
 
 ---
 
@@ -166,6 +191,9 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 - **로그인 후 바로 튕김**: `AUTH_SECRET`이 설정됐는지 확인.
 - **에이전트가 "저장된 토큰을 읽지 못했어요"**: 토큰을 넣을 때와 `AUTH_SECRET`(또는 `KEY_DOMAIN`)이 달라진 경우예요 → 6절 ⚠️ 1·2.
 - **에이전트가 "토큰 갱신에 실패했어요 (HTTP 4xx · invalid_grant)"**: refresh_token 이 다른 곳에서 회전됐어요 → `npm run agent:login` 으로 다시 로그인 (6절 ⚠️ 3).
+- **"물어보기" 버튼이 안 보임**: `AGENT_ENABLED=true` 인지 확인하고 Redeploy. 꺼져 있으면 버튼이 아예 렌더되지 않아요(정상 동작).
+- **질문을 보내거나 ☰ 기록을 열면 500** (창을 여는 것 자체는 멀쩡함): `AgentChat`·`AgentChatMessage` 테이블이 아직 없어요 → 2절의 `prisma db push` (6절 ⚠️ 4).
+- **에이전트가 뭘 추가했다는데 사이트에 안 보이거나 되돌리기가 안 됨**: `AGENT_ORIGIN` 이 배포 주소인지 확인하세요. 비어 있으면 `AUTH_URL`, 그것도 없으면 `localhost:3000` 으로 나갑니다 (3절 표의 ⚠️).
 
 ## 다음 단계 (선택)
 - **구글 로그인/캘린더 연동**: 배포된 `vercel.app` 주소로 redirect URI 등록 → [REQUIREMENTS.md](REQUIREMENTS.md) "구글 로그인" 절

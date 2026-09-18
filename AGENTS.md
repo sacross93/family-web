@@ -48,17 +48,23 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - `read_url` 의 사설·내부망 차단은 **도구 층에만** 둔다 — `lib/url.ts` 는 아기 참고 사이트 카드가 공유하므로 거기를 조이면 무관한 기능이 깨진다.
 - 테스트는 `llm/fake.ts` 로 네트워크 없이 돈다. 스펙: `docs/superpowers/specs/2026-09-17-site-agent-design.md`(§16에 실측/미확인 구분).
 - 토큰은 `AgentAuth` 에 암호화 저장. 재발급은 `npm run agent:login`(브라우저 로그인 → DB 직행, 평문 파일 없음), 파일이 있으면 `npm run agent:auth -- <경로>`. **`AUTH_SECRET` 또는 `crypto.ts` 의 `KEY_DOMAIN` 이 바뀌면 기존 토큰을 못 읽는다** — 배포 전 [DEPLOY.md](DEPLOY.md) 6절 필독.
-- **2단계(라우트·UI)가 지켜야 할 것** — 엔진이 강제하지 못하는 부분이라 여기 적어 둔다.
-  - `ToolContext.origin` 을 `Host`/`X-Forwarded-Host` 헤더에서 만들지 말 것. 세션 쿠키가 공격자 서버로 나간다 — 환경변수나 고정 상수에서.
-  - **가상 경로 2개를 링크로 만들지 말 것**: `/decorations`(꾸미기)·`/family`(가족)는 `listPath` 자리를 채우려고 둔 값이라 **그런 페이지가 없다**(`app/decorations/`·`app/family/` 부재). 리소스 경로로 링크·"보러가기" 버튼을 만들 땐 **화이트리스트로 거르거나 이 둘을 제외**해야 한다. 안 그러면 사용자가 404 를 본다. 타입으로는 못 막으니 이 규칙이 유일한 방어선이다.
-  - `runAgent` 는 최종 `messages` 를 반환하지 않는다. 라우트가 대화 기록을 보관할 땐 assistant 의 `toolCalls` 와 tool 의 `toolCallId` 를 **짝째로** 저장해야 네이티브 도구 모드가 그 경계에서 안 깨진다.
-  - `/api/agent` 의 `maxDuration` 은 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유보다 크게. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
-  - **`agentConfig().enabled` 는 라우트가 검사할 것.** `.env.example` 은 `AGENT_ENABLED=true` 일 때만 동작한다고 약속하는데 엔진에는 이 값을 보는 곳이 하나도 없다. 꺼져 있으면 라우트가 곧바로 끝내야 약속이 지켜진다.
-  - **되돌리기는 `{resource, id}` 만 받을 것.** 서버가 `findResource(key)?.create?.undoApi(id)` 로만 경로를 만들고, 모르는 key 는 거절하고, 요청한 사용자의 쿠키로 **환경변수에서 만든** origin 에 DELETE 한다. 경로를 클라이언트가 주게 만들면 화이트리스트가 무의미해진다.
-  - **도구 결과 본문을 줄이는 건 엔진 쪽 일이다.** `loop.ts` 가 `JSON.stringify(result)` 로 대화에 넣고 라우트는 `LoopEvent` 만 보므로 라우트는 줄일 수 없다. 지금은 `read_url` 만 `fetchMaxChars` 로 잘리고 `open_page` 의 상세는 상한이 없다 — 줄여야 하면 도구·루프에서.
-  - **`AgentRun.steps` 에 `ToolResult.data` 를 넣지 말 것.** `read_url` 로 가져온 바깥 글과 가족 데이터가 로그 테이블에 눌러앉는다. 도구 이름·성패·label 까지만. 같은 이유로 공급자 오류 본문도 로그에 찍지 않는다.
-  - **`createCodexProvider()` 의 수명을 정할 것.** `session_id` 는 "대화 하나에 하나"로 만든다 — 요청마다 새로 만들면 그 의도가 깨진다. 대화 단위로 유지할지 요청 단위로 둘지 2단계가 명시적으로 고른다.
-  - **"…더 있음" 을 사용자에게도 보일 것.** 목록이 상한(`LIST_TAKE`)에 걸리면 엔진이 이 꼬리를 붙인다. 화면이 그것을 평범한 항목처럼 그리면 사용자는 여전히 "이게 전부"로 읽는다.
+- **2단계(라우트·UI)**: 화면은 `components/agent/*`(fab·sheet·thread·history·use-agent-chat·agent-stream), 라우트는 `app/api/agent/*`(대화 SSE·chats·undo). 대화 읽기·쓰기는 `lib/agent/chat-store.ts` 를 통한다 — 다만 `chats/[id]` 는 404 판정 때문에 `prisma` 를 직접 한 번 부른다(유일한 예외. 늘리지 말 것).
+- **2단계가 지킨 것** — 엔진이 강제하지 못하니 고칠 때 깨뜨리지 말 것.
+  - `ToolContext.origin` 은 `lib/agent/origin.ts` 의 `agentOrigin()`(환경변수) 한 곳에서만. `Host`/`X-Forwarded-Host` 헤더로 만들면 그 주소로 나가는 요청에 **요청자의 세션 쿠키가 실려** 남의 서버로 걸어 나간다.
+  - 가상 경로 `/decorations`·`/family` 는 링크로 만들지 않는다 — `components/agent/agent-thread.tsx` 의 `canVisit()`. `listPath` 자리를 채우려고 둔 값이라 **그런 페이지가 없다**(`app/decorations/`·`app/family/` 부재). 타입으로는 못 막으니 이 함수가 유일한 방어선이다.
+  - assistant 의 `toolCalls` ↔ tool 의 `toolCallId` 를 **짝째로** 저장한다 — `app/api/agent/route.ts` + `lib/agent/chat-store.ts`. 짝이 깨지면 네이티브 도구 모드가 그 경계에서 죽는다. 같은 밀리초의 순서는 `orderBy: [{createdAt:desc},{id:desc}]` 의 cuid 단조성에 기댄다.
+  - `app/api/agent/route.ts` 의 `maxDuration = 60` — 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
+  - `agentConfig().enabled` 는 **POST `/api/agent` 만** 검사한다(403 "아직 준비 중이에요."). `chats/*`·`undo` 는 **일부러** 안 건다 — 기능을 꺼도 남은 대화는 지울 수 있어야 하고 로그인은 `middleware.ts` 가 이미 강제한다. "빠졌다"고 채우지 말 것.
+  - 되돌리기는 `{resource, id}` 만 받는다 — `app/api/agent/undo/route.ts`. 경로는 서버가 `findResource(key)?.create?.undoApi(id)` 로만 만들고, `id` 는 `/^[A-Za-z0-9_-]{1,64}$/` 만 통과한다(`../site-config` 가 지나가면 화이트리스트가 무의미해진다). 대상의 5xx 는 502 로 번역해 우리 라우트가 500 으로 남지 않게 한다.
+- **2단계가 아직 안 지킨 것** — 하게 되면 여기서 지운다.
+  - **도구 결과 본문 줄이기.** `loop.ts` 가 `JSON.stringify(result)` 로 대화에 넣고 라우트는 `LoopEvent` 만 보므로 줄일 자리는 도구·루프뿐이다. 지금은 `read_url` 만 `fetchMaxChars` 로 잘리고 `open_page` 의 상세는 상한이 없다.
+  - **`AgentRun` 로그.** 테이블만 있고(`prisma/schema.prisma`) 쓰는 코드가 한 줄도 없다. 쓰게 되면 `steps` 에 `ToolResult.data` 를 넣지 말 것 — `read_url` 로 가져온 바깥 글과 가족 데이터가 로그 테이블에 눌러앉는다. 도구 이름·성패·label 까지만. 공급자 오류 본문도 마찬가지.
+  - **"…더 있음"을 사용자에게 보이기.** 목록이 상한(`LIST_TAKE`)에 걸리면 엔진이 꼬리(`MORE_TITLE`)를 붙이지만, 화면은 도구 결과를 카드 한 장(제목+버튼)으로만 그려 모델이 말로 옮겨 주는 데 기대고 있다.
+- **2단계가 정한 것**
+  - `createCodexProvider()` 수명 = **요청 하나.** `app/api/agent/route.ts` 가 요청마다 새로 만들어 `session_id` 도 턴마다 새로 생긴다. `store:false` 라 히스토리를 매번 다시 보내므로 문제되지 않는다.
+  - 결과 카드는 `components/agent/agent-stream.ts` 의 `visibleResults` 가 두 갈래로 추린다. **만든 것(`undo` 있음)은 하나도 접지 않는다** — 되돌리기를 품은 유일한 자리이고, 리소스 16종 중 14종은 `detailPattern` 이 없어 만든 항목의 `path` 가 목록 경로로 다 같아지므로 경로로 중복을 지우면 "우유·계란·빵" 의 둘째·셋째가 되돌리기째 사라진다. **찾아준 곳(`undo` 없음)만** 같은 경로 한 번 · 만든 카드가 이미 가리키는 곳 제외 · `MAX_PLACE_CARDS`(2장) 상한.
+  - 시트는 **폰에서만** `보러가기` 에 스스로 닫힌다(`onNavigate`). 데스크톱은 옆에 붙어 있어 도착한 페이지를 가리지 않으므로 닫지 않는다.
+  - 기록 삭제는 숨은 제스처가 아니라 **보이는 휴지통**(저장소의 다른 목록과 같은 규칙). 목록 조회가 실패하면 빈 목록으로 그리지 않는다 — "확인 안 됨"을 "없음"으로 보여주지 말 것.
 
 ## 마크다운 글쓰기
 - `components/markdown-editor.tsx`(툴바·단축키 ⌘B/I/K·미리보기·이미지 업로드·목록 자동이음) + `components/markdown-view.tsx`(react-markdown+remark-gfm). 렌더 스타일은 globals.css `.md-content`.
