@@ -796,35 +796,58 @@ function userItem(message: AgentMessage): InputItem[] {
 
 `InputItem` 의 첫 갈래를 넓혀라: `{ role: "user" | "assistant"; content: string | { type: string; text?: string; image_url?: string }[] }`.
 
-`lib/agent/llm/codex.test.ts` 에 두 개를 더한다:
+`lib/agent/llm/codex.test.ts` 에 `describe("codex 공급자 — 사진 첨부", …)` 를 더한다. 이 파일은 `buildBody` 를 직접 부르지 않고 **fetch 를 가로채 본문을 본다** — 이미 있는 `sse`·`drain`·`bodyOf`·`token`·`W.completed` 를 그대로 쓴다(새 수출을 만들지 마라):
 
 ```ts
-it("사진이 붙으면 input_image 파트로 나간다", () => {
-  const body = buildBodyForTest({
-    system: "s",
-    tools: [],
-    messages: [{ role: "user", content: "이거 뭐야?", imageData: "data:image/jpeg;base64,AAA" }],
+describe("codex 공급자 — 사진 첨부", () => {
+  it("사진이 붙으면 input_image 파트로 나간다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [
+          { role: "user", content: "이거 뭐야?", imageData: "data:image/jpeg;base64,AAA" },
+        ],
+      }),
+    );
+    expect(bodyOf(f, 0).input).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "이거 뭐야?" },
+          { type: "input_image", image_url: "data:image/jpeg;base64,AAA" },
+        ],
+      },
+    ]);
   });
-  expect(body.input).toEqual([
-    {
-      role: "user",
-      content: [
-        { type: "input_text", text: "이거 뭐야?" },
-        { type: "input_image", image_url: "data:image/jpeg;base64,AAA" },
-      ],
-    },
-  ]);
-});
 
-it("사진이 없으면 지금까지처럼 문자열 하나다", () => {
-  const body = buildBodyForTest({ system: "s", tools: [], messages: [{ role: "user", content: "안녕" }] });
-  expect(body.input).toEqual([{ role: "user", content: "안녕" }]);
+  it("사진이 없으면 지금까지처럼 문자열 하나다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", tools: [], messages: [{ role: "user", content: "안녕" }] }));
+    expect(bodyOf(f, 0).input).toEqual([{ role: "user", content: "안녕" }]);
+  });
+
+  it("사진만 있고 글이 없으면 input_image 파트만 나간다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(
+      p.sendTurn({
+        system: "s",
+        tools: [],
+        messages: [{ role: "user", content: "  ", imageData: "data:image/jpeg;base64,AAA" }],
+      }),
+    );
+    expect(bodyOf(f, 0).input).toEqual([
+      { role: "user", content: [{ type: "input_image", image_url: "data:image/jpeg;base64,AAA" }] },
+    ]);
+  });
 });
 ```
 
-`buildBodyForTest` 라는 이름의 도우미가 없으면 그 파일이 이미 `buildBody` 를 어떻게 시험하는지 보고 **그 방식을 따라라.** 새 수출을 만들지 마라.
-
-두 번째 시험이 중요하다 — 사진 없는 경우가 예전 모양 그대로임을 못 박는다. 이게 없으면 파트 배열로 통일해 버리는 회귀를 아무도 못 잡는다.
+두 번째 시험이 중요하다 — 사진 없는 경우가 예전 모양 그대로임을 못 박는다. 이게 없으면 전부 파트 배열로 통일해 버리는 회귀를 아무도 못 잡는다. 세 번째는 `textItem` 이 빈 글을 버리는 규칙(`text.trim() ? … : []`)을 사진 쪽으로 잘못 옮기면 **사진까지 통째로 사라지는** 것을 잡는다.
 
 - [ ] **Step 5: 시험**
 
