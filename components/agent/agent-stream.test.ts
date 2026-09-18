@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createSseParser, EMPTY_STREAM, foldMessages, pushDelta, pushResult, pushUser } from "./agent-stream";
+import { createSseParser, EMPTY_STREAM, foldMessages, pushDelta, pushResult, pushUser, visibleResults } from "./agent-stream";
 import type { StreamBubbles } from "./agent-stream";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import type { ToolResult } from "@/lib/agent/tools";
@@ -167,5 +167,61 @@ describe("foldMessages", () => {
 
   it("빈 기록은 빈 화면", () => {
     expect(foldMessages([])).toEqual([]);
+  });
+});
+
+describe("visibleResults", () => {
+  const made = (label: string, path: string, id: string) => ({
+    ok: true as const,
+    data: null,
+    label,
+    path,
+    undo: { resource: "todo", id },
+  });
+  const found = (label: string, path: string) => ({ ok: true as const, data: null, label, path });
+
+  it("만든 것을 먼저 보여준다 — 잘리면 되돌릴 방법이 사라진다", () => {
+    const kept = visibleResults([
+      found("사진첩", "/albums"),
+      found("계획", "/plans"),
+      found("할일", "/todos"),
+      made("할일 · 우유 사기", "/todos/abc", "abc"),
+    ]);
+    expect(kept[0]?.label).toBe("할일 · 우유 사기");
+    expect(kept.map((r) => r.label)).toContain("할일 · 우유 사기");
+  });
+
+  it("같은 곳을 두 번 보여주지 않는다", () => {
+    const kept = visibleResults([found("사진첩", "/albums"), found("사진첩", "/albums")]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("세 장을 넘기지 않는다", () => {
+    const kept = visibleResults([
+      found("가", "/a"),
+      found("나", "/b"),
+      found("다", "/c"),
+      found("라", "/d"),
+      found("마", "/e"),
+    ]);
+    expect(kept).toHaveLength(3);
+  });
+
+  it("실패한 결과와 라벨 없는 결과는 카드가 되지 않는다", () => {
+    const kept = visibleResults([
+      { ok: false, error: "못 찾았어요" },
+      { ok: true, data: null, path: "/todos" },
+      found("할일", "/todos"),
+    ]);
+    expect(kept).toEqual([found("할일", "/todos")]);
+  });
+
+  it("경로가 없는 결과는 라벨로 가른다", () => {
+    const kept = visibleResults([
+      { ok: true, data: null, label: "example.com" },
+      { ok: true, data: null, label: "example.com" },
+      { ok: true, data: null, label: "other.com" },
+    ]);
+    expect(kept).toHaveLength(2);
   });
 });

@@ -8,10 +8,8 @@ import { Button } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
-import type { AgentChatState, AssistantBubble } from "./use-agent-chat";
-
-type Result = AssistantBubble["results"][number];
-type OkResult = Extract<Result, { ok: true }>;
+import { visibleResults, type OkResult } from "./agent-stream";
+import type { AgentChatState } from "./use-agent-chat";
 
 /**
  * 빈 화면이 사용법을 가르친다 — 커서만 깜빡이면 뭘 할 수 있는지 모른다.
@@ -41,10 +39,6 @@ function undoKey(undo: { resource: string; id: string }): string {
   return `${undo.resource}:${undo.id}`;
 }
 
-function isOk(result: Result): result is OkResult {
-  return result.ok;
-}
-
 /** 추가한 것 하나 — 제목 + [보러가기] [되돌리기]. */
 function ResultCard({
   result,
@@ -52,12 +46,14 @@ function ResultCard({
   busy,
   error,
   onUndo,
+  onNavigate,
 }: {
   result: OkResult;
   undone: boolean;
   busy: boolean;
   error: string | null;
   onUndo: (undo: { resource: string; id: string }) => void;
+  onNavigate: () => void;
 }) {
   const undo = result.undo;
   const visitable = canVisit(result.path) ? result.path : null;
@@ -75,7 +71,7 @@ function ResultCard({
           {(visitable || undo) && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               {visitable && (
-                <Button href={visitable} size="sm" variant="outline">
+                <Button href={visitable} size="sm" variant="outline" onClick={onNavigate}>
                   보러가기
                 </Button>
               )}
@@ -105,9 +101,12 @@ export function AgentThread({
   onSuggest,
   undone,
   onUndone,
+  onNavigate,
 }: {
   state: AgentChatState;
   onSuggest: (text: string) => void;
+  /** 카드의 [보러가기]로 떠날 때. 폰에서는 시트가 덮고 있어 닫아 주지 않으면 도착한 곳이 안 보인다. */
+  onNavigate: () => void;
   /** 이미 되돌린 것들(`resource:id`). 시트가 쥔다 — 닫았다 열어도 같은 것을 두 번 되돌리지 않게. */
   undone: Record<string, boolean>;
   onUndone: (key: string) => void;
@@ -205,8 +204,7 @@ export function AgentThread({
               <div key={index} className="flex justify-start">
                 <div className="min-w-0 max-w-[92%] break-words rounded-3xl rounded-bl-lg border border-line bg-surface px-4 py-2.5 shadow-sm">
                   {bubble.text && <MarkdownView className="text-[15px]">{bubble.text}</MarkdownView>}
-                  {bubble.results.filter(isOk).map((result, rIndex) => {
-                    if (!result.label) return null;
+                  {visibleResults(bubble.results).map((result, rIndex) => {
                     const key = result.undo ? undoKey(result.undo) : "";
                     return (
                       <ResultCard
@@ -216,6 +214,7 @@ export function AgentThread({
                         busy={Boolean(key && busy[key])}
                         error={(key && undoErrors[key]) || null}
                         onUndo={runUndo}
+                        onNavigate={onNavigate}
                       />
                     );
                   })}

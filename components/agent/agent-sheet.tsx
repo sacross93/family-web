@@ -113,6 +113,11 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
     setUndone((prev) => ({ ...prev, [key]: true }));
   }, []);
 
+  // 폰에서만 닫는다 — 데스크톱 시트는 옆에 붙어 있어서 도착한 페이지를 가리지 않는다.
+  const leaveFor = useCallback(() => {
+    if (isPhone()) onClose();
+  }, [onClose]);
+
   const newChat = useCallback(() => {
     state.reset();
     setDraft("");
@@ -170,7 +175,13 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             지난 대화 목록은 곧 여기에 담겨요.
           </div>
         ) : (
-          <AgentThread state={state} onSuggest={ask} undone={undone} onUndone={markUndone} />
+          <AgentThread
+            state={state}
+            onSuggest={ask}
+            undone={undone}
+            onUndone={markUndone}
+            onNavigate={leaveFor}
+          />
         )}
 
         {!history && (

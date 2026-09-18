@@ -38,6 +38,8 @@ type ButtonProps = CommonProps &
 
 type LinkProps = CommonProps & {
   href: string;
+  /** 링크를 따라가기 직전에 할 일(예: 떠나면서 열려 있던 창 닫기). */
+  onClick?: () => void;
 };
 
 export function Button(props: ButtonProps | LinkProps) {
@@ -46,7 +48,7 @@ export function Button(props: ButtonProps | LinkProps) {
 
   if ("href" in props && props.href) {
     return (
-      <Link href={props.href} className={classes}>
+      <Link href={props.href} className={classes} onClick={props.onClick}>
         {children}
       </Link>
     );

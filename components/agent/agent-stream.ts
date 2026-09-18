@@ -12,6 +12,41 @@ export type Bubble =
 
 export type AssistantBubble = Extract<Bubble, { kind: "assistant" }>;
 
+/** 성공한 도구 결과. 화면은 실패한 결과를 카드로 그리지 않는다(포동이가 말로 설명한다). */
+export type OkResult = Extract<ToolResult, { ok: true }>;
+
+/**
+ * 한 말풍선이 보여줄 카드 수 상한. 왕복이 6번까지 허용되므로(lib/agent/loop.ts) 그대로 두면
+ * 390px 화면이 카드로 가득 찬다.
+ */
+const MAX_CARDS = 3;
+
+/**
+ * 말풍선 하나에 실제로 그릴 결과들.
+ *
+ * 도구는 목록을 보거나 페이지를 열 때도 `label`·`path` 를 돌려주므로(lib/agent/tools.ts)
+ * "찾아준 곳"에도 카드가 생긴다 — 그건 유용하다(폰에서 답 아래 바로 [보러가기]).
+ * 다만 **같은 곳을 두 번 보여주지 않고**, **만든 것을 먼저** 남긴다.
+ * 만든 것(`undo` 가 있는 것)은 되돌리기를 품고 있어 잘리면 되돌릴 방법이 사라진다.
+ */
+export function visibleResults(results: ToolResult[]): OkResult[] {
+  const ok = results.filter((r): r is OkResult => r.ok && Boolean(r.label));
+  // 만든 것을 앞으로. 그 안에서는 원래 순서를 지킨다(안정 정렬).
+  const ordered = [...ok.filter((r) => r.undo), ...ok.filter((r) => !r.undo)];
+
+  const seen = new Set<string>();
+  const kept: OkResult[] = [];
+  for (const result of ordered) {
+    // 경로가 없는 결과(read_url 등)는 서로 겹칠 일이 없으니 라벨로 가른다.
+    const at = result.path ?? `label:${result.label}`;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    kept.push(result);
+    if (kept.length === MAX_CARDS) break;
+  }
+  return kept;
+}
+
 /**
  * 서버가 흘려보낸 한 줄. `type` 말고는 믿지 않고 쓰는 쪽에서 확인한다.
  * 열린 모양인 이유: 서버가 나중에 이벤트를 늘려도 화면이 막히지 않아야 한다.
