@@ -5,7 +5,7 @@
 import { agentConfig } from "./config";
 import { detailPath, findResource, resolvePath } from "./registry";
 import type { AgentResource, CreateSpec, JsonSchema, ToolSchema } from "./registry";
-import { RESOURCES } from "./resources";
+import { LIST_TAKE, MORE_TITLE, RESOURCES } from "./resources";
 import { displayDomain, normalizeUrl } from "@/lib/url";
 
 /** 도구 실행 문맥. 쿠키는 요청의 세션을 그대로 넘겨 화면에서 누른 것과 같은 권한으로 동작시킨다. */
@@ -85,7 +85,8 @@ export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[
     {
       name: "list_resource",
       description:
-        `한 종류의 목록을 전부 본다. 목차에서 "외 N개"로 접힌 항목을 펼칠 때 쓴다. ` +
+        `한 종류의 목록을 본다(한 번에 최대 ${LIST_TAKE}개). 목차에서 "외 N개"로 접힌 항목을 펼칠 때 쓴다. ` +
+        `목록 끝에 "${MORE_TITLE}"이 있으면 그게 전부가 아니라는 뜻이다. ` +
         `종류: ${resourceHints(resources)}`,
       parameters: objectSchema(
         {
@@ -233,10 +234,17 @@ async function openPage(args: Record<string, unknown>, resources: AgentResource[
     return fail(`그 페이지는 열 수 없어요. 열 수 있는 경로: ${pathHints(resources)}`);
   }
 
-  if (target.id && resource.detail) {
+  // 상세를 가진 리소스는 상세로 답한다. 항목이 하나뿐이라 detailPattern 이 없는 리소스(아기)는
+  // 경로에 id 가 없으므로 id 없이 부른다 — id 를 기다리면 그 상세는 영원히 읽히지 않는다.
+  // (detailPattern 이 있는 리소스를 목록 경로로 열면 지금처럼 목차다: /albums 는 앨범 하나가 아니다.)
+  if (resource.detail && (target.id || !resource.detailPattern)) {
     const data = await resource.detail(target.id);
-    if (data === null || data === undefined) return fail("그 항목을 찾지 못했어요.");
-    return { ok: true, data, label: resource.label, path: detailPath(resource, target.id) };
+    if (target.id && (data === null || data === undefined)) return fail("그 항목을 찾지 못했어요.");
+    if (data !== null && data !== undefined) {
+      const path = target.id ? detailPath(resource, target.id) : resource.listPath;
+      return { ok: true, data, label: resource.label, path };
+    }
+    // 단일 리소스가 아직 등록 전이면(아기 정보 없음) 목차로 내려간다 — 빈 목차와 같은 답이 된다.
   }
 
   return { ok: true, data: await resource.catalog(), label: resource.label, path: resource.listPath };

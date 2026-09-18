@@ -478,3 +478,45 @@ describe("read_url 보강", () => {
     expect(r).toEqual({ ok: false, error: "그 주소의 내용이 너무 커서 읽지 못했어요." });
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// 상세가 하나뿐인 리소스(아기) — 경로에 id 가 없어도 상세를 읽는다.
+// ─────────────────────────────────────────────────────────────
+
+describe("open_page — detailPattern 이 없는 단일 리소스", () => {
+  /** 아기처럼 "항목이 하나뿐"이라 상세 경로가 따로 없는 리소스. detail 은 id 를 받지 않는다. */
+  const SINGLE: AgentResource = {
+    key: "baby", label: "아기", listPath: "/baby",
+    catalog: async () => [{ title: "콩이", hint: "기록 12" }],
+    detail: async (id?: string) => ({
+      askedId: id ?? null,
+      nickname: "콩이",
+      entries: [{ content: "오늘 태동을 느꼈다" }],
+      checklist: [{ text: "산모수첩 챙기기" }],
+      links: [{ url: "https://example.com/baby" }],
+    }),
+  };
+
+  it("id 없이 열어도 상세를 읽는다(목차 한 줄로 떨어지지 않는다)", async () => {
+    const r = await executeTool("open_page", { path: "/baby" }, ctxOf([SINGLE]));
+    expect(r).toMatchObject({ ok: true, path: "/baby", label: "아기" });
+    const data = (r as { data: { askedId: null; entries: { content: string }[] } }).data;
+    expect(data.askedId).toBe(null); // id 없이 불린다
+    expect(data.entries[0].content).toBe("오늘 태동을 느꼈다");
+  });
+
+  it("상세가 비어 있으면 목차로 답한다(등록 전에도 동작은 그대로)", async () => {
+    const empty: AgentResource = { ...SINGLE, catalog: async () => [], detail: async () => null };
+    const r = await executeTool("open_page", { path: "/baby" }, ctxOf([empty]));
+    expect(r).toMatchObject({ ok: true, path: "/baby" });
+    expect((r as { data: unknown[] }).data).toEqual([]);
+  });
+
+  it("detailPattern 이 있는 리소스는 id 없이 열면 그대로 목차다(앨범·계획 회귀 방지)", async () => {
+    const r = await executeTool("open_page", { path: "/plans" }, ctx());
+    expect(r).toMatchObject({ ok: true, path: "/plans", label: "계획" });
+    const data = (r as { data: unknown }).data;
+    expect(Array.isArray(data)).toBe(true); // 상세 객체가 아니라 목차 배열
+    expect((data as { title: string }[])[0].title).toBe("발리");
+  });
+});

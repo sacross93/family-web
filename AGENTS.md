@@ -53,6 +53,12 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
   - **가상 경로 2개를 링크로 만들지 말 것**: `/decorations`(꾸미기)·`/family`(가족)는 `listPath` 자리를 채우려고 둔 값이라 **그런 페이지가 없다**(`app/decorations/`·`app/family/` 부재). 리소스 경로로 링크·"보러가기" 버튼을 만들 땐 **화이트리스트로 거르거나 이 둘을 제외**해야 한다. 안 그러면 사용자가 404 를 본다. 타입으로는 못 막으니 이 규칙이 유일한 방어선이다.
   - `runAgent` 는 최종 `messages` 를 반환하지 않는다. 라우트가 대화 기록을 보관할 땐 assistant 의 `toolCalls` 와 tool 의 `toolCallId` 를 **짝째로** 저장해야 네이티브 도구 모드가 그 경계에서 안 깨진다.
   - `/api/agent` 의 `maxDuration` 은 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유보다 크게. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
+  - **`agentConfig().enabled` 는 라우트가 검사할 것.** `.env.example` 은 `AGENT_ENABLED=true` 일 때만 동작한다고 약속하는데 엔진에는 이 값을 보는 곳이 하나도 없다. 꺼져 있으면 라우트가 곧바로 끝내야 약속이 지켜진다.
+  - **되돌리기는 `{resource, id}` 만 받을 것.** 서버가 `findResource(key)?.create?.undoApi(id)` 로만 경로를 만들고, 모르는 key 는 거절하고, 요청한 사용자의 쿠키로 **환경변수에서 만든** origin 에 DELETE 한다. 경로를 클라이언트가 주게 만들면 화이트리스트가 무의미해진다.
+  - **도구 결과 본문을 줄이는 건 엔진 쪽 일이다.** `loop.ts` 가 `JSON.stringify(result)` 로 대화에 넣고 라우트는 `LoopEvent` 만 보므로 라우트는 줄일 수 없다. 지금은 `read_url` 만 `fetchMaxChars` 로 잘리고 `open_page` 의 상세는 상한이 없다 — 줄여야 하면 도구·루프에서.
+  - **`AgentRun.steps` 에 `ToolResult.data` 를 넣지 말 것.** `read_url` 로 가져온 바깥 글과 가족 데이터가 로그 테이블에 눌러앉는다. 도구 이름·성패·label 까지만. 같은 이유로 공급자 오류 본문도 로그에 찍지 않는다.
+  - **`createCodexProvider()` 의 수명을 정할 것.** `session_id` 는 "대화 하나에 하나"로 만든다 — 요청마다 새로 만들면 그 의도가 깨진다. 대화 단위로 유지할지 요청 단위로 둘지 2단계가 명시적으로 고른다.
+  - **"…더 있음" 을 사용자에게도 보일 것.** 목록이 상한(`LIST_TAKE`)에 걸리면 엔진이 이 꼬리를 붙인다. 화면이 그것을 평범한 항목처럼 그리면 사용자는 여전히 "이게 전부"로 읽는다.
 
 ## 마크다운 글쓰기
 - `components/markdown-editor.tsx`(툴바·단축키 ⌘B/I/K·미리보기·이미지 업로드·목록 자동이음) + `components/markdown-view.tsx`(react-markdown+remark-gfm). 렌더 스타일은 globals.css `.md-content`.

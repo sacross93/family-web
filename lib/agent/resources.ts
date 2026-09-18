@@ -95,6 +95,30 @@ async function memberIdByName(name: unknown): Promise<string | undefined> {
   return member.id;
 }
 
+/**
+ * 목차·목록이 한 리소스에서 한 번에 읽어 오는 행 수 상한. DB 와 프롬프트를 지키려고 둔 값이지
+ * "이게 전부"라는 뜻이 **아니다** — 상한에 걸리면 `capped()` 가 "더 있음" 한 줄을 남긴다.
+ * 각 catalog 에 숫자를 흩어 놓지 않고 여기 한 곳에서만 정한다(흩어지면 조용한 누락이 다시 생긴다).
+ * config.ts(환경변수)로 빼지 않은 이유: 운영자가 조절할 값이 아니라 목록의 모양을 정하는 상수다.
+ */
+export const LIST_TAKE = 30;
+
+/** 앞으로의 일정이 하나도 없을 때만 대신 싣는 "지난 일정" 폴백의 상한. 보조 정보라 더 짧다. */
+export const PAST_TAKE = 10;
+
+/** 상한에 걸려 잘렸다는 표시. 목차와 `list_resource` 가 같은 문구를 쓴다. */
+export const MORE_TITLE = "…더 있음";
+
+/**
+ * 상한까지 꽉 차게 읽혔으면 "더 있음" 한 줄을 덧붙인다.
+ * 리소스별 분기 없이, 상한이 있는 모든 목록이 같은 규칙을 쓴다.
+ * 행 수가 딱 상한과 같을 때도 붙는다(한 줄 더 읽어 확인하지는 않는다) — 더 없는데 "더 있을지 모른다"고
+ * 말하는 쪽이, 있는데 "없다"고 말하는 것보다 안전하기 때문이다.
+ */
+function capped(entries: CatalogEntry[], take: number): CatalogEntry[] {
+  return entries.length >= take ? [...entries, { title: MORE_TITLE }] : entries;
+}
+
 /** 스티커를 붙일 수 있는 페이지 목록(상단 메뉴 + 모든 페이지). */
 const DECORATION_PAGES = [...NAV.map((n) => n.href), "global"];
 
@@ -141,7 +165,8 @@ export const RESOURCES: AgentResource[] = [
           .join(" · "),
       }));
     },
-    async detail(id) {
+    // 앨범은 detailPattern 이 있으므로 언제나 id 와 함께 불린다.
+    async detail(id: string) {
       return prisma.album.findUnique({
         where: { id },
         include: { photos: { orderBy: { sortOrder: "asc" } } },
@@ -212,7 +237,7 @@ export const RESOURCES: AgentResource[] = [
     async catalog() {
       const rows = await prisma.plan.findMany({
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: LIST_TAKE,
         select: {
           id: true,
           title: true,
@@ -222,17 +247,21 @@ export const RESOURCES: AgentResource[] = [
           _count: { select: { items: true } },
         },
       });
-      return rows.map((p) => ({
-        id: p.id,
-        title: p.title,
-        hint: hintOf([
-          p.type,
-          p.startDate ? `${kDateShort(p.startDate)}${p.endDate ? `~${kDateShort(p.endDate)}` : ""}` : null,
-          `일정 ${p._count.items}`,
-        ]),
-      }));
+      return capped(
+        rows.map((p) => ({
+          id: p.id,
+          title: p.title,
+          hint: hintOf([
+            p.type,
+            p.startDate ? `${kDateShort(p.startDate)}${p.endDate ? `~${kDateShort(p.endDate)}` : ""}` : null,
+            `일정 ${p._count.items}`,
+          ]),
+        })),
+        LIST_TAKE
+      );
     },
-    async detail(id) {
+    // 계획도 detailPattern 이 있으므로 언제나 id 와 함께 불린다.
+    async detail(id: string) {
       return prisma.plan.findUnique({
         where: { id },
         include: {
@@ -366,15 +395,14 @@ export const RESOURCES: AgentResource[] = [
           where: { done: false },
           orderBy: [{ date: "asc" }, { sortOrder: "asc" }],
           select: { id: true, title: true, date: true },
-          take: 20,
+          take: LIST_TAKE,
         }),
         prisma.todo.count({ where: { done: true } }),
       ]);
-      const entries: CatalogEntry[] = rows.map((t) => ({
-        id: t.id,
-        title: t.title,
-        hint: kDateShort(t.date),
-      }));
+      const entries: CatalogEntry[] = capped(
+        rows.map((t) => ({ id: t.id, title: t.title, hint: kDateShort(t.date) })),
+        LIST_TAKE
+      );
       if (doneCount) entries.push({ title: `완료한 할일 ${doneCount}개` });
       return entries;
     },
@@ -424,26 +452,29 @@ export const RESOURCES: AgentResource[] = [
         where: { start: { gte: startOfDay(new Date()) } },
         orderBy: { start: "asc" },
         select,
-        take: 20,
+        take: LIST_TAKE,
       });
       // 폴백으로 지난 일정을 싣는 경우, 표시가 없으면 "다음 일정"을 지난 일로 답하게 된다.
       let past = false;
       if (rows.length === 0) {
         rows = (
-          await prisma.calendarEvent.findMany({ orderBy: { start: "desc" }, select, take: 10 })
+          await prisma.calendarEvent.findMany({ orderBy: { start: "desc" }, select, take: PAST_TAKE })
         ).reverse();
         past = true;
       }
-      return rows.map((e) => ({
-        id: e.id,
-        title: e.title,
-        hint: hintOf([
-          past ? "지난 일정" : null,
-          kDateShort(e.start),
-          e.allDay ? "하루 종일" : kTime(e.start),
-          e.location,
-        ]),
-      }));
+      return capped(
+        rows.map((e) => ({
+          id: e.id,
+          title: e.title,
+          hint: hintOf([
+            past ? "지난 일정" : null,
+            kDateShort(e.start),
+            e.allDay ? "하루 종일" : kTime(e.start),
+            e.location,
+          ]),
+        })),
+        past ? PAST_TAKE : LIST_TAKE
+      );
     },
     create: {
       api: "/api/events",
@@ -484,11 +515,11 @@ export const RESOURCES: AgentResource[] = [
       const rows = await prisma.anniversary.findMany({
         orderBy: { date: "asc" },
         select: { id: true, title: true, date: true, type: true, recurring: true },
-        take: 30,
+        take: LIST_TAKE,
       });
       // 저장된 원본 날짜를 그대로 쓰면 반복 기념일의 요일이 수십 년 전 요일이 된다.
       // 화면들과 똑같이 dday 의 nextDate 를 쓴다(반복이 아니면 원본 날짜와 같다).
-      return rows
+      const entries = rows
         .map((a) => ({ ...a, d: dday(a.date, { recurring: a.recurring }) }))
         // 다가오는 것을 가까운 순으로 앞에, 이미 지난 것(반복이 아닌 기념일)은 최근 순으로 뒤에.
         // 지난 것이 앞에 오면 "다음 기념일"을 지난 일로 답하게 된다.
@@ -508,6 +539,7 @@ export const RESOURCES: AgentResource[] = [
             a.recurring ? "매년" : null,
           ]),
         }));
+      return capped(entries, LIST_TAKE);
     },
     create: {
       api: "/api/anniversaries",
@@ -553,13 +585,16 @@ export const RESOURCES: AgentResource[] = [
       const rows = await prisma.boardPost.findMany({
         orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
         select: { id: true, content: true, pinned: true, createdAt: true, author: { select: { name: true } } },
-        take: 20,
+        take: LIST_TAKE,
       });
-      return rows.map((p) => ({
-        id: p.id,
-        title: firstLine(p.content),
-        hint: hintOf([kDateShort(p.createdAt), p.author?.name, p.pinned ? "고정" : null]),
-      }));
+      return capped(
+        rows.map((p) => ({
+          id: p.id,
+          title: firstLine(p.content),
+          hint: hintOf([kDateShort(p.createdAt), p.author?.name, p.pinned ? "고정" : null]),
+        })),
+        LIST_TAKE
+      );
     },
     create: {
       api: "/api/board",
@@ -595,13 +630,16 @@ export const RESOURCES: AgentResource[] = [
       const rows = await prisma.shoppingItem.findMany({
         orderBy: [{ done: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
         select: { id: true, name: true, quantity: true, done: true },
-        take: 30,
+        take: LIST_TAKE,
       });
-      return rows.map((s) => ({
-        id: s.id,
-        title: s.name,
-        hint: hintOf([s.quantity, s.done ? "완료" : null]),
-      }));
+      return capped(
+        rows.map((s) => ({
+          id: s.id,
+          title: s.name,
+          hint: hintOf([s.quantity, s.done ? "완료" : null]),
+        })),
+        LIST_TAKE
+      );
     },
     create: {
       api: "/api/shopping",
@@ -647,13 +685,17 @@ export const RESOURCES: AgentResource[] = [
         ].join(" · "),
       }];
     },
+    // 아기는 1명이라 상세 경로(/baby/:id)가 없다 → open_page("/baby") 가 id 없이 부른다.
     async detail() {
       return prisma.baby.findFirst({
         orderBy: { createdAt: "desc" },
         include: {
-          entries: { orderBy: { date: "desc" }, take: 20, include: { author: true } },
+          // 기록은 최근 것만 싣는다. 몇 개를 못 실었는지는 _count 로 함께 알려 준다
+          // (잘린 줄 모르면 "기록은 이게 전부"라고 답해 버린다).
+          entries: { orderBy: { date: "desc" }, take: LIST_TAKE, include: { author: true } },
           checklist: { orderBy: { sortOrder: "asc" } },
           links: { orderBy: { sortOrder: "asc" } },
+          _count: { select: { entries: true } },
         },
       });
     },

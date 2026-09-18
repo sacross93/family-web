@@ -73,8 +73,8 @@ export interface AgentResource {
   /** 1층 목차 한 줄. 제목·날짜·개수 수준으로만. */
   catalog(): Promise<CatalogEntry[]>;
 
-  /** 2층 상세. 그 페이지가 보여주는 데이터 전부. */
-  detail?(id: string): Promise<unknown>;
+  /** 2층 상세. 그 페이지가 보여주는 데이터 전부. 단일 리소스(아기)는 id 없이 불린다. */
+  detail?(id?: string): Promise<unknown>;
 
   /** 추가 가능한 리소스만 정의. 없으면 agent는 추가할 수 없다. */
   create?: CreateSpec;
@@ -113,7 +113,7 @@ export interface CatalogEntry {
 | `anniversary` | 기념일 | `/anniversaries` | 날짜·제목 (D-day 순, 지난 것은 뒤로) | — | `/api/anniversaries` | `DELETE /api/anniversaries/[id]` |
 | `board` | 게시판 글 | `/board` | 첫 줄·날짜·작성자 | — | `/api/board` | `DELETE /api/board/[id]` |
 | `shopping` | 장보기 | `/shopping` | 이름·수량·완료 | — | `/api/shopping` | `DELETE /api/shopping/[id]` |
-| `baby` | 아기 | `/baby` | 태명·예정일(또는 출생)·기록수 | — | — | — |
+| `baby` | 아기 | `/baby` | 태명·예정일(또는 출생)·기록수 | ✅ 기록(최근 30)·체크리스트·참고 사이트 | — | — |
 | `babyEntry` | 아기 기록 | `/baby` | 총 개수만 | — | `/api/baby-entries` | `DELETE /api/baby-entries/[id]` |
 | `babyChecklist` | 아기 준비 체크리스트 | `/baby` | 총 개수·완료수 | — | `/api/baby-checklist` | `DELETE /api/baby-checklist/[id]` |
 | `babyLink` | 아기 참고 사이트 | `/baby` | 총 개수만 | — | `/api/baby-links` | `DELETE /api/baby-links/[id]` |
@@ -122,7 +122,7 @@ export interface CatalogEntry {
 ⚠️ **`/family` 와 `/decorations` 는 실재하지 않는 가상 경로다**(`app/family/`·`app/decorations/` 가 없다). 가족만 모아 보는 페이지도, 스티커만 모아 보는 페이지도 없어서 `listPath` 가 다른 리소스와 겹치지 않도록 둔 자리표시자다(`decoration` 에 `"/"` 를 주면 홈 질문이 "스티커 목록"으로 해석된다). **결과 카드에서 사용자를 이 두 경로로 보내면 404 다.**
 
 - **`familyMember` 는 읽기 전용이다** — 에이전트가 가족 구성원을 만들어서는 안 된다. 그런데도 목차에 올리는 이유는, `todo`·`anniversary`·`board`·`shopping`·`babyEntry` 가 이름·역할로 사람을 찾기 때문이다. 목록이 없으면 LLM 이 이름을 지어내고 조회가 실패해 **추가가 통째로 깨진다**.
-- **`detail` 을 가진 건 `album`·`plan` 둘뿐이다.** 나머지는 목차로 답하거나 `list_resource` 로 펼친다.
+- **`detail` 을 가진 건 `album`·`plan`·`baby` 셋이다.** 앞의 둘은 `detailPattern` 으로 `/albums/:id`·`/plans/:id` 를 열고, `baby` 는 항목이 하나뿐이라 상세 경로가 없다 — `/baby` 를 열면 id 없이 `detail()` 이 불린다. 나머지는 목차로 답하거나 `list_resource` 로 펼친다.
 - LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범·계획은 제목으로, 아기는 1명으로, 가족은 이름(또는 역할)으로 찾아 `toBody` 가 id 를 채운다.
 
 `site-config` · `nav` · `auth` 는 등록하지 않는다(설정 변경은 범위 밖).
@@ -136,6 +136,7 @@ export interface CatalogEntry {
 - **캐시하지 않는다.** 60행 규모에서 `prisma.$transaction` 한 번(count + 가벼운 select)이면 50ms 미만이고 항상 최신이다.
 - 각 POST 라우트에 갱신 훅을 심지 않는다 — 무효화 로직이 없는 쪽이 안전하다.
 - 목차 총 길이 상한 `AGENT_CATALOG_MAX_CHARS`(기본 4000). 넘으면 오래된 항목부터 줄이고 "외 N개"로 접는다.
+- 리소스마다 읽어 오는 행 수 상한(`LIST_TAKE`)도 있다. 상한에 걸리면 `…더 있음` 한 줄을 남겨, 잘린 것이 **"없는 것"으로 보이지 않게** 한다(길이가 모자라 접힌 것과 같은 규칙).
 
 ```
 [사이트 목차]
@@ -155,9 +156,11 @@ export interface CatalogEntry {
 
 `/plans/abc123` → 레지스트리의 `detailPath`/`listPath` 역매핑으로 `{ resource, id }` 해석 → 해당 `detail()` 결과 반환. **등록되지 않은 경로는 거부**한다(임의 경로 스캔 방지).
 
+`detailPattern` 이 없는 단일 리소스(`/baby`)는 경로에 id 가 없으므로 **id 없이 `detail()`** 을 부른다(아직 등록 전이라 상세가 비면 목차로 내려간다). `detailPattern` 이 있는 리소스를 목록 경로(`/albums`)로 열면 지금처럼 목차다.
+
 ### 5.2 `목록(resource, limit?)`
 
-레지스트리 `catalog()` 전체 반환. 목차에서 접힌 항목을 펼칠 때 쓴다.
+레지스트리 `catalog()` 를 그대로 반환. 목차에서 접힌 항목을 펼칠 때 쓴다. 다만 리소스 하나가 한 번에 읽어 오는 행 수에는 상한(`LIST_TAKE`=30, 지난 일정 폴백은 `PAST_TAKE`=10)이 있어 **"전부"가 아닐 수 있다** — 상한에 걸리면 목록 끝에 `…더 있음` 항목이 붙는다.
 
 ### 5.3 `추가(resource, args)`
 

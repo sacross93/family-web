@@ -40,7 +40,8 @@ export interface AgentResource {
   /** "/plans/:id" — 경로 해석이 역방향으로 동작해야 하므로 함수가 아니라 패턴이다. */
   detailPattern?: string;
   catalog(): Promise<CatalogEntry[]>;
-  detail?(id: string): Promise<unknown>;
+  /** 항목이 하나뿐인 리소스(아기)는 detailPattern 이 없어 경로에 id 가 없다 — 그때는 인자 없이 불린다. */
+  detail?(id?: string): Promise<unknown>;
   create?: CreateSpec;
 }
 
