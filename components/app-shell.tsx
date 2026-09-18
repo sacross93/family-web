@@ -7,6 +7,7 @@ import { Menu, X, LogOut, Palette } from "lucide-react";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { Decorations } from "@/components/decorations";
+import { AgentFab } from "@/components/agent/agent-fab";
 import type { NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
 import type { SessionUser } from "@/lib/session";
@@ -127,11 +128,14 @@ export function AppShell({
   user,
   site,
   nav,
+  agentEnabled,
 }: {
   children: React.ReactNode;
   user: SessionUser | null;
   site: SiteConfigData;
   nav: NavItem[];
+  /** AGENT_ENABLED. 서버에서만 읽히는 값이라 layout 이 내려준다. */
+  agentEnabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -151,6 +155,8 @@ export function AppShell({
   if (pathname === "/login") return <>{children}</>;
 
   const isTopLevel = nav.some((n) => n.href === pathname);
+  // 꾸미기 FAB 은 상단 메뉴 페이지 + 관리자일 때만 뜬다(decoration-surface 의 canEdit).
+  const hasDecorationFab = isTopLevel && Boolean(user?.isAdmin);
 
   return (
     <div className="min-h-dvh">
@@ -207,7 +213,13 @@ export function AppShell({
 
       {/* ── 메인 콘텐츠 (+ 꾸미기 스티커 레이어) ── */}
       <main className="lg:pl-[264px]">
-        <div className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10",
+            // 물어보기가 뜨면 아래가 그만큼 더 높아진다 — 콘텐츠가 가리지 않게 여백을 키운다.
+            agentEnabled && (hasDecorationFab ? "pb-36 lg:pb-36" : "pb-28 lg:pb-24")
+          )}
+        >
           {/* 전역 페이지 꾸미기는 상단 메뉴 페이지에서만. 상세(계획/앨범)는 자체 꾸미기 사용 */}
           {isTopLevel ? (
             <Decorations isAdmin={Boolean(user?.isAdmin)}>{children}</Decorations>
@@ -216,6 +228,10 @@ export function AppShell({
           )}
         </div>
       </main>
+
+      {/* 물어보기는 main 바깥에 — 안에 두면 lg:pl-[264px] 때문에 위치가 밀린다.
+          꾸미기 FAB 은 상단 메뉴 페이지에서 관리자에게만 뜬다(그 자리를 피해 위로 올라간다). */}
+      {agentEnabled && <AgentFab hasDecorationFab={hasDecorationFab} />}
     </div>
   );
 }

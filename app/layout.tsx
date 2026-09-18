@@ -5,6 +5,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/current-user";
 import { getSiteConfig, getNav } from "@/lib/site";
+import { agentConfig } from "@/lib/agent/config";
 
 const pretendard = localFont({
   src: "./fonts/PretendardVariable.woff2",
@@ -48,7 +49,7 @@ export default async function RootLayout({
       className={`${pretendard.variable} ${fredoka.variable} h-full antialiased`}
     >
       <body className="min-h-full font-sans">
-        <AppShell user={user} site={site} nav={nav}>
+        <AppShell user={user} site={site} nav={nav} agentEnabled={agentConfig().enabled}>
           {children}
         </AppShell>
       </body>
