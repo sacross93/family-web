@@ -91,10 +91,11 @@ export function AgentHistory({
 
   const remove = useCallback(
     async (id: string) => {
-      const before = chats;
-      if (!before) return;
+      const at = chats?.findIndex((chat) => chat.id === id) ?? -1;
+      if (!chats || at < 0) return;
+      const removed = chats[at];
       // 먼저 지우고, 서버가 거절하면 되돌린다(이 저장소의 낙관적 업데이트 패턴).
-      setChats(before.filter((chat) => chat.id !== id));
+      setChats((prev) => prev?.filter((chat) => chat.id !== id) ?? prev);
 
       let ok = false;
       try {
@@ -105,7 +106,13 @@ export function AgentHistory({
       }
 
       if (!ok) {
-        setChats(before);
+        // 지운 행 **하나만** 제자리로 되돌린다. 목록 전체를 클릭 시점 스냅샷으로 되돌리면
+        // 그 사이 성공한 다른 삭제까지 화면에 되살아난다 — 서버에 없는 대화가 목록에 보인다.
+        setChats((prev) => {
+          if (!prev || prev.some((chat) => chat.id === id)) return prev;
+          const where = Math.min(at, prev.length);
+          return [...prev.slice(0, where), removed, ...prev.slice(where)];
+        });
         return;
       }
       // 지금 보고 있던 대화를 지웠다면 화면도 새 대화로 비운다. 그대로 두면 다음에 보내는 말이
