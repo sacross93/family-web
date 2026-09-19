@@ -164,7 +164,8 @@ describe("youtubeSummaryText", () => {
 
   it("자막 트랙이 아예 없으면 그렇게 말한다", () => {
     const text = youtubeSummaryText({ ...base, captionLanguages: [] });
-    expect(text).toContain("자막: 없습니다");
+    expect(text).toContain("확인하지 못했습니다");
+    expect(text).not.toContain("자막: 없습니다"); // 배포에서는 있는 자막도 안 보인다 — 없다고 단정하면 거짓
     expect(text).not.toContain("내려받지 못했습니다");
   });
 
