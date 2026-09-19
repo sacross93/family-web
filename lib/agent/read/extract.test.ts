@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dropBoilerplate,
   extractBlobText,
   extractImages,
   extractJsonLd,
@@ -31,8 +32,58 @@ describe("stripTags", () => {
     expect(out).toBe("본문");
   });
 
-  it("태그 자리에 공백을 남겨 단어가 붙지 않게 한다", () => {
-    expect(stripTags("<p>앞</p><p>뒤</p>")).toBe("앞 뒤");
+  it("블록 태그는 줄을 나누고, 인라인 태그는 공백만 남긴다", () => {
+    // 줄을 살려야 메뉴 덩어리와 본문 문단을 따로 볼 수 있다.
+    expect(stripTags("<p>앞</p><p>뒤</p>")).toBe("앞\n뒤");
+    expect(stripTags("굵은 <b>글씨</b> 입니다")).toBe("굵은 글씨 입니다");
+  });
+
+  it("속성값 안에 > 가 든 태그도 온전히 걷어낸다", () => {
+    // 실측: 위키백과의 data-mw='{"…":"</span>"}' 때문에 본문에 `</span>"}'>` 가 12개 새어 나왔다.
+    const html = `<span data-mw='{"parts":"</span>"}'>보이는 글</span>`;
+    expect(stripTags(html)).toBe("보이는 글");
+  });
+
+  it("따옴표가 안 닫힌 깨진 태그에서도 멈추지 않는다", () => {
+    expect(stripTags(`<p>앞</p><span title="안 닫힘`)).toBe("앞");
+  });
+});
+
+describe("dropBoilerplate", () => {
+  it("짧은 줄이 짧은 줄들 사이에 있으면 메뉴다 — 버린다", () => {
+    // 실측(terms.naver): 본문 앞에 "AD / 좋아요 0 / 공유 / 글자크기" 가 줄줄이 있었다.
+    const text = ["AD", "좋아요 0", "공유", "글자크기", "쇼핑중독은 필요 없는 물건을 과도히 구매하는 강박적 충동장애이다."].join("\n");
+    const out = dropBoilerplate(text);
+    for (const junk of ["AD", "좋아요 0", "공유"]) expect(out, junk).not.toContain(junk);
+    expect(out).toContain("쇼핑중독은 필요 없는");
+  });
+
+  it("**한계**: 껍데기 줄 중 맨 마지막 하나는 소제목과 구분되지 않아 남는다", () => {
+    // 소제목도 "짧은 줄 + 바로 뒤에 긴 글" 이라 모양이 같다. 낱말 목록으로 특수 처리하면
+    // 사이트마다 규칙이 늘고 곧 틀린다. 한 줄 남는 것을 받아들인다.
+    const text = ["메뉴1", "메뉴2", "글자크기", "본문이 여기서 시작하고 충분히 깁니다 그렇습니다."].join("\n");
+    expect(dropBoilerplate(text).split("\n")[0]).toBe("글자크기");
+  });
+
+  it("짧은 줄이 긴 글 바로 앞에 있으면 소제목이다 — 남긴다", () => {
+    // 그냥 "짧으면 버린다" 로 하면 "이름 [편집]" 같은 소제목까지 날아간다.
+    const text = ["이름 [ 편집 ]", "'불고기'라는 이름은 불에 구워 먹는 고기라는 뜻에서 생겨났다가 점차 바뀌었다."].join("\n");
+    expect(dropBoilerplate(text).split("\n")[0]).toBe("이름 [ 편집 ]");
+  });
+
+  it("긴 줄은 언제나 남긴다", () => {
+    const long = "이 문장은 충분히 길어서 본문으로 인정받습니다.";
+    expect(dropBoilerplate(long)).toBe(long);
+  });
+
+  it("전부 짧으면 거르지 않는다 — 짧은 줄만으로 된 페이지도 있다", () => {
+    const text = ["짧은 줄", "또 짧은 줄", "역시 짧다"].join("\n");
+    expect(dropBoilerplate(text)).toBe(text);
+  });
+
+  it("빈 줄은 없앤다", () => {
+    expect(dropBoilerplate("앞줄은 충분히 긴 문장입니다 그렇습니다\n\n   \n뒷줄도 충분히 긴 문장입니다 그렇습니다"))
+      .toBe("앞줄은 충분히 긴 문장입니다 그렇습니다\n뒷줄도 충분히 긴 문장입니다 그렇습니다");
   });
 });
 

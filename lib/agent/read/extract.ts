@@ -79,7 +79,59 @@ function safeChar(code: number): string {
   return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
 }
 
-/** 태그를 걷어내고 공백을 한 칸으로 만든다. 블록 태그 자리에는 공백을 남긴다(단어가 붙지 않게). */
+/** 줄을 나눌 블록 태그. 여기서 끊어야 메뉴 덩어리와 본문 문단이 서로 다른 줄이 된다. */
+const BLOCK_TAGS = /^\/?(p|div|br|li|ul|ol|tr|td|th|h[1-6]|section|article|header|footer|nav|blockquote|pre|dd|dt|figure|figcaption|table|main|aside)$/i;
+
+/**
+ * 태그를 걷어낸다. **정규식이 아니라 한 번 훑는 스캐너**다.
+ *
+ * `<[^>]*>` 로는 속성값 안에 `>` 가 든 태그를 못 지운다 — 위키백과의
+ * `data-mw='{"…":"</span>"}'` 같은 것이 그렇고, 실제로 본문에 `</span>"}'>` 가 12개 새어 나왔다.
+ * 따옴표 안을 건너뛰며 훑으면 정확하고, 되돌아가지 않으니 500KB 에서도 안전하다.
+ *
+ * 블록 태그 자리에는 줄바꿈을, 나머지에는 공백을 남긴다(단어가 붙지 않게).
+ */
+export function removeTags(html: string): string {
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt);
+
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      i = end < 0 ? html.length : end + 3;
+      out += " ";
+      continue;
+    }
+
+    // 태그 이름을 읽어 블록인지 본다.
+    let j = lt + 1;
+    while (j < html.length && /[a-zA-Z/!?]/.test(html[j])) j++;
+    const name = html.slice(lt + 1, j);
+
+    // 따옴표 안의 `>` 는 태그 끝이 아니다.
+    let quote = "";
+    while (j < html.length) {
+      const c = html[j];
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === ">") break;
+      j++;
+    }
+    out += BLOCK_TAGS.test(name) ? "\n" : " ";
+    i = j + 1;
+  }
+  return out;
+}
+
+/** 태그를 걷어내고 공백을 정리한다. 줄 구분은 살린다 — 껍데기를 거르는 데 쓴다. */
 export function stripTags(html: string): string {
   let out = html;
   for (const tag of CHROME_TAGS) {
@@ -87,11 +139,33 @@ export function stripTags(html: string): string {
     // 닫히지 않은 채 끝나는 경우(잘린 HTML)도 버린다
     out = out.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*$`, "i"), " ");
   }
-  return out
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
+  return removeTags(out)
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{2,}/g, "\n")
     .trim();
+}
+
+/** 이 길이 아래는 "짧은 줄" 로 본다. 메뉴 한 칸과 소제목이 여기 들어온다. */
+const SHORT_LINE = 24;
+
+/**
+ * 메뉴·버튼 같은 껍데기 줄을 버린다.
+ *
+ * 실측(namu.wiki): 본문 앞 400자가 통째로 "최근 변경 최근 토론 특수 기능 … 편집 권한이
+ * 부족합니다 …" 였다. 모델은 위에서부터 읽으므로 **맨 앞의 껍데기가 가장 나쁘다.**
+ *
+ * 가르는 기준: **짧은 줄이 짧은 줄들 사이에 있으면 메뉴, 긴 글 바로 앞에 있으면 소제목.**
+ * 그냥 "짧으면 버린다" 로 하면 소제목("이름 [편집]", "AI가 요약한 핵심 내용")까지 날아간다.
+ * 사이트 이름이나 낱말 목록으로 거르지 않는다 — 그런 규칙은 사이트마다 늘어나고 곧 틀린다.
+ */
+export function dropBoilerplate(text: string): string {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const isLong = lines.map((l) => l.length >= SHORT_LINE);
+
+  const kept = lines.filter((_, i) => isLong[i] || isLong[i + 1]);
+  // 전부 걸러졌다면 거르지 않은 편이 낫다 — 짧은 줄만으로 된 페이지도 있다.
+  return kept.length ? kept.join("\n") : lines.join("\n");
 }
 
 /**
@@ -254,7 +328,7 @@ export function extractPage(html: string, baseUrl: string): PageParts {
     description: unescapeEntities(metaContent(html, "description") || metaContent(html, "og:description")),
     siteName: unescapeEntities(metaContent(html, "og:site_name")),
     jsonLd: extractJsonLd(html),
-    body: unescapeEntities(stripTags(main)),
+    body: dropBoilerplate(unescapeEntities(stripTags(main))),
     blobText: extractBlobText(html),
     images: extractImages(html, baseUrl, main),
   };
