@@ -40,8 +40,13 @@
 | Piped 공개 인스턴스 3곳 | 전부 실패(JSON 깨짐·fetch 실패·HTML 반환) |
 | Invidious `inv.nadeko.net` 자막 **목록** | ✅ 200, 31개 |
 | 같은 인스턴스 자막 **본문** (`?lang=`·`?label=` 3가지) | 전부 200, **0자** |
+| InnerTube `/youtubei/v1/get_transcript` — UI 패널이 쓰는 그 엔드포인트 | HTTP **400** `Precondition check failed` |
+| 같은 엔드포인트 + `visitorData`·쿠키·`x-goog-visitor-id`·`x-youtube-client-*` 풀 컨텍스트 | HTTP **400** 동일 |
 
-`baseUrl` 의 파라미터는 `v,ei,caps,opi,exp,xoaf,xowf,hl,ip,ipbits,expire,sparams,signature,key,lang` —
+`getTranscriptEndpoint.params`(120자)는 watch 페이지에 **있다.** 그런데도 거절된다 —
+그 blob 역시 세션에 묶여 있다는 뜻이다. 즉 페이지에서 꺼낼 수 있는 값만으로는 안 된다.
+
+**총 여섯 갈래, 열다섯 번을 시도했다.** `baseUrl` 의 파라미터는 `v,ei,caps,opi,exp,xoaf,xowf,hl,ip,ipbits,expire,sparams,signature,key,lang` —
 **`pot`(PO 토큰)이 없다.** 유튜브가 지금 요구하는 값이고, 그걸 만들려면 유튜브의 BotGuard JS 를 돌려야 한다.
 
 **자동화된 브라우저도 안 된다**는 게 중요하다. 브라우저를 지어도 이 문제는 안 풀린다.
