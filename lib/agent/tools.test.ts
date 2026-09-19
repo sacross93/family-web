@@ -644,3 +644,67 @@ describe("read_url — 유튜브", () => {
     expect((r as { error: string }).error).toContain("비공개이거나 삭제된");
   });
 });
+
+describe("read_url — 페이지가 내놓은 그림", () => {
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+  const page = `<title>글</title><meta property="og:image" content="https://cdn.example.com/hero.png">
+    <body><main>${"본문이 한 문단 들어 있습니다. ".repeat(20)}</main></body>`;
+
+  /** HTML 한 번, 그림 한 번. */
+  const servePageThenImage = (imageType = "image/png", bytes: Buffer = PNG) =>
+    vi.fn(async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("cdn.example.com")) {
+        return new Response(new Uint8Array(bytes), { status: 200, headers: { "content-type": imageType } });
+      }
+      return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    });
+
+  it("og:image 를 우리가 받아서 data URL 로 싣는다", async () => {
+    const f = servePageThenImage();
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    expect((r as { imageData?: string }).imageData).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it("**base64 는 data 안에 들어가지 않는다** — 들어가면 글로 박혀 한 턴을 먹는다", async () => {
+    const f = servePageThenImage();
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    const serialized = JSON.stringify((r as { data: unknown }).data);
+    expect(serialized).not.toContain("base64");
+  });
+
+  it("그림이 아니면 싣지 않는다", async () => {
+    const f = servePageThenImage("text/html");
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect((r as { imageData?: string }).imageData).toBeUndefined();
+  });
+
+  it("너무 큰 그림은 싣지 않는다 — 본문을 밀어낼 이유가 없다", async () => {
+    const f = servePageThenImage("image/png", Buffer.alloc(3 * 1024 * 1024));
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect((r as { imageData?: string }).imageData).toBeUndefined();
+  });
+
+  it("그림을 못 가져와도 읽기는 성공한다 — 그림은 덤이지 본문이 아니다", async () => {
+    const f = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("cdn.example.com")) throw new Error("네트워크 끊김");
+      return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    });
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    expect((r as { imageData?: string }).imageData).toBeUndefined();
+  });
+
+  it("사설망 그림 주소는 받지 않는다", async () => {
+    const html = `<title>글</title><meta property="og:image" content="http://169.254.169.254/latest/meta-data/">
+      <body><main>${"본문입니다. ".repeat(40)}</main></body>`;
+    const f = vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
+    const r = await executeTool("read_url", { url: "example.com" }, ctx(f as unknown as typeof fetch));
+    expect((r as { imageData?: string }).imageData).toBeUndefined();
+    expect(f).toHaveBeenCalledTimes(1); // 페이지 한 번. 메타데이터로는 나가지 않았다
+  });
+});

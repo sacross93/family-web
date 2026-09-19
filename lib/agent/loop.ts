@@ -213,7 +213,15 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
         // 모델에게 보낼 본문을 먼저 굳힌다. yield 에서 제너레이터가 멈춰 있는 동안
         // 소비자가 result 를 화면용으로 손대도(길이 줄이기 등) 모델이 보는 것은 그대로다.
         calls.push({ id: event.id, name: event.name, args: event.args });
-        results.push({ role: "tool", content: JSON.stringify(result), toolCallId: event.id });
+        // 그림은 **글에서 떼어내** 따로 싣는다. imageData 를 그대로 직렬화하면 수 MB 짜리
+        // base64 가 대화에 글로 박혀 한 턴을 통째로 먹는다. 모델에게는 그림 파트로 간다.
+        const { imageData, ...forModel } = result.ok ? result : { ...result, imageData: undefined };
+        results.push({
+          role: "tool",
+          content: JSON.stringify(forModel),
+          toolCallId: event.id,
+          ...(imageData ? { imageData, imageDetail: "low" as const } : {}),
+        });
         yield { type: "tool_result", result };
         continue;
       }

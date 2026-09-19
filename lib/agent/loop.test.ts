@@ -316,3 +316,53 @@ describe("runAgent — 사진 첨부", () => {
     expect(p.calls[1].messages.find((m) => m.role === "user")?.imageUrl).toBe("/uploads/a.jpg");
   });
 });
+
+describe("runAgent — 도구가 가져온 그림", () => {
+  const PNG_B64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const PAGE = `<title>글</title><meta property="og:image" content="https://cdn.example.com/hero.png">
+    <body><main>${"본문이 한 문단 들어 있습니다. ".repeat(20)}</main></body>`;
+
+  const withImage = {
+    ...ctx,
+    fetchImpl: (async (input: string | URL | Request) =>
+      String(input).includes("cdn.example.com")
+        ? new Response(new Uint8Array(Buffer.from(PNG_B64, "base64")), {
+            status: 200,
+            headers: { "content-type": "image/png" },
+          })
+        : new Response(PAGE, { status: 200, headers: { "content-type": "text/html" } })) as unknown as typeof fetch,
+  };
+
+  async function runWithRead() {
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "c1", name: "read_url", args: { url: "https://e.com" } }, { type: "done" }],
+      [{ type: "text", delta: "사진이 보이네요" }, { type: "done" }],
+    ]);
+    await drain(runAgent({ question: "이 링크 뭐야?", provider: p, ctx: withImage, catalog: "" }));
+    const toolMessage = p.calls[1].messages.find((m: AgentMessage) => m.role === "tool")!;
+    return { p, toolMessage };
+  }
+
+  it("**base64 가 대화 글에 박히지 않는다** — 박히면 한 턴을 통째로 먹는다", async () => {
+    const { toolMessage } = await runWithRead();
+    expect(toolMessage.content).not.toContain("base64");
+    expect(toolMessage.content).not.toContain(PNG_B64.slice(0, 20));
+  });
+
+  it("그림은 글이 아니라 그림 자리로 따라간다", async () => {
+    const { toolMessage } = await runWithRead();
+    expect(toolMessage.imageData).toMatch(/^data:image\/png;base64,/);
+    expect(toolMessage.imageDetail).toBe("low");
+  });
+
+  it("그림이 없는 도구 결과에는 그림 자리를 만들지 않는다", async () => {
+    const p = createFakeProvider([
+      [{ type: "tool_call", id: "c1", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
+      [{ type: "text", delta: "네" }, { type: "done" }],
+    ]);
+    await drain(runAgent({ question: "발리?", provider: p, ctx, catalog: "" }));
+    const toolMessage = p.calls[1].messages.find((m: AgentMessage) => m.role === "tool")!;
+    expect(toolMessage.imageData).toBeUndefined();
+  });
+});

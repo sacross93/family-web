@@ -22,7 +22,16 @@ export interface ToolContext {
 }
 
 export type ToolResult =
-  | { ok: true; data: unknown; undo?: { resource: string; id: string }; label?: string; path?: string }
+  | {
+      ok: true;
+      data: unknown;
+      undo?: { resource: string; id: string };
+      label?: string;
+      path?: string;
+      /** 도구가 가져온 그림(data URL). **`data` 안에 넣지 않는다** — 루프가 data 를 JSON 으로
+       *  직렬화해 대화에 넣기 때문에, 여기 있어야 base64 가 글로 박히지 않는다. */
+      imageData?: string;
+    }
   | { ok: false; error: string };
 
 const HTTP_TIMEOUT_MS = 15_000;
@@ -636,6 +645,42 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
   };
 }
 
+/**
+ * 페이지가 내놓은 그림 한 장을 바이트로 가져온다.
+ *
+ * 주소를 모델에게 넘기지 않고 **우리가 받아서 싣는** 이유: 실측에서 모델 쪽이 그 주소를 직접
+ * 내려받으려다 실패했다(위키미디어가 그쪽 fetcher 를 막음, HTTP 400). 남의 사이트 정책에
+ * 달린 길은 "될 때도 있고 안 될 때도 있는" 기능이 된다.
+ *
+ * 못 가져오면 조용히 없는 셈 친다 — 그림은 덤이지 본문이 아니다.
+ */
+async function fetchImageData(url: string, doFetch: typeof fetch): Promise<string | undefined> {
+  const target = externalUrl(url);
+  if (!target) return undefined;
+  try {
+    const res = await doFetch(target, {
+      method: "GET",
+      headers: { accept: "image/*", "user-agent": BROWSER_UA },
+      redirect: "follow",
+      signal: timeoutSignal(),
+    });
+    if (!res.ok) return undefined;
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!/^image\/(png|jpeg|jpg|webp|gif)$/.test(type)) return undefined;
+    const declared = Number(res.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) return undefined;
+
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) return undefined;
+    return `data:${type};base64,${Buffer.from(buf).toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 그림 한 장의 상한. 넘으면 싣지 않는다 — 본문을 밀어낼 이유가 없다. */
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
 async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const requested = str(args.url);
   if (!normalizeUrl(requested)) {
@@ -689,9 +734,20 @@ async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise
     maxChars: agentConfig().fetchMaxChars,
   });
 
+  // 페이지가 스스로 내놓은 그림 한 장. 스크린샷 대신이다(§20.3) — og:image 는 애초에
+  // "이 페이지를 한 장으로 대표하는 그림"이고, 렌더 스크린샷은 쿠키 배너가 덮기 일쑤다.
+  const imageData = parts.images.length
+    ? await fetchImageData(parts.images[0], ctx.fetchImpl ?? fetch)
+    : undefined;
+
   // 제목·본문을 따로 내보내지 않는다. 액자 밖 사본이 하나라도 있으면
   // 루프가 ToolResult 를 통째로 직렬화할 때 외부 글이 감싸개 없이 프롬프트에 또 들어간다.
-  return { ok: true, data: { url, wrapped: frame(url, composed.text) }, label: displayDomain(url) };
+  return {
+    ok: true,
+    data: { url, wrapped: frame(url, composed.text) },
+    label: displayDomain(url),
+    ...(imageData ? { imageData } : {}),
+  };
 }
 
 // ── 실행 ──────────────────────────────────────────────────────

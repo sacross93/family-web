@@ -20,6 +20,9 @@ export interface AgentMessage {
   toolCallId?: string;
   /** role:"user" — 함께 보낸 사진의 주소. 저장되고, 다시 열 때 화면에 보인다. */
   imageUrl?: string;
+  /** 그림을 어느 해상도로 볼지. "low" 는 512px 로 줄여 보므로 토큰이 ~85개로 고정된다(실측).
+   *  페이지에서 가져온 그림처럼 "무엇이 찍혔나"만 알면 되는 경우에 쓴다. */
+  imageDetail?: "low";
   /** role:"user" — 이번 턴에 모델에게 보여줄 축소본(data URL). **저장하지 않는다.**
    *  기록에서 되살린 메시지에는 없다 — 사진을 두고 이어서 묻는 건 이번 턴 안에서만 된다. */
   imageData?: string;
