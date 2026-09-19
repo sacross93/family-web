@@ -77,5 +77,7 @@ export function composeRead(parts: {
   }
 
   const b = budget(parts.body, parts.maxChars);
-  return { text: [...head, "", b.text].join("\n"), truncated: b.truncated, original: b.original };
+  // 머리말이 없으면 빈 줄로 시작하지 않는다.
+  const text = head.length ? [...head, "", b.text].join("\n") : b.text;
+  return { text, truncated: b.truncated, original: b.original };
 }

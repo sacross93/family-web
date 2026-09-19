@@ -31,6 +31,8 @@ export function agentConfig(): AgentConfig {
     maxSteps: num("AGENT_MAX_STEPS", 6),
     history: num("AGENT_HISTORY", 10),
     catalogMaxChars: num("AGENT_CATALOG_MAX_CHARS", 4000),
-    fetchMaxChars: num("AGENT_FETCH_MAX_CHARS", 3000),
+    // 3,000 은 한 문단짜리 소개글에나 맞다. 실측한 기사·백과 항목이 6,000~43,000자였고,
+    // 6,000 이면 대부분의 기사 한 편이 통째로 들어간다. 넘치면 얼마나 잘렸는지 숫자로 알린다.
+    fetchMaxChars: num("AGENT_FETCH_MAX_CHARS", 6000),
   };
 }

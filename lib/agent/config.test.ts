@@ -13,7 +13,7 @@ describe("agentConfig", () => {
     expect(c.maxSteps).toBe(6);
     expect(c.history).toBe(10);
     expect(c.catalogMaxChars).toBe(4000);
-    expect(c.fetchMaxChars).toBe(3000);
+    expect(c.fetchMaxChars).toBe(6000);
   });
 
   // 일곱 필드를 모두, 기본값과 "다른" 값으로 덮어쓴다.

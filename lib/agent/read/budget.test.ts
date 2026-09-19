@@ -84,7 +84,7 @@ describe("composeRead", () => {
 
   it("없는 값은 줄을 만들지 않는다", () => {
     const r = composeRead({ ...base, title: "", siteName: "", description: "", body: "본문만" });
-    expect(r.text).toBe("\n본문만");
+    expect(r.text).toBe("본문만"); // 머리말이 없으면 빈 줄로 시작하지 않는다
   });
 
   it("긴 본문은 잘리고 잘림이 보고된다", () => {
