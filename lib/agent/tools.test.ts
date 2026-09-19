@@ -620,6 +620,42 @@ describe("read_url — 유튜브", () => {
     }
   });
 
+  it("자막을 받아 오면 자막 전문을 싣는다", async () => {
+    const f = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const u = String(input);
+      if (u.includes("/youtubei/v1/player")) {
+        expect(JSON.parse(String(init?.body)).context.client.clientVersion).toBe("20.10.38");
+        return Response.json({
+          captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ languageCode: "ko", baseUrl: "https://cap.example.com/ko?a=1&fmt=srv3" }] } },
+        });
+      }
+      if (u.startsWith("https://cap.example.com/ko")) {
+        expect(u).not.toContain("fmt=srv3"); // 붙은 채로는 빈 몸통이 온다
+        return new Response(`<transcript><text start="0">진짜 자막 내용입니다</text></transcript>`, {
+          status: 200, headers: { "content-type": "text/xml" },
+        });
+      }
+      return new Response(`${WATCH}<script>var x = {"INNERTUBE_API_KEY": "AIzaTest"};</script>`, {
+        status: 200, headers: { "content-type": "text/html" },
+      });
+    });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    const w = wrappedOf(r);
+    expect(w).toContain("자막: ko");
+    expect(w).toContain("진짜 자막 내용입니다");
+  });
+
+  it("자막을 못 받아도 영상 정보는 준다 — 자막은 덤이다", async () => {
+    const f = vi.fn(async (input: string | URL | Request) =>
+      String(input).includes("/youtubei/v1/player")
+        ? new Response("nope", { status: 500 })
+        : new Response(WATCH, { status: 200, headers: { "content-type": "text/html" } })
+    );
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    expect(wrappedOf(r)).toContain("내려받지 못했습니다");
+  });
+
   it("자막을 못 읽었다는 사실이 결과에 담긴다", async () => {
     // 이 문장이 빠지면 모델이 영상을 본 것처럼 말한다.
     const r = await executeTool(
@@ -629,7 +665,7 @@ describe("read_url — 유튜브", () => {
     );
     expect(r.ok).toBe(true);
     const w = wrappedOf(r);
-    expect(w).toContain("내려받을 수 없었습니다");
+    expect(w).toContain("내려받지 못했습니다");
     expect(w).toContain("들어가며");
     expect((r as { label: string }).label).toBe("신경망이란 무엇인가");
   });

@@ -9,7 +9,18 @@ import { LIST_TAKE, MORE_TITLE, RESOURCES } from "./resources";
 import { composeRead } from "./read/budget";
 import { extractPage, looksBlocked } from "./read/extract";
 import { rewriteKnownShell } from "./read/rewrite";
-import { parseWatchPage, youtubeId, youtubeSummaryText } from "./read/youtube";
+import {
+  captionUrl,
+  innertubeApiKey,
+  parseCaptionXml,
+  parseWatchPage,
+  pickCaptionTrack,
+  playerCaptionTracks,
+  playerRequestBody,
+  youtubeId,
+  youtubeSummaryText,
+} from "./read/youtube";
+import type { FetchedCaption } from "./read/youtube";
 import { displayDomain, normalizeUrl } from "@/lib/url";
 
 /** 도구 실행 문맥. 쿠키는 요청의 세션을 그대로 넘겨 화면에서 누른 것과 같은 권한으로 동작시킨다. */
@@ -614,10 +625,60 @@ function frame(url: string, inner: string): string {
   );
 }
 
-/** 유튜브. 자막은 못 가져오므로(실측) 설명과 챕터로 답하고, 그 사실을 글 안에 담는다. */
+/** 자막을 읽을 언어 순서. 가족이 한국어로 쓰는 사이트라 한국어가 먼저다. */
+const CAPTION_LANGUAGES = ["ko", "en"];
+
+/**
+ * 자막을 실제로 받아 온다. 못 받으면 undefined — 그때는 설명·챕터로 답한다.
+ *
+ * **watch 페이지의 baseUrl 로는 안 된다**(빈 몸통). 살아 있는 주소는 ANDROID 클라이언트로
+ * InnerTube player 를 부른 응답에 들어 있다. 자세한 이유는 `read/youtube.ts` 머리말에.
+ */
+async function fetchCaption(
+  videoId: string,
+  html: string,
+  doFetch: typeof fetch
+): Promise<FetchedCaption | undefined> {
+  const key = innertubeApiKey(html);
+  if (!key) return undefined;
+
+  try {
+    const res = await doFetch(`https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "accept-language": "en-US", "user-agent": BROWSER_UA },
+      body: JSON.stringify(playerRequestBody(videoId)),
+      signal: timeoutSignal(),
+    });
+    if (!res.ok) return undefined;
+
+    const track = pickCaptionTrack(playerCaptionTracks(await res.json()), CAPTION_LANGUAGES);
+    if (!track) return undefined;
+
+    const url = captionUrl(track);
+    if (!url) return undefined; // PO 토큰이 필요한 영상
+    const target = externalUrl(url);
+    if (!target) return undefined;
+
+    const capRes = await doFetch(target, {
+      headers: { "accept-language": "en-US", "user-agent": BROWSER_UA },
+      signal: timeoutSignal(),
+    });
+    if (!capRes.ok) return undefined;
+
+    const xml = await readBodyText(capRes);
+    if ("error" in xml) return undefined;
+    const text = parseCaptionXml(xml.text);
+    return text ? { languageCode: track.languageCode, isGenerated: track.isGenerated, text } : undefined;
+  } catch {
+    return undefined; // 자막은 덤이다. 못 받아도 영상 정보는 준다.
+  }
+}
+
+/** 유튜브. 자막을 받아 오고, 못 받으면 설명과 챕터로 답하며 그 사실을 글 안에 담는다. */
 async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResult> {
   const watch = `https://www.youtube.com/watch?v=${videoId}&hl=ko`;
-  const outcome = await fetchExternal(watch, ctx.fetchImpl ?? fetch);
+  const doFetch = ctx.fetchImpl ?? fetch;
+  const outcome = await fetchExternal(watch, doFetch);
   if ("error" in outcome) return fail(outcome.error);
   if (!outcome.res.ok) return fail(`그 영상을 열지 못했어요. (오류 ${outcome.res.status})`);
 
@@ -629,7 +690,8 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
     return fail("그 영상의 정보를 읽지 못했어요. 비공개이거나 삭제된 영상일 수 있어요.");
   }
 
-  const summary = youtubeSummaryText(info);
+  const caption = await fetchCaption(videoId, body.text, doFetch);
+  const summary = youtubeSummaryText(info, caption);
   const composed = composeRead({
     title: "",
     siteName: "",

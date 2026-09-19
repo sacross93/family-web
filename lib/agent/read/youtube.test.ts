@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { extractChapters, humanDuration, parseWatchPage, timeLabel, youtubeId, youtubeSummaryText } from "./youtube";
+import {
+  captionUrl,
+  extractChapters,
+  humanDuration,
+  innertubeApiKey,
+  parseCaptionXml,
+  parseWatchPage,
+  pickCaptionTrack,
+  playerCaptionTracks,
+  playerRequestBody,
+  timeLabel,
+  youtubeId,
+  youtubeSummaryText,
+} from "./youtube";
 
 describe("youtubeId", () => {
   it("여러 모양의 유튜브 주소를 같은 id 로 읽는다", () => {
@@ -145,14 +158,14 @@ describe("youtubeSummaryText", () => {
   it("자막을 못 읽었다는 사실이 글 안에 들어간다", () => {
     // 이 문장이 빠지면 모델이 영상을 본 것처럼 말한다.
     const text = youtubeSummaryText(base);
-    expect(text).toContain("내려받을 수 없었습니다");
+    expect(text).toContain("내려받지 못했습니다");
     expect(text).toContain("자막이 아니라 설명과 챕터");
   });
 
   it("자막 트랙이 아예 없으면 그렇게 말한다", () => {
     const text = youtubeSummaryText({ ...base, captionLanguages: [] });
     expect(text).toContain("자막: 없습니다");
-    expect(text).not.toContain("내려받을 수 없었습니다");
+    expect(text).not.toContain("내려받지 못했습니다");
   });
 
   it("제목·채널·길이·챕터·설명을 담는다", () => {
@@ -171,5 +184,107 @@ describe("youtubeSummaryText", () => {
     expect(text).not.toContain("조회수:");
     expect(text).not.toMatch(/챕터 \d+개:/); // 안내 문장 속 "챕터"는 남는다
     expect(text).not.toContain("설명:");
+  });
+});
+
+describe("자막 가져오기", () => {
+  it("watch 페이지에서 InnerTube 열쇠를 꺼낸다", () => {
+    expect(innertubeApiKey(`x"INNERTUBE_API_KEY": "AIzaSy-abc_123"y`)).toBe("AIzaSy-abc_123");
+    expect(innertubeApiKey("열쇠 없음")).toBeNull();
+  });
+
+  it("player 요청은 ANDROID 20.10.38 로 나간다 — 낮추면 HTTP 400 이다(실측)", () => {
+    expect(playerRequestBody("aircAruvnKk")).toEqual({
+      context: { client: { clientName: "ANDROID", clientVersion: "20.10.38" } },
+      videoId: "aircAruvnKk",
+    });
+  });
+
+  it("player 응답에서 트랙을 읽고 자동 생성 여부를 표시한다", () => {
+    const player = {
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            { languageCode: "en", baseUrl: "https://t/en", kind: "asr" },
+            { languageCode: "ko", baseUrl: "https://t/ko" },
+            { languageCode: "", baseUrl: "https://t/x" },
+          ],
+        },
+      },
+    };
+    expect(playerCaptionTracks(player)).toEqual([
+      { languageCode: "en", baseUrl: "https://t/en", isGenerated: true },
+      { languageCode: "ko", baseUrl: "https://t/ko", isGenerated: false },
+    ]);
+  });
+
+  it("자막이 없는 응답에는 빈 배열", () => {
+    expect(playerCaptionTracks({})).toEqual([]);
+    expect(playerCaptionTracks(null)).toEqual([]);
+  });
+
+  it("사람이 단 자막을 자동 생성보다 먼저 고른다", () => {
+    const tracks = [
+      { languageCode: "ko", baseUrl: "a", isGenerated: true },
+      { languageCode: "ko", baseUrl: "b", isGenerated: false },
+    ];
+    expect(pickCaptionTrack(tracks, ["ko"])?.baseUrl).toBe("b");
+  });
+
+  it("원하는 언어가 없으면 있는 것이라도 읽는다 — 영어라도 없는 것보단 낫다", () => {
+    const tracks = [{ languageCode: "ja", baseUrl: "j", isGenerated: false }];
+    expect(pickCaptionTrack(tracks, ["ko", "en"])?.languageCode).toBe("ja");
+    expect(pickCaptionTrack([], ["ko"])).toBeNull();
+  });
+
+  it("fmt=srv3 를 뗀다 — 붙은 채로는 빈 몸통이 온다", () => {
+    expect(captionUrl({ languageCode: "ko", baseUrl: "https://t/ko?a=1&fmt=srv3", isGenerated: false }))
+      .toBe("https://t/ko?a=1");
+  });
+
+  it("exp=xpe 가 있으면 포기한다 — PO 토큰이 필요한 영상이다", () => {
+    expect(captionUrl({ languageCode: "ko", baseUrl: "https://t/ko?a=1&exp=xpe", isGenerated: false })).toBeNull();
+  });
+
+  it("자막 XML 을 글로 잇는다", () => {
+    const xml = `<?xml version="1.0"?><transcript>
+      <text start="0" dur="2">여기에 숫자 3이 있습니다</text>
+      <text start="2" dur="3">뇌는 어떻게 &amp;quot;3&amp;quot; 이라고 인식할까요</text>
+      <text start="5" dur="1">   </text></transcript>`;
+    expect(parseCaptionXml(xml)).toBe('여기에 숫자 3이 있습니다 뇌는 어떻게 "3" 이라고 인식할까요');
+  });
+
+  it("자막 안의 서식 태그는 걷어낸다", () => {
+    expect(parseCaptionXml(`<text start="0">앞 <b>굵게</b> 뒤</text>`)).toBe("앞 굵게 뒤");
+  });
+});
+
+describe("youtubeSummaryText — 자막이 있을 때", () => {
+  const base = parseWatchPage(WATCH_HTML, "aircAruvnKk")!;
+
+  it("자막을 읽었으면 그렇게 말하고 자막을 싣는다", () => {
+    const text = youtubeSummaryText(base, { languageCode: "ko", isGenerated: false, text: "실제 자막입니다" });
+    expect(text).toContain("자막: ko");
+    expect(text).toContain("번역본일 수 있습니다"); // 실측: 번역 자막을 원문 인용처럼 지어냈다
+    expect(text).toContain("자막 전문:");
+    expect(text).toContain("실제 자막입니다");
+    expect(text).not.toContain("내려받지 못했습니다");
+  });
+
+  it("자동 생성 자막이면 받아쓰기라 틀릴 수 있다고 밝힌다", () => {
+    const text = youtubeSummaryText(base, { languageCode: "ko", isGenerated: true, text: "자동 자막" });
+    expect(text).toContain("자동 생성");
+    expect(text).toContain("받아쓰기 오류가 있을 수 있습니다");
+  });
+
+  it("자막이 있으면 설명은 자리를 양보한다 — 자막이 내용이다", () => {
+    const text = youtubeSummaryText(base, { languageCode: "ko", isGenerated: false, text: "자막" });
+    expect(text).not.toContain("설명:");
+  });
+
+  it("자막을 못 받으면 예전처럼 설명과 챕터로 답하고 그 사실을 밝힌다", () => {
+    const text = youtubeSummaryText(base, undefined);
+    expect(text).toContain("내려받지 못했습니다");
+    expect(text).toContain("설명:");
   });
 });
