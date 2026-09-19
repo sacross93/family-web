@@ -8,7 +8,13 @@
 // 그래서 설명과 챕터로 답하되, 자막을 읽지 못했다는 사실을 함께 돌려준다.
 // 안 돌려주면 모델이 "영상을 봤다"는 투로 말한다.
 
-/** 유튜브에서 건진 것. `hasCaptions` 는 "자막이 있다"는 뜻이지 "우리가 읽었다"는 뜻이 아니다. */
+/** 챕터 한 칸. 시각까지 가져오는 이유는 아래 extractChapters 주석에 있다. */
+export interface Chapter {
+  title: string;
+  startSeconds: number;
+}
+
+/** 유튜브에서 건진 것. `captionLanguages` 는 "자막이 있다"는 뜻이지 "우리가 읽었다"는 뜻이 아니다. */
 export interface YoutubeInfo {
   videoId: string;
   title: string;
@@ -17,7 +23,7 @@ export interface YoutubeInfo {
   lengthSeconds: number;
   viewCount: string;
   description: string;
-  chapters: string[];
+  chapters: Chapter[];
   /** 자막 트랙이 존재하는 언어들. 본문은 못 읽는다. */
   captionLanguages: string[];
 }
@@ -102,19 +108,37 @@ function get(o: unknown, ...path: string[]): unknown {
 }
 
 /**
- * 챕터 제목들. `ytInitialData` 안에 `chapterRenderer` 로 들어 있다.
+ * 챕터. `ytInitialData` 안에 `chapterRenderer` 로 들어 있다.
  *
  * 실측에서 3Blue1Brown 영상이 12개였다 — **사실상 영상의 목차**라서, 자막이 없는 지금
  * "무슨 내용이냐"에 답하는 가장 강한 재료다.
+ *
+ * **시각(`timeRangeStartMillis`)까지 가져온다.** 제목만 주면 "3분쯤에 뭐라고 해?" 같은 물음에
+ * 모델이 시각을 지어낸다(실측에서 실제로 그랬다). 시각이 있으면 "3분경은 X 챕터입니다"라고
+ * 아는 것만 말할 수 있다.
  */
-export function extractChapters(html: string): string[] {
-  const out: string[] = [];
-  for (const m of html.matchAll(/"chapterRenderer":\{"title":\{"simpleText":"((?:[^"\\]|\\.){0,200})"/g)) {
-    const title = m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\").replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-    if (title.trim()) out.push(title.trim());
+export function extractChapters(html: string): Chapter[] {
+  const out: Chapter[] = [];
+  const re = /"chapterRenderer":\{"title":\{"simpleText":"((?:[^"\\]|\\.){0,200})"\}(?:,"timeRangeStartMillis":(\d{1,12}))?/g;
+  for (const m of html.matchAll(re)) {
+    const title = m[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\\\/g, "\\")
+      .trim();
+    if (!title) continue;
+    out.push({ title, startSeconds: Math.floor(Number(m[2] ?? 0) / 1000) });
     if (out.length >= 60) break;
   }
   return out;
+}
+
+/** "0:00" · "1:02:03" — 챕터 앞에 붙일 시각. */
+export function timeLabel(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const parts = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60];
+  const head = parts[0] ? [parts[0], String(parts[1]).padStart(2, "0")] : [parts[1]];
+  return [...head, String(parts[2]).padStart(2, "0")].join(":");
 }
 
 /** watch 페이지 HTML → 우리가 실제로 읽을 수 있는 것들. 못 읽으면 null. */
@@ -170,7 +194,11 @@ export function youtubeSummaryText(info: YoutubeInfo): string {
   );
 
   if (info.chapters.length) {
-    lines.push("", `챕터 ${info.chapters.length}개:`, ...info.chapters.map((c, i) => `  ${i + 1}. ${c}`));
+    lines.push(
+      "",
+      `챕터 ${info.chapters.length}개 (영상 안 시각과 제목. 이 시각 정보 말고는 언제 무슨 말을 했는지 알 수 없습니다):`,
+      ...info.chapters.map((c) => `  ${timeLabel(c.startSeconds)}  ${c.title}`)
+    );
   }
   if (info.description) lines.push("", "설명:", info.description);
   return lines.join("\n");

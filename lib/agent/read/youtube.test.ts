@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractChapters, humanDuration, parseWatchPage, youtubeId, youtubeSummaryText } from "./youtube";
+import { extractChapters, humanDuration, parseWatchPage, timeLabel, youtubeId, youtubeSummaryText } from "./youtube";
 
 describe("youtubeId", () => {
   it("여러 모양의 유튜브 주소를 같은 id 로 읽는다", () => {
@@ -44,16 +44,29 @@ describe("extractChapters", () => {
       `"chapterRenderer":{"title":{"simpleText":"Series preview"},"timeRangeStartMillis":61000}`,
       `"chapterRenderer":{"title":{"simpleText":"What are neurons?"},"timeRangeStartMillis":121000}`,
     ].join(",");
-    expect(extractChapters(html)).toEqual(["Introduction example", "Series preview", "What are neurons?"]);
+    expect(extractChapters(html)).toEqual([
+      { title: "Introduction example", startSeconds: 0 },
+      { title: "Series preview", startSeconds: 61 },
+      { title: "What are neurons?", startSeconds: 121 },
+    ]);
   });
 
   it("이스케이프된 따옴표와 유니코드를 되돌린다", () => {
     const html = `"chapterRenderer":{"title":{"simpleText":"\\uc784\\uc2e0 \\"\\ucd08\\uae30\\""}}`;
-    expect(extractChapters(html)).toEqual(['임신 "초기"']);
+    expect(extractChapters(html)).toEqual([{ title: '임신 "초기"', startSeconds: 0 }]);
   });
 
   it("챕터가 없으면 빈 배열", () => {
     expect(extractChapters(`<html>아무것도 없음</html>`)).toEqual([]);
+  });
+});
+
+describe("timeLabel", () => {
+  it("영상 안 시각으로 읽는다", () => {
+    expect(timeLabel(0)).toBe("0:00");
+    expect(timeLabel(61)).toBe("1:01");
+    expect(timeLabel(600)).toBe("10:00");
+    expect(timeLabel(3723)).toBe("1:02:03");
   });
 });
 
@@ -95,7 +108,10 @@ describe("parseWatchPage", () => {
     expect(info!.lengthSeconds).toBe(1120);
     expect(info!.viewCount).toBe("24377557");
     expect(info!.description).toContain("What are the neurons");
-    expect(info!.chapters).toEqual(["Introduction example", "Series preview"]);
+    expect(info!.chapters).toEqual([
+      { title: "Introduction example", startSeconds: 0 },
+      { title: "Series preview", startSeconds: 0 },
+    ]);
   });
 
   it("같은 언어 트랙이 여러 개여도 언어는 한 번만 센다", () => {
@@ -120,6 +136,12 @@ describe("parseWatchPage", () => {
 describe("youtubeSummaryText", () => {
   const base = parseWatchPage(WATCH_HTML, "aircAruvnKk")!;
 
+  it("챕터에 시각을 함께 준다 — 없으면 모델이 시각을 지어낸다(실측)", () => {
+    const text = youtubeSummaryText({ ...base, chapters: [{ title: "뉴런이란", startSeconds: 121 }] });
+    expect(text).toContain("2:01  뉴런이란");
+    expect(text).toContain("이 시각 정보 말고는 언제 무슨 말을 했는지 알 수 없습니다");
+  });
+
   it("자막을 못 읽었다는 사실이 글 안에 들어간다", () => {
     // 이 문장이 빠지면 모델이 영상을 본 것처럼 말한다.
     const text = youtubeSummaryText(base);
@@ -138,7 +160,7 @@ describe("youtubeSummaryText", () => {
     expect(text).toContain("제목: But what is a neural network?");
     expect(text).toContain("채널: 3Blue1Brown");
     expect(text).toContain("길이: 18분 40초");
-    expect(text).toContain("1. Introduction example");
+    expect(text).toContain("0:00  Introduction example");
     expect(text).toContain("What are the neurons");
   });
 
