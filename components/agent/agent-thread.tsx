@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
-import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { visibleResults, type OkResult } from "./agent-stream";
 import type { AgentChatState } from "./use-agent-chat";
@@ -177,7 +176,9 @@ export function AgentThread({
   return (
     <div
       ref={scrollRef}
-      className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 py-4"
+      // 대화 바탕을 종이색으로. 시트가 흰 판이라 **흰 말풍선이 흰 바탕 위에** 있었고,
+      // 테두리(1.24:1)로는 경계가 생기지 않았다. 바탕을 한 단 내리면 풍선이 뜬다.
+      className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain bg-paper px-4 py-4"
     >
       {bubbles.length === 0 ? (
         /* 시작 화면은 **입력칸 바로 위**에 붙인다(justify-end).
@@ -208,8 +209,9 @@ export function AgentThread({
                 <div
                   className={cn(
                     "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-xl rounded-br-sm px-4 py-2.5 text-[0.9375rem] leading-relaxed",
-                    // soft 배경 + ink 글자 = palette 의 chip. 색은 여기서만 고른다.
-                    palette("lavender").chip,
+                    // 내가 한 말은 **브랜드 로즈**로. 사이트 전체가 핑크가 된 뒤로
+                    // 라벤더 풍선은 혼자 다른 집 물건 같았다. 색은 여기서만 고른다.
+                    "bg-primary-soft text-primary-ink",
                   )}
                 >
                   {/* 붙인 사진은 글 위에. next/image 가 아니라 <img> 를 쓰는 건 이 저장소 규칙이다(AGENTS.md). */}
