@@ -56,9 +56,13 @@ export function EntryTimeline({
           상단바로 올라가면서 그 줄에 버튼만 남아, 무엇에 더하는 버튼인지 알 수 없었다. */}
       <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
         <h2 className="font-display text-xl font-bold text-ink">일기</h2>
-        <Button size="sm" onClick={onCreate}>
-          <Plus className="h-4 w-4" /> 기록 남기기
-        </Button>
+        {/* 아직 한 편도 없으면 아래 빈 화면의 초대가 같은 일을 한다 —
+            같은 버튼 둘이 한 화면에 보이면 어느 쪽을 눌러야 하나 머뭇거린다. */}
+        {entries.length > 0 && (
+          <Button size="sm" onClick={onCreate}>
+            <Plus className="h-4 w-4" /> 기록 남기기
+          </Button>
+        )}
       </div>
 
       <div className="overflow-x-auto pb-1">

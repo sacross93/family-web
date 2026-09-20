@@ -498,6 +498,75 @@ await step("기념일 지우기", async () => {
   if ((await text()).includes(MARK + "기념")) throw new Error("서버엔 안 지워졌다");
 });
 
+// ── 아기 일기 ────────────────────────────────────────────
+//
+// 이 흐름이 없었다. 아기 페이지는 두 번째 탭이고 가장 사적인 글이 쌓이는 곳인데,
+// 검사는 장보기·게시판·계획·앨범·할일·캘린더·기념일만 돌고 있었다.
+console.log("아기");
+await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+await page.waitForTimeout(500);
+
+await step("기록 남기기를 열면 **쓰는 칸이 맨 위**에 있다", async () => {
+  await page.getByRole("button", { name: /기록 남기기/ }).first().click();
+  await page.waitForTimeout(800);
+  const box = page.locator('[role="dialog"] textarea').first();
+  const b = await box.boundingBox();
+  if (!b) throw new Error("쓰는 칸이 안 보인다");
+  // 모달 안에서 글 칸보다 위에 있는 것이 머리글뿐이어야 한다.
+  const others = await page.evaluate(() => {
+    const dlg = document.querySelector('[role="dialog"]');
+    const ta = dlg?.querySelector("textarea");
+    if (!dlg || !ta) return null;
+    const top = ta.getBoundingClientRect().top;
+    // 글 칸보다 위에 있는 입력/선택 요소
+    return [...dlg.querySelectorAll('input, [role="radio"], [aria-pressed]')].filter(
+      (el) => el.getBoundingClientRect().bottom < top && el.getBoundingClientRect().height > 0
+    ).length;
+  });
+  if (others === null) throw new Error("모달을 못 찾았다");
+  if (others > 0) throw new Error(`쓰는 칸 위에 정할 것이 ${others}개 있다 — 한 줄 적으러 왔는데`);
+});
+
+await step("한 줄 적고 저장하면 일기에 남는다", async () => {
+  await page.locator('[role="dialog"] textarea').first().fill(MARK + " 오늘 입덧이 좀 나아졌어요");
+  await page.getByRole("button", { name: /^저장$/ }).last().click();
+  await page.waitForTimeout(1500);
+  if (!(await text()).includes(MARK)) throw new Error("목록에 안 보인다");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(700);
+  if (!(await text()).includes(MARK)) throw new Error("새로고침하니 사라졌다");
+});
+
+await step("접힌 줄을 펴면 날짜·누가·컨디션이 있다", async () => {
+  await page.getByRole("button", { name: /기록 남기기/ }).first().click();
+  await page.waitForTimeout(700);
+  const fold = page.locator('[role="dialog"] button[aria-expanded]').first();
+  await fold.click();
+  await page.waitForTimeout(400);
+  if ((await page.locator('[role="dialog"] input[type="date"]').count()) === 0)
+    throw new Error("펴도 날짜가 없다");
+  await page.getByRole("button", { name: "취소" }).last().click();
+  await page.waitForTimeout(500);
+});
+
+await step("기록 지우기 — 새로고침해도 안 되살아난다", async () => {
+  await page.locator("article, li, div").filter({ hasText: MARK }).last();
+  const menu = page.getByRole("button", { name: "더보기" }).first();
+  await menu.click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-item-menu] button:has-text("삭제")').click();
+  await page.waitForTimeout(700);
+  // 아기 기록은 다시 만들 수 없는 글이라 한 번 묻는다(DESIGN §8).
+  const confirm = page.getByRole("button", { name: /^삭제$|^지우기$/ }).last();
+  if (await confirm.isVisible().catch(() => false)) {
+    await confirm.click();
+    await page.waitForTimeout(1200);
+  }
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(700);
+  if ((await text()).includes(MARK)) throw new Error("서버엔 안 지워졌다");
+});
+
 // ── 꾸미기 스티커 ────────────────────────────────────────
 console.log("꾸미기");
 await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {

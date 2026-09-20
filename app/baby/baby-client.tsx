@@ -217,8 +217,11 @@ export function BabyClient({
           더해지는 목록(일기) 옆으로 내려갔다. 같은 말을 위아래로 두 번 하지 않는다. */}
       <BabyHero baby={baby} entries={baby.entries} onOpenSettings={() => setSettingsOpen(true)} />
 
+      {/* 폰에서는 **일기가 먼저**다. 전에는 접힌 카드 두 장(준비 체크리스트·참고 사이트)이
+          히어로 바로 밑에 붙어, 한 줄씩 보여 주려고 160px 을 쓰고 정작 읽으러 온 일기를
+          아래로 밀어냈다. 데스크톱은 옆에 나란히 서므로 지금대로가 맞다. */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:order-2">
+        <div className="order-2 min-w-0 lg:order-2">
           <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-6">
             <BabyChecklist
               items={baby.checklist}
@@ -237,7 +240,7 @@ export function BabyClient({
             />
           </div>
         </div>
-        <div className="lg:order-1 lg:col-span-2">
+        <div className="order-1 lg:order-1 lg:col-span-2">
           <EntryTimeline
             entries={baby.entries}
             filter={filter}
