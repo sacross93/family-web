@@ -1,5 +1,17 @@
-import { LoadingBlock } from "@/components/ui";
+import { PageSkeleton } from "@/components/page-skeleton";
 
+/**
+ * 페이지가 오는 동안 보이는 화면.
+ *
+ * 경로마다 `loading.tsx` 를 두는 것도 생각해 봤지만 **필요 없었다** —
+ * 이 한 장이 이미 모든 하위 경로의 경계 노릇을 한다(프로덕션 빌드로 재 봤다:
+ * 탭을 누르면 150ms 안에 탭이 켜지고 주소가 바뀌고 이 화면이 뜬다).
+ * `next dev` 는 프리페치를 하지 않아 그냥 멈춘 것처럼 보이는데, 그건 개발 환경 얘기다.
+ *
+ * 바뀐 것은 모양과 말이다: 빙글빙글 도는 표시 대신 **올 내용의 뼈대**를 두어
+ * 내용이 도착할 때 화면이 덜컥이지 않게, 그리고 "포동을 여는 중" 대신
+ * (사이트 안에서 옮겨 다니는 중이므로) 조용히 뼈대만.
+ */
 export default function Loading() {
-  return <LoadingBlock label="포동을 여는 중…" />;
+  return <PageSkeleton />;
 }
