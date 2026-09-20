@@ -56,10 +56,14 @@ export function BottomTabs({
                 aria-current={active ? "page" : undefined}
                 className="flex h-full flex-col items-center justify-center gap-0.5"
               >
+                {/* 켜진 표시는 **알약이 아니라 글자색**이 한다.
+                    분류색 soft 는 로즈 틀 위에서 1.09~1.20:1 이라 28px 알약으로는 안 보인다.
+                    알약은 흰색으로 두고(1.30, 넓지 않아도 테두리가 잡힌다),
+                    이름을 브랜드 로즈로 굵게 쓴다(4.6:1). */}
                 <span
                   className={cn(
                     "flex h-7 w-11 items-center justify-center rounded-full text-base transition-colors",
-                    active ? pal.soft : "opacity-60",
+                    active ? "bg-white" : "opacity-60",
                   )}
                 >
                   {item.emoji}
@@ -67,7 +71,7 @@ export function BottomTabs({
                 <span
                   className={cn(
                     "text-[0.625rem] leading-none",
-                    active ? "font-bold text-chrome-ink" : "text-chrome-faint",
+                    active ? "font-bold text-primary-ink" : "text-chrome-faint",
                   )}
                 >
                   {item.label}

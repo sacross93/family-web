@@ -38,14 +38,21 @@ function NavList({
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              // 진한 틀 위. 지금 있는 곳만 밝은 파스텔 알약이 되고, 나머지는 조용하다.
+              // 틀이 연한 로즈가 된 뒤로 **파스텔 알약이 보이지 않는다** — 분류색 soft 여섯 개가
+              // 로즈 위에서 1.09~1.20:1 이라 켜져 있는지 알 수 없었다. 지금 있는 곳은 **흰 판**이
+              // 되고, 분류색은 그 안의 이모지 타일로 옮긴다(흰 판 위에서는 제 색이 보인다).
               "group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-200",
               active
-                ? cn(pal.soft, pal.ink, "font-semibold")
+                ? cn("bg-surface font-semibold", pal.ink)
                 : "text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink",
             )}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-lg">
+            <span
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg",
+                active ? pal.soft : "bg-white",
+              )}
+            >
               {item.emoji}
             </span>
             <span className="flex flex-col leading-tight">
