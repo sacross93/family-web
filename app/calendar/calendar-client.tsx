@@ -343,7 +343,7 @@ export function CalendarClient({
                         key={ev.id}
                         title={ev.title}
                         className={cn(
-                          "block truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight sm:text-[11px]",
+                          "block truncate rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold leading-tight sm:text-[0.6875rem]",
                           palette(ev.color).chip,
                           !inMonth && "opacity-60"
                         )}
@@ -352,7 +352,7 @@ export function CalendarClient({
                       </span>
                     ))}
                     {extra > 0 && (
-                      <span className="px-1 text-[10px] font-semibold text-ink-faint">
+                      <span className="px-1 text-[0.625rem] font-semibold text-ink-faint">
                         +{extra}개
                       </span>
                     )}
@@ -394,7 +394,7 @@ export function CalendarClient({
                         )}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-semibold text-ink">
+                        <span className="block truncate text-[0.9375rem] font-semibold text-ink">
                           {ev.title}
                         </span>
                         <span className="mt-0.5 block text-xs text-ink-soft">

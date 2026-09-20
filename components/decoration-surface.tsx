@@ -270,7 +270,7 @@ export function DecorationSurface({
               title={front ? "콘텐츠 뒤로 보내기" : "콘텐츠 앞으로 가져오기"}
               onClick={() => toggleLayer(d)}
               onPointerDown={(e) => e.stopPropagation()}
-              className="absolute flex h-7 items-center gap-0.5 rounded-full bg-surface px-2 text-[11px] font-bold text-primary-ink shadow-md ring-1 ring-line"
+              className="absolute flex h-7 items-center gap-0.5 rounded-full bg-surface px-2 text-[0.6875rem] font-bold text-primary-ink shadow-md ring-1 ring-line"
               style={{ left: -8, bottom: -14 }}
             >
               {front ? <ChevronsDown className="h-3.5 w-3.5" /> : <ChevronsUp className="h-3.5 w-3.5" />}

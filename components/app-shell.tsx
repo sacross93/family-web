@@ -53,10 +53,10 @@ function NavList({
               {item.emoji}
             </span>
             <span className="flex flex-col leading-tight">
-              <span className="text-[15px]">{item.label}</span>
+              <span className="text-[0.9375rem]">{item.label}</span>
               <span
                 className={cn(
-                  "text-[11px] font-normal",
+                  "text-[0.6875rem] font-normal",
                   active ? "opacity-70" : "text-ink-faint",
                 )}
               >
@@ -89,7 +89,7 @@ function Brand({ site }: { site: SiteConfigData }) {
         <span className="font-display text-2xl font-bold text-ink">
           {site.siteName}
         </span>
-        <span className="mt-1 text-[11px] text-ink-faint">{site.tagline}</span>
+        <span className="mt-1 text-[0.6875rem] text-ink-faint">{site.tagline}</span>
       </span>
     </Link>
   );
@@ -230,7 +230,7 @@ export function AppShell({
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
                 <MessageCircle className="h-4.5 w-4.5" />
               </span>
-              <span className="text-[15px]">포동이에게 물어보기</span>
+              <span className="text-[0.9375rem]">포동이에게 물어보기</span>
             </button>
           )}
           <div className="scrollbar-thin flex-1 overflow-y-auto">

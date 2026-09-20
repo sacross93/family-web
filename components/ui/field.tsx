@@ -9,7 +9,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 const FIELD_BASE =
-  "w-full rounded-2xl border border-line-strong bg-surface px-4 text-[15px] text-ink placeholder:text-ink-faint outline-none transition focus:border-primary focus:ring-4 focus:ring-primary-soft";
+  "w-full rounded-2xl border border-line-strong bg-surface px-4 text-[0.9375rem] text-ink placeholder:text-ink-faint outline-none transition focus:border-primary focus:ring-4 focus:ring-primary-soft";
 
 export function Label({
   children,

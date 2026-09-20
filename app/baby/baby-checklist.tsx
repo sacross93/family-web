@@ -69,7 +69,7 @@ export function BabyChecklist({
             {items.map((it) => (
               <li key={it.id} className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0">
                 <Checkbox checked={it.done} onChange={() => onToggle(it)} color={color} size="sm" label={it.text} />
-                <span className={cn("flex-1 text-[15px]", it.done ? "text-ink-faint line-through" : "text-ink")}>{it.text}</span>
+                <span className={cn("flex-1 text-[0.9375rem]", it.done ? "text-ink-faint line-through" : "text-ink")}>{it.text}</span>
                 <IconButton
                   variant="danger"
                   size="sm"

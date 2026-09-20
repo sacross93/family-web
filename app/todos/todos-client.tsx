@@ -380,13 +380,13 @@ export function TodosClient({
               >
                 <span
                   className={cn(
-                    "text-[11px] font-semibold",
+                    "text-[0.6875rem] font-semibold",
                     sel ? "text-white/80" : "text-ink-faint"
                   )}
                 >
                   {kWeekday(day)}
                 </span>
-                <span className="font-num text-[15px] font-bold leading-none">
+                <span className="font-num text-[0.9375rem] font-bold leading-none">
                   {day.getDate()}
                 </span>
                 <span
@@ -614,7 +614,7 @@ function TodoRow({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "truncate text-[15px]",
+              "truncate text-[0.9375rem]",
               done
                 ? "text-ink-faint line-through"
                 : todo.priority === "low"

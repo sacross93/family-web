@@ -238,7 +238,7 @@ export function MarkdownEditor({
           }}
           placeholder={placeholder}
           autoFocus={autoFocus}
-          className="block w-full resize-none border-0 bg-transparent px-4 py-3 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint"
+          className="block w-full resize-none border-0 bg-transparent px-4 py-3 text-[0.9375rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint"
           style={{ minHeight }}
         />
       )}

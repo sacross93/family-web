@@ -184,7 +184,7 @@ export function AgentThread({
           <span className="text-4xl" aria-hidden="true">
             🌱
           </span>
-          <p className="text-[15px] font-semibold text-ink">뭐든 물어보고, 시켜도 돼요</p>
+          <p className="text-[0.9375rem] font-semibold text-ink">뭐든 물어보고, 시켜도 돼요</p>
           <div className="flex w-full flex-col items-center gap-2">
             {SUGGESTIONS.map((text) => (
               <button
@@ -205,7 +205,7 @@ export function AgentThread({
               <div key={index} className="flex justify-end">
                 <div
                   className={cn(
-                    "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-3xl rounded-br-lg px-4 py-2.5 text-[15px] leading-relaxed",
+                    "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-3xl rounded-br-lg px-4 py-2.5 text-[0.9375rem] leading-relaxed",
                     // soft 배경 + ink 글자 = palette 의 chip. 색은 여기서만 고른다.
                     palette("lavender").chip,
                   )}
@@ -225,7 +225,7 @@ export function AgentThread({
             ) : bubble.text || bubble.results.length > 0 ? (
               <div key={index} className="flex justify-start">
                 <div className="min-w-0 max-w-[92%] break-words rounded-3xl rounded-bl-lg border border-line bg-surface px-4 py-2.5 shadow-sm">
-                  {bubble.text && <MarkdownView className="text-[15px]">{bubble.text}</MarkdownView>}
+                  {bubble.text && <MarkdownView className="text-[0.9375rem]">{bubble.text}</MarkdownView>}
                   {visibleResults(bubble.results).map((result, rIndex) => {
                     const key = result.undo ? undoKey(result.undo) : "";
                     return (

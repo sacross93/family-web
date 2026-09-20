@@ -154,7 +154,7 @@ export function BoardClient({
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-butter-soft text-lg">
             💛
           </span>
-          <span className="text-[15px] text-ink-faint">가족에게 한마디 남기기…</span>
+          <span className="text-[0.9375rem] text-ink-faint">가족에게 한마디 남기기…</span>
           <Plus className="ml-auto h-4 w-4 shrink-0 text-ink-faint" />
         </button>
       ) : (

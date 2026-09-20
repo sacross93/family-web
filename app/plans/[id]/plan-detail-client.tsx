@@ -626,11 +626,11 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                             <span className="font-num block text-sm font-semibold text-ink-soft">
                               {it.time}
                               {showTz && isHome && (
-                                <span className="ml-0.5 text-[10px]">🇰🇷</span>
+                                <span className="ml-0.5 text-[0.625rem]">🇰🇷</span>
                               )}
                             </span>
                             {kr && (
-                              <span className="font-num block text-[10px] leading-tight text-ink-faint">
+                              <span className="font-num block text-[0.625rem] leading-tight text-ink-faint">
                                 🇰🇷 {kr.time}
                                 {kr.dayDelta ? ` ${dayDeltaLabel(kr.dayDelta)}` : ""}
                               </span>
@@ -666,7 +666,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                             <div className="flex items-start justify-between gap-2">
                               <p
                                 className={cn(
-                                  "text-[15px] font-semibold leading-snug",
+                                  "text-[0.9375rem] font-semibold leading-snug",
                                   it.done
                                     ? "text-ink-faint line-through"
                                     : "text-ink"
@@ -1177,7 +1177,7 @@ function ChecklistRow({
       />
       <span
         className={cn(
-          "flex-1 text-[15px]",
+          "flex-1 text-[0.9375rem]",
           item.done ? "text-ink-faint line-through" : "text-ink"
         )}
       >

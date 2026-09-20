@@ -18,7 +18,7 @@ const VARIANTS: Record<Variant, string> = {
 const SIZES: Record<Size, string> = {
   // 폰에서는 40px 은 되게(DESIGN.md §9). 데스크톱은 마우스라 그대로 36px.
   sm: "h-10 gap-1.5 px-3.5 text-sm lg:h-9",
-  md: "h-11 gap-2 px-5 text-[15px]",
+  md: "h-11 gap-2 px-5 text-[0.9375rem]",
   lg: "h-12 gap-2 px-6 text-base",
 };
 

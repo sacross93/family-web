@@ -46,7 +46,7 @@ export function PageHeader({
           </span>
         )}
         <div>
-          <h1 className="font-display text-[28px] font-bold leading-tight text-ink">
+          <h1 className="font-display text-[1.75rem] font-bold leading-tight text-ink">
             {title}
           </h1>
           {description && (

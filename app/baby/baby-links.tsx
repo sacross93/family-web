@@ -119,7 +119,7 @@ export function BabyLinks({
                           🌐
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] text-ink">{label}</span>
+                          <span className="block truncate text-[0.9375rem] text-ink">{label}</span>
                           {it.title.trim() && (
                             <span className="block truncate text-xs text-ink-faint">{domain}</span>
                           )}

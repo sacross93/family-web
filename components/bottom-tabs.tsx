@@ -66,7 +66,7 @@ export function BottomTabs({
                 </span>
                 <span
                   className={cn(
-                    "text-[10px] leading-none",
+                    "text-[0.625rem] leading-none",
                     active ? cn(pal.ink, "font-bold") : "text-ink-faint",
                   )}
                 >
@@ -87,7 +87,7 @@ export function BottomTabs({
               <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-white shadow-sm">
                 <MessageCircle className="h-4 w-4" />
               </span>
-              <span className="text-[10px] font-bold leading-none text-primary-ink">
+              <span className="text-[0.625rem] font-bold leading-none text-primary-ink">
                 포동이
               </span>
             </button>
@@ -115,7 +115,7 @@ export function BottomTabs({
             </span>
             <span
               className={cn(
-                "text-[10px] leading-none",
+                "text-[0.625rem] leading-none",
                 inMore ? "font-bold text-ink" : "text-ink-faint",
               )}
             >

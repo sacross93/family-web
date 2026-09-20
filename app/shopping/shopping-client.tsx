@@ -241,17 +241,21 @@ function ShoppingRow({
         label={item.name}
       />
       <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", palette(item.category).dot)} />
-      <span
-        className={cn(
-          "flex-1 truncate text-[15px]",
-          item.done ? "text-ink-faint line-through" : "text-ink"
+      {/* 이름과 수량을 한 덩어리로 묶고 좁아지면 수량이 아래로 내려간다.
+          한 줄로 밀어 넣으면 글자를 키운 사람에게 "우유" 가 "두" 로 잘린다. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
+        <span
+          className={cn(
+            "min-w-0 flex-1 basis-24 truncate text-[0.9375rem]",
+            item.done ? "text-ink-faint line-through" : "text-ink"
+          )}
+        >
+          {item.name}
+        </span>
+        {item.quantity && (
+          <span className="shrink-0 text-sm text-ink-faint">{item.quantity}</span>
         )}
-      >
-        {item.name}
-      </span>
-      {item.quantity && (
-        <span className="shrink-0 text-sm text-ink-faint">{item.quantity}</span>
-      )}
+      </div>
       {item.addedBy && (
         <Avatar emoji={item.addedBy.emoji} color={item.addedBy.color} name={item.addedBy.name} size="xs" />
       )}

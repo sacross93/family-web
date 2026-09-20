@@ -164,7 +164,7 @@ export function AgentHistory({
                 openingId === chat.id && "opacity-60",
               )}
             >
-              <span className="w-full truncate text-[15px] font-semibold text-ink">{title}</span>
+              <span className="w-full truncate text-[0.9375rem] font-semibold text-ink">{title}</span>
               <span className="text-xs text-ink-faint">
                 {when(chat.updatedAt)} · 메시지 {chat.count}개
               </span>

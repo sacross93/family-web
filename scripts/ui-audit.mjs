@@ -6,6 +6,7 @@
 //   4. `…` 메뉴          펼친 항목이 잘리지 않는가, 바깥을 누르면 닫히는가 (폰만)
 //   5. 탭 타깃           폰에서 누를 수 있는 넓이가 40px 이상인가, 서로 훔치지 않는가
 //   6. 키보드            포커스 표시가 보이는가, 떠 있는 판이 탭을 가두는가
+//   7. 글자 확대         브라우저 글자 크기를 1.5배로 해도 글이 잘리지 않는가
 //
 // 4번이 있는 이유: 조상에 overflow-hidden 이 있으면 메뉴가 잘려 아래 항목을 아예
 // 누를 수 없고(계획 상세에서 "수정·삭제" 가 그랬다), 조상에 transform 이 있으면
@@ -379,6 +380,51 @@ for (const { w, h, tag } of WIDTHS) {
   }
   await ctx.close();
 }
+// ── 글자 확대 ────────────────────────────────────────────
+// 브라우저·폰의 "글자 크기" 를 키운 사람에게도 읽혀야 한다. 화면 확대(zoom)와 달리
+// 글자만 커지므로 한 줄에 밀어 넣은 레이아웃이 깨진다 — 장보기 "우유" 가 "두" 로
+// 잘렸던 적이 있다. 크기 단위가 px 면 아예 안 커지는데, 그건 그것대로 위계가 깨진다.
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await ctx.newPage();
+  if (USER && PASS) {
+    await page.goto(BASE + "/login");
+    await page.getByRole("textbox", { name: "아이디" }).fill(USER);
+    await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
+    await page.getByRole("button", { name: "로그인" }).click();
+    await page.waitForURL(BASE + "/", { timeout: 15000 });
+  }
+  for (const path of PATHS) {
+    await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
+    await page.addStyleTag({ content: "html { font-size: 24px !important; }" });
+    await page.waitForTimeout(350);
+    // 진짜 먹었는지 확인하고 센다 — 안 먹은 채로 "이상 없음" 이라 하면 안 된다.
+    const root = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+    if (root < 23) {
+      problems.push(`글자 확대: ${path} 에서 확대가 적용되지 않아 재지 못했다`);
+      continue;
+    }
+    const { over, cut } = await page.evaluate(() => {
+      const over = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      const cut = [];
+      for (const el of document.querySelectorAll("*")) {
+        if (el.children.length) continue;
+        const t = (el.textContent || "").trim();
+        if (t.length < 2) continue;
+        if (el.getBoundingClientRect().width < 4) continue;
+        // 반 넘게 잘려 못 읽는 것만 — 긴 이름이 말줄임되는 건 정상이다.
+        if (el.clientWidth > 0 && el.scrollWidth > el.clientWidth * 2) {
+          cut.push(`${t.slice(0, 12)}(${el.clientWidth}<${el.scrollWidth})`);
+        }
+      }
+      return { over, cut: [...new Set(cut)].slice(0, 4) };
+    });
+    if (over > 0) problems.push(`글자 확대: ${path} 가로 스크롤 ${over}px`);
+    for (const c of cut) problems.push(`글자 확대: ${path} 에서 "${c}" 가 반 넘게 잘린다`);
+  }
+  await ctx.close();
+}
+
 // ── 키보드 ──────────────────────────────────────────────
 // 포커스 표시가 없으면 탭으로 다닐 때 지금 어디인지 알 수 없고,
 // 떠 있는 판(모달·시트·드로어)이 탭을 가두지 않으면 보이지도 않는 뒤쪽 화면으로
@@ -455,7 +501,7 @@ await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

@@ -111,7 +111,7 @@ export function BabySettingsModal({
         <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-sunken px-4 py-3">
           <Checkbox checked={showOnHome} onChange={setShowOnHome} color={color} label="홈에 보여주기" />
           <span className="flex flex-col">
-            <span className="text-[15px] font-semibold text-ink">홈에 보여주기</span>
+            <span className="text-[0.9375rem] font-semibold text-ink">홈에 보여주기</span>
             <span className="text-xs text-ink-soft">홈 화면에 주차와 최근 기록 카드를 띄워요.</span>
           </span>
         </label>

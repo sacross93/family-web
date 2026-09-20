@@ -66,7 +66,7 @@ export function useConfirm() {
         </>
       }
     >
-      <p className="text-[15px] text-ink-soft">
+      <p className="text-[0.9375rem] text-ink-soft">
         {ask?.description ?? "지우면 다시 볼 수 없어요."}
       </p>
     </Modal>
