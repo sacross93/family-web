@@ -73,7 +73,7 @@ export function BabySettingsModal({
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-[88px_1fr] gap-3">
+        <div className="grid gap-3 sm:grid-cols-[88px_1fr]">
           <Field label="이모지">
             <Input
               value={emoji}

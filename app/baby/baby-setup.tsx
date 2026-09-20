@@ -66,7 +66,9 @@ export function BabySetup({ onCreate }: { onCreate: (p: BabySetupPayload) => Pro
         />
       </Field>
 
-      <div className="grid grid-cols-[88px_1fr] gap-3">
+      {/* 폰에서는 색 여섯 개(232px)가 이모지 칸 옆에 다 못 들어가 여섯째가 다음 줄로 밀렸다.
+          좁을 때는 위아래로 놓는다. */}
+      <div className="grid gap-3 sm:grid-cols-[88px_1fr]">
         <Field label="이모지">
           <Input
             value={emoji}
@@ -77,7 +79,7 @@ export function BabySetup({ onCreate }: { onCreate: (p: BabySetupPayload) => Pro
           />
         </Field>
         <Field label="색">
-          <ColorPicker value={color} onChange={setColor} className="pt-1.5" />
+          <ColorPicker value={color} onChange={setColor} className="pt-1.5 sm:pt-1.5" />
         </Field>
       </div>
 

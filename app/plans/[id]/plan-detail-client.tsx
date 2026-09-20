@@ -19,6 +19,7 @@ import {
   Card,
   Button,
   IconButton,
+  ItemActions,
   Checkbox,
   EmptyState,
   Tag,
@@ -437,7 +438,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         onEditingChange={setDecorating}
       >
       {/* 헤더 (히어로) */}
-      <Card flush className="mb-6 overflow-hidden">
+      <Card flush className="group relative mb-6 overflow-hidden">
         <div className={cn("bg-gradient-to-br p-5 sm:p-6", pal.gradient)}>
           <div className="flex items-start gap-4">
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface/70 text-3xl shadow-sm">
@@ -452,7 +453,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                   </span>
                 )}
               </div>
-              <h1 className="mt-1.5 font-display text-2xl font-bold leading-tight text-ink">
+              <h1 className="mt-1.5 break-keep font-display text-2xl font-bold leading-tight text-ink">
                 {plan.title}
               </h1>
               <div className="mt-1.5 flex flex-col gap-1">
@@ -481,38 +482,18 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                 </div>
               )}
             </div>
-            <div className="flex shrink-0 gap-1">
-              <IconButton
-                variant="surface"
-                aria-label="사진 꾸미기"
-                onClick={() => setDecorating(true)}
-                className={decorating ? "text-primary" : undefined}
-              >
-                <Sparkles className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="surface"
-                aria-label="시차 설정"
-                onClick={openTz}
-                className={plan.tzOffsetMin !== 0 ? "text-primary" : undefined}
-              >
-                <Clock className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="surface"
-                aria-label="계획 수정"
-                onClick={openEditPlan}
-              >
-                <Pencil className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="surface"
-                aria-label="계획 삭제"
-                onClick={deletePlan}
-              >
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-            </div>
+            {/* 아이콘 넷이 제목과 같은 줄을 먹어 폰에서 글자 폭이 100px 밖에 안 남았다 —
+                "이번/주말/계획" 처럼 한 줄에 한 단어, 날짜는 "7월/25일/(토)부/터" 로 넉 줄.
+                `…` 하나로 모아 줄에서 빼면 제목이 제 폭을 갖는다. */}
+            <ItemActions
+              className="right-4 top-4 sm:right-5 sm:top-5"
+              actions={[
+                { label: "사진 꾸미기", icon: Sparkles, onClick: () => setDecorating(true) },
+                { label: "시차 설정", icon: Clock, onClick: openTz },
+                { label: "계획 수정", icon: Pencil, onClick: openEditPlan },
+                { label: "계획 삭제", icon: Trash2, onClick: deletePlan, danger: true },
+              ]}
+            />
           </div>
         </div>
       </Card>
