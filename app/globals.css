@@ -14,9 +14,13 @@
   --color-paper: #fbfaf7;
   --color-surface: #ffffff;
   --color-sunken: #f3f1ec;
-  --color-ink: #3a3a44;
-  --color-ink-soft: #6e6e7a;
-  --color-ink-faint: #a6a6b2;
+  /* 글자 세 단계. 흰 배경(#fff)·종이(#fbfaf7) 기준 대비를 적어 둔다 —
+     WCAG AA 본문은 4.5:1 이다. 예전 --color-ink-faint(#a6a6b2)는 **2.41:1** 이라
+     날짜·개수·캡션이 사실상 안 읽혔다. 세 단계 간격은 유지하면서 가장 옅은 것도
+     기준을 넘도록 다시 잡았다. 더 옅게 만들고 싶으면 대비부터 재 볼 것. */
+  --color-ink: #3a3a44; /* 11.2 : 1 */
+  --color-ink-soft: #585862; /* 7.0 : 1 */
+  --color-ink-faint: #717179; /* 4.8 : 1 (예전 2.4) */
   --color-line: #ece9e3;
   --color-line-strong: #e0dcd4;
 

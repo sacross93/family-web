@@ -31,8 +31,8 @@
 | 카드·표면 | `bg-surface` | `#FFFFFF` |
 | 가라앉은 영역 (아이콘 타일 등) | `bg-sunken` | `#F3F1EC` |
 | 본문 텍스트 | `text-ink` | `#3A3A44` |
-| 보조 텍스트 | `text-ink-soft` | `#6E6E7A` |
-| 흐린 텍스트·플레이스홀더 | `text-ink-faint` | `#A6A6B2` |
+| 보조 텍스트 | `text-ink-soft` | `#585862` |
+| 흐린 텍스트·플레이스홀더 | `text-ink-faint` | `#717179` |
 | 실선 | `border-line` | `#ECE9E3` |
 | 진한 실선 | `border-line-strong` | `#E0DCD4` |
 
@@ -187,7 +187,12 @@ app/api/<feature>/[id]/route.ts   # PATCH(수정) · DELETE(삭제)
 - **목록 항목의 `Checkbox` 에는 그 항목 이름을 `label` 로 준다** — 이름이 없으면 스크린리더에
   "체크박스" 라고만 읽혀 무엇을 켜는지 알 수 없다. 여러 줄이 같은 "완료" 를 갖는 것도 같은 문제다.
 - 색만으로 정보 전달 금지 — 색 + 텍스트/아이콘 병행(태그엔 라벨 필수).
-- 본문 대비 확보(`text-ink` on `surface`). **모바일 탭 타깃 ≥ 40px** — `npm run ui:audit` 가
+- **글자 대비는 재서 정한다**(`lib/colors.contrast.test.ts`가 토큰 값으로 확인).
+  흰 배경·종이 배경에서 `ink`·`ink-soft`·`ink-faint` 셋 다 **4.5:1 이상**.
+  예전 `ink-faint`(#A6A6B2)는 2.41:1 이라 날짜·개수·캡션이 사실상 안 읽혔다.
+  더 옅게 만들고 싶으면 대비부터 재 볼 것 — 세 단계 간격도 같이 본다(한 덩어리가 되면 위계가 사라진다).
+  `primary`는 4.01:1 이라 **아이콘·테두리·큰 글씨에만**. 작은 글자에는 `primary-ink`.
+- **모바일 탭 타깃 ≥ 40px** — `npm run ui:audit` 가
   보이는 크기가 아니라 **실제로 눌리는 넓이**를 잰다.
   - 버튼·칩은 폰에서 `h-10`(데스크톱은 `lg:h-8`처럼 낮춰도 된다. 마우스는 정확하다).
   - 체크 동그라미처럼 **작아야 예쁜 것**은 `.tap-target`(globals.css)을 붙인다 —
