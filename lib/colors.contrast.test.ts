@@ -185,6 +185,18 @@ describe("글자 대비", () => {
     }
   });
 
+  it("파스텔 동그라미 위의 표시는 잉크로 — 흰색은 거기서 아무것도 표시하지 못한다", () => {
+    // 체크 표시(장보기·준비물), 색 고르개의 체크가 파스텔 `dot` 위에 놓인다.
+    // 흰색이면 1.28(버터)~1.80(로즈) 이라 담았는지 아닌지가 눈으로 안 잡혔다.
+    // 그래픽이므로 3:1 을 본다.
+    for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {
+      const r = contrast(token("ink"), token(key));
+      expect(r, `ink on ${key} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
+      // 흰색이 왜 안 되는지도 같이 박아 둔다 — 값이 바뀌면 이 줄이 먼저 알려 준다.
+      expect(contrast("#ffffff", token(key)), `흰색 on ${key}`).toBeLessThan(3);
+    }
+  });
+
   it("파스텔 태그는 제 짝 배경 위에서 3:1 을 넘는다", () => {
     // Tag 는 `bg-<색>-soft` 위에 `text-<색>-ink` 로 그려진다.
     for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {
