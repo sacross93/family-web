@@ -22,7 +22,10 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-sunken p-1",
+        // 트랙에 테두리가 필요하다 — `sunken` 은 분홍 페이지와 **ΔE 3.3** 이라
+        // 골라 놓은 흰 알약만 보이고 "여기 고를 게 더 있다" 는 게 안 보였다.
+        // `line-strong` 은 ΔE 12.7 로 이 판의 기준선(9.3)을 넘는다.
+        "inline-flex items-center gap-1 rounded-full border border-line-strong bg-sunken p-1",
         className
       )}
     >

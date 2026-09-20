@@ -296,8 +296,12 @@ export function CalendarClient({
                 <ChevronRight className="h-5 w-5" />
               </IconButton>
             </div>
+            {/* `soft` 가 아니라 `outline`. 이 줄은 **페이지 바탕 위**에 그냥 놓여 있어서
+                `soft` 의 연한 채움이 분홍 페이지와 ΔE 3.1 이 된다 — 옆의 ‹ › 는 흰 동그라미로
+                버튼처럼 보이는데 "오늘" 만 글자가 떠 있는 것처럼 보였다. 같은 묶음인데.
+                (흰 판 **안**에 있는 `soft` 버튼은 그대로 둔다. 거기서는 흰 바탕이 채움을 드러낸다.) */}
             <Button
-              variant="soft"
+              variant="outline"
               size="sm"
               onClick={() => setCursor(startOfMonth(new Date()))}
             >

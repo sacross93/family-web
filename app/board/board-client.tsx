@@ -321,8 +321,13 @@ function NoteCard({
   return (
     <div
       className={cn(
-        "group relative mb-4 break-inside-avoid rounded-lg p-5 transition-all duration-300 animate-pop-in",
+        "group relative mb-4 break-inside-avoid rounded-lg border p-5 transition-all duration-300 animate-pop-in",
         pal.soft,
+        // 테두리는 **그 쪽지의 기본색**으로. 채움만으로는 로즈 쪽지가 분홍 페이지에
+        // 파묻혔다(ΔE 2.9 — 라벤더 8.4·스카이 11.0·버터 19.2 는 색상이 달라 보이는데
+        // 로즈만 같은 계열이라 안 보였다). 여섯 중 다섯만 쪽지처럼 보이면 안 된다.
+        // 기본색 테두리는 페이지와 ΔE 22.7~41.2 — 여섯 다 가장자리가 생긴다.
+        pal.border,
         // 워시테이프(흰 반투명 조각)는 뗐다 — 옛 '코르크보드' 컨셉의 흔적이라
         // 새 바탕 위에서는 쪽지 위에 얹힌 흰 얼룩처럼 보였다.
         // 고정 쪽지는 핀 하나로 충분하다.

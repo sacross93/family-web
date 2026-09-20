@@ -732,6 +732,70 @@ for (const { w, h, tag } of WIDTHS) {
     }
     return [...new Set(out)].slice(0, 5);
   };
+
+  // ── 판이 판 위에서 보이는가 ─────────────────────────────
+  // 대비(명도)만으로는 못 가른다: 라벤더 쪽지는 분홍 페이지와 대비 1.03 이지만
+  // **색상이 달라** 잘 보인다. 사람 눈에 가까운 ΔE(Lab 거리)로 잰다.
+  // 이 판의 기준선은 9.3 — 포동이의 흰 카드가 대화 바탕에서 떨어진 만큼이다.
+  // 하루에 네 번 같은 것에 걸렸다: 오류 토스트 2.9 · 내 말풍선 3.1 ·
+  // 로즈 쪽지 2.9 · 캘린더 "오늘" 3.1. 전부 "연한 판을 연한 판 위에" 였다.
+  const plates = () => {
+    const parse = (c) => {
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    };
+    const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const over = (f, b) => ({ r: f.r * f.a + b.r * (1 - f.a), g: f.g * f.a + b.g * (1 - f.a), b: f.b * f.a + b.b * (1 - f.a), a: 1 });
+    const lab = (c) => {
+      const r = lin(c.r), g = lin(c.g), b = lin(c.b);
+      const X = r * 0.4124 + g * 0.3576 + b * 0.1805, Y = r * 0.2126 + g * 0.7152 + b * 0.0722, Z = r * 0.0193 + g * 0.1192 + b * 0.9505;
+      const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+      const fx = f(X / 0.95047), fy = f(Y), fz = f(Z / 1.08883);
+      return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+    };
+    const dE = (a, b) => { const A = lab(a), B = lab(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); };
+    const bgFrom = (el) => {
+      let cur = el, acc = null;
+      while (cur) {
+        const cs = getComputedStyle(cur);
+        if (cs.backgroundImage && cs.backgroundImage !== "none") return null;
+        const c = parse(cs.backgroundColor);
+        if (c && c.a > 0) { acc = acc ? over(acc, c) : c; if (acc.a >= 0.999) return acc; }
+        cur = cur.parentElement;
+      }
+      return null;
+    };
+    const key = (c) => `${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)}`;
+    const out = [];
+    for (const el of document.querySelectorAll("body *")) {
+      if (el.closest("nextjs-portal")) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === "hidden" || cs.opacity === "0") continue;
+      if (cs.backgroundImage && cs.backgroundImage !== "none") continue;
+      const own = parse(cs.backgroundColor);
+      if (!own || own.a === 0) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width * r.height < 1600) continue;                 // 작은 점·막대는 판이 아니다
+      if ((parseFloat(cs.borderTopLeftRadius) || 0) < 4) continue; // 둥근 "판" 만
+      const behind = bgFrom(el.parentElement);
+      if (!behind) continue;
+      const plate = own.a < 1 ? over(own, behind) : own;
+      if (key(plate) === key(behind)) continue;                // 같은 색이면 분리하려던 게 아니다
+      // 판은 **채움 아니면 가장자리**로 정의된다. 테두리가 충분히 떨어져 있으면 형태는 보인다.
+      const bw = parseFloat(cs.borderTopWidth) || 0;
+      const bc = parse(cs.borderTopColor);
+      const edge = bw >= 1 && bc && bc.a > 0 ? dE(bc.a < 1 ? over(bc, behind) : bc, behind) : 0;
+      const d = dE(plate, behind);
+      if (d < 7 && edge < 7) {
+        const label = (el.getAttribute("aria-label") || (el.textContent || "").trim() || el.tagName).slice(0, 18);
+        out.push(`"${label}" ΔE ${d.toFixed(1)} (테두리 ${edge.toFixed(1)}) ${Math.round(r.width)}×${Math.round(r.height)}`);
+      }
+    }
+    return [...new Set(out)].slice(0, 4);
+  };
+
   for (const { w, h, tag } of WIDTHS.filter((x) => x.w !== 768)) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
@@ -745,6 +809,7 @@ for (const { w, h, tag } of WIDTHS) {
     for (const path of PATHS) {
       await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
       for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}: 대비 부족 — ${bad}`);
+      for (const bad of await page.evaluate(plates)) problems.push(`${tag} ${path}: 판이 바탕에 묻힌다 — ${bad}`);
 
       // **모달 안도 본다.** 겹쳐 뜨는 판은 목록 화면을 훑는 것만으로는 한 번도 안 재진다 —
       // 오류 토스트가 페이지와 1.02:1 인 채로 오래 살아남은 것이 그래서였다(그건 눈으로 찾았다).
@@ -755,6 +820,9 @@ for (const { w, h, tag } of WIDTHS) {
         if (await page.locator('[role="dialog"]').first().isVisible().catch(() => false)) {
           for (const bad of await page.evaluate(scan)) {
             problems.push(`${tag} ${path}(모달): 대비 부족 — ${bad}`);
+          }
+          for (const bad of await page.evaluate(plates)) {
+            problems.push(`${tag} ${path}(모달): 판이 바탕에 묻힌다 — ${bad}`);
           }
         }
         await page.keyboard.press("Escape").catch(() => {});
@@ -769,7 +837,7 @@ await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA · 판이 바탕에서 떠 보임");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);
