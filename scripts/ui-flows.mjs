@@ -194,7 +194,8 @@ await page.waitForURL(BASE + "/");
 // 시작할 때 MARK 가 붙은 것을 전부 걷어내면 몇 번을 돌려도 같은 결과가 나온다.
 {
   const swept = await page.evaluate(async (mark) => {
-    const paths = ["anniversaries", "todos", "shopping", "plans", "albums", "board"];
+    // `baby-entries` 가 빠져 있었다 — 아기 기록만 찌꺼기가 쌓여도 안 치워졌다.
+    const paths = ["anniversaries", "todos", "shopping", "plans", "albums", "board", "baby-entries"];
     let n = 0;
     for (const path of paths) {
       const list = await fetch(`/api/${path}`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
@@ -515,8 +516,10 @@ await step("체크하면 줄이 그어진다", async () => {
   if (!struck) throw new Error("체크해도 줄이 안 그어진다");
 });
 await step("할일 지우기", async () => {
-  await page.getByRole("button", { name: "더보기" }).first().click();
-  await page.waitForTimeout(350);
+  // **그 줄의** `…` 를 연다. 화면의 첫 `…` 를 누르면 **다른 할일이 지워지고** 우리가 만든 건
+  // 남아서, 검사가 "서버엔 안 지워졌다" 고 엉뚱하게 실패한다(시드를 다시 깔자마자 그랬다).
+  // 자리로 짚지 말 것 — 운영에서 한 번 아찔했던 것과 같은 실수다.
+  await openMenu("li", MARK + "우체국");
   await page.locator('[data-item-menu] button:has-text("삭제")').click();
   await page.waitForTimeout(1200);
   await page.reload({ waitUntil: "networkidle" });
@@ -649,10 +652,9 @@ await step("접힌 줄을 펴면 날짜·누가·컨디션이 있다", async () 
 });
 
 await step("기록 지우기 — 새로고침해도 안 되살아난다", async () => {
-  await page.locator("article, li, div").filter({ hasText: MARK }).last();
-  const menu = page.getByRole("button", { name: "더보기" }).first();
-  await menu.click();
-  await page.waitForTimeout(350);
+  // 여기도 **그 카드의** `…` 로. 앞 줄에 아무 데도 안 쓰는 locator 가 매달려 있었고,
+  // 실제로는 화면의 첫 `…`(= 다른 기록)를 누르고 있었다.
+  await openMenu("[class*='rounded-lg']", MARK);
   await page.locator('[data-item-menu] button:has-text("삭제")').click();
   await page.waitForTimeout(700);
   // 아기 기록은 다시 만들 수 없는 글이라 한 번 묻는다(DESIGN §8).

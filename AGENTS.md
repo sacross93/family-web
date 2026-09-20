@@ -28,6 +28,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 ## DB / 실행
 - 로컬: `postgresql://ascentai@localhost:5432/podong` (Homebrew `postgresql@16`, `brew services start postgresql@16`).
 - `npm run dev` · `npm run db:push` · `npm run db:seed` · `npm run db:reset` · `npm run db:studio`.
+- ⚠️ **`db:reset` 은 `AgentAuth` 를 날린다** — `--force-reset` 이라 테이블을 통째로 다시 만든다. 거기 들어 있는 건 사용자의 **암호화된 ChatGPT 토큰**이고, 다시 받으려면 브라우저 로그인(`npm run agent:login`)을 또 해야 한다. 시드 내용만 되돌리고 싶으면 **`db:seed`** 를 쓸 것 — 그건 콘텐츠 표만 지우고 `AgentAuth`·`AppUser` 는 건드리지 않는다(확인함: 지운 뒤에도 토큰 1행 그대로).
 
 ## 로그인 / 인증 (적용됨)
 - 아이디·비밀번호 로그인. `AppUser`(bcrypt) + jose 세션 쿠키. 전 페이지를 `proxy.ts`가 보호.
