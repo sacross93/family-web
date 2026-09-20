@@ -58,7 +58,10 @@ export function BabyHomeInvite({
         </Link>{" "}
         <span className="font-num">{summary}</span>
       </p>
-      <Button size="sm" variant="soft" onClick={showOnHome} disabled={busy}>
+      {/* `soft` 가 아니라 `outline` — 이 카드는 테두리만 있고 **채움이 없어서**
+          버튼이 페이지 바탕(`paper`) 위에 바로 놓인다. `soft` 의 연한 채움은 거기서
+          ΔE 3.1 이라 글자만 떠 있는 것처럼 보였다(캘린더 `오늘` 과 같은 자리). */}
+      <Button size="sm" variant="outline" onClick={showOnHome} disabled={busy}>
         홈에서도 보기
       </Button>
     </div>
