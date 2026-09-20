@@ -15,7 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { ArrowUp, Menu, Paperclip, Plus, Square, X } from "lucide-react";
 
-import { IconButton, Spinner, Textarea } from "@/components/ui";
+import { IconButton, Spinner, Textarea, useFocusTrap } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AgentHistory } from "./agent-history";
 import { AgentThread } from "./agent-thread";
@@ -62,6 +62,8 @@ function isPhone(): boolean {
 export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   // 닫아도 훅은 살아 있다 — 다시 열면 하던 이야기가 그대로 이어진다.
   const state = useAgentChat();
+  // 시트가 떠 있는 동안 탭이 뒤쪽 화면으로 새어 나가지 않게.
+  const panel = useFocusTrap<HTMLDivElement>(open);
   const mounted = useSyncExternalStore(
     NEVER_CHANGES,
     () => true,
@@ -231,6 +233,9 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
         className="fixed inset-0 z-50 bg-ink/35 backdrop-blur-sm sm:hidden"
       />
       <div
+        ref={panel}
+        tabIndex={-1}
+        aria-modal="true"
         role="dialog"
         aria-label="포동이에게 물어보기"
         className={cn(

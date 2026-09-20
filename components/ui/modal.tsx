@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFocusTrap } from "./use-focus-trap";
 
 export function Modal({
   open,
@@ -22,6 +23,7 @@ export function Modal({
   footer?: ReactNode;
   size?: "sm" | "md" | "lg";
 }) {
+  const panel = useFocusTrap<HTMLDivElement>(open);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -49,6 +51,8 @@ export function Modal({
         className="absolute inset-0 bg-ink/35 backdrop-blur-sm animate-[fade-up_.2s_ease]"
       />
       <div
+        ref={panel}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}

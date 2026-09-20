@@ -5,6 +5,7 @@
 //   3. 페이지 길이       몇 화면어치인가 — 짧을수록 좋다는 뜻은 아니고, 늘어나면 눈에 띄게
 //   4. `…` 메뉴          펼친 항목이 잘리지 않는가, 바깥을 누르면 닫히는가 (폰만)
 //   5. 탭 타깃           폰에서 누를 수 있는 넓이가 40px 이상인가, 서로 훔치지 않는가
+//   6. 키보드            포커스 표시가 보이는가, 떠 있는 판이 탭을 가두는가
 //
 // 4번이 있는 이유: 조상에 overflow-hidden 이 있으면 메뉴가 잘려 아래 항목을 아예
 // 누를 수 없고(계획 상세에서 "수정·삭제" 가 그랬다), 조상에 transform 이 있으면
@@ -378,11 +379,83 @@ for (const { w, h, tag } of WIDTHS) {
   }
   await ctx.close();
 }
+// ── 키보드 ──────────────────────────────────────────────
+// 포커스 표시가 없으면 탭으로 다닐 때 지금 어디인지 알 수 없고,
+// 떠 있는 판(모달·시트·드로어)이 탭을 가두지 않으면 보이지도 않는 뒤쪽 화면으로
+// 포커스가 새어 나가 엉뚱한 곳에서 엔터가 눌린다.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  if (USER && PASS) {
+    await page.goto(BASE + "/login");
+    await page.getByRole("textbox", { name: "아이디" }).fill(USER);
+    await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
+    await page.getByRole("button", { name: "로그인" }).click();
+    await page.waitForURL(BASE + "/", { timeout: 15000 });
+  }
+  await page.waitForTimeout(500);
+
+  const focusInfo = () =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body || el.closest("nextjs-portal")) return null;
+      const st = getComputedStyle(el);
+      return {
+        label: (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().replace(/\s+/g, " ").slice(0, 20),
+        marked: (st.outlineStyle !== "none" && parseFloat(st.outlineWidth) > 0) || st.boxShadow !== "none",
+      };
+    });
+
+  const unmarked = new Set();
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab");
+    const f = await focusInfo();
+    if (f && !f.marked) unmarked.add(f.label);
+  }
+  for (const label of unmarked) problems.push(`키보드: "${label}" 에 포커스 표시가 없다`);
+
+  // 떠 있는 판이 탭을 가두는가
+  const traps = [
+    ["모달", async () => {
+      await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: /기념일 추가|첫 기념일/ }).first().click();
+    }, ".fixed.inset-0.z-50"],
+    ["포동이 시트", async () => {
+      await page.goto(BASE + "/", { waitUntil: "networkidle" });
+      const b = page.getByRole("button", { name: "포동이에게 물어보기" });
+      if (await b.count()) await b.first().click(); else throw new Error("skip");
+    }, '[role="dialog"][aria-label="포동이에게 물어보기"]'],
+  ];
+  for (const [name, openIt, sel] of traps) {
+    try {
+      await openIt();
+    } catch {
+      continue; // 그 화면이 없으면 건너뛴다(예: 포동이가 꺼져 있음)
+    }
+    await page.waitForTimeout(800);
+    const leaked = new Set();
+    for (let i = 0; i < 22; i++) {
+      await page.keyboard.press("Tab");
+      const out = await page.evaluate((s) => {
+        const el = document.activeElement;
+        const panel = document.querySelector(s);
+        if (!el || !panel || el.closest("nextjs-portal")) return null;
+        return panel.contains(el) ? null : (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 18);
+      }, sel);
+      if (out) leaked.add(out);
+    }
+    for (const l of leaked) problems.push(`키보드: ${name} 이 열려 있는데 탭이 "${l}" 로 새어 나간다`);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+  }
+  await ctx.close();
+}
+
 await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 맨 아래에서 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

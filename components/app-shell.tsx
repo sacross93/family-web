@@ -10,6 +10,7 @@ import { Decorations } from "@/components/decorations";
 import { AgentFab } from "@/components/agent/agent-fab";
 import { BottomTabs } from "@/components/bottom-tabs";
 import { ShellProvider } from "@/components/shell-context";
+import { useFocusTrap } from "@/components/ui";
 import { isNavActive, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
 import type { SessionUser } from "@/lib/session";
@@ -171,6 +172,8 @@ export function AppShell({
   const [decorating, setDecorating] = useState(false);
   // 포동이 시트. 탭바(여는 쪽)와 시트가 형제라 공통 부모인 셸이 쥔다.
   const [asking, setAsking] = useState(false);
+  // 드로어가 열려 있는 동안 탭이 뒤쪽 화면으로 새어 나가지 않게.
+  const drawer = useFocusTrap<HTMLElement>(open);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -276,7 +279,14 @@ export function AppShell({
               onClick={() => setOpen(false)}
               className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
             />
-            <aside className="absolute inset-y-0 left-0 flex w-[80%] max-w-[300px] flex-col gap-6 bg-surface px-4 py-6 shadow-lg animate-[pop-in_.25s_ease]">
+            <aside
+            ref={drawer}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label="메뉴"
+            className="absolute inset-y-0 left-0 flex w-[80%] max-w-[300px] flex-col gap-6 bg-surface px-4 py-6 shadow-lg animate-[pop-in_.25s_ease]"
+          >
               <div className="flex items-center justify-between">
                 <Brand site={site} />
                 <button

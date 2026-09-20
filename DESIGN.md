@@ -183,6 +183,10 @@ app/api/<feature>/[id]/route.ts   # PATCH(수정) · DELETE(삭제)
 ## 9. 접근성 (Accessibility) — 품질 하한선
 
 - 모든 인터랙티브 요소에 보이는 **포커스 링**(globals.css 기본 제공).
+- **떠 있는 판(모달·시트·드로어)은 탭을 가둔다** — `useFocusTrap(open)` 을 쓰고
+  판에 `tabIndex={-1} role="dialog" aria-modal="true"` 를 준다. 가두지 않으면 폼이
+  떠 있는 채로 Tab 이 **보이지도 않는 뒤쪽 화면으로 새어 나가** 엉뚱한 데서 엔터가 눌린다.
+  닫을 때는 열기 전 자리로 포커스를 돌려준다. `npm run ui:audit` 이 확인한다.
 - 아이콘 전용 버튼엔 `aria-label`.
 - **목록 항목의 `Checkbox` 에는 그 항목 이름을 `label` 로 준다** — 이름이 없으면 스크린리더에
   "체크박스" 라고만 읽혀 무엇을 켜는지 알 수 없다. 여러 줄이 같은 "완료" 를 갖는 것도 같은 문제다.
