@@ -21,7 +21,8 @@
     "agent:auth": "tsx scripts/agent-auth.ts",
     "agent:login": "tsx scripts/codex-login.ts",
     "postinstall": "prisma generate",
-    "ui:audit": "node scripts/ui-audit.mjs"
+    "ui:audit": "node scripts/ui-audit.mjs",
+    "ui:flows": "node scripts/ui-flows.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

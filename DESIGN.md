@@ -180,6 +180,8 @@ app/api/<feature>/[id]/route.ts   # PATCH(수정) · DELETE(삭제)
 
 - 모든 인터랙티브 요소에 보이는 **포커스 링**(globals.css 기본 제공).
 - 아이콘 전용 버튼엔 `aria-label`.
+- **목록 항목의 `Checkbox` 에는 그 항목 이름을 `label` 로 준다** — 이름이 없으면 스크린리더에
+  "체크박스" 라고만 읽혀 무엇을 켜는지 알 수 없다. 여러 줄이 같은 "완료" 를 갖는 것도 같은 문제다.
 - 색만으로 정보 전달 금지 — 색 + 텍스트/아이콘 병행(태그엔 라벨 필수).
 - 본문 대비 확보(`text-ink` on `surface`). 모바일 탭 타깃 ≥ 40px(h-10/h-11).
 - `prefers-reduced-motion` 존중(globals.css에서 애니메이션 억제).

@@ -652,7 +652,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                             onChange={() => toggleItem(it)}
                             color={it.category}
                             size="sm"
-                            label="완료"
+                            label={it.title}
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -1155,7 +1155,13 @@ function ChecklistRow({
 }) {
   return (
     <li className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0">
-      <Checkbox checked={item.done} onChange={() => onToggle(item)} color={color} size="sm" />
+      <Checkbox
+        checked={item.done}
+        onChange={() => onToggle(item)}
+        color={color}
+        size="sm"
+        label={item.text}
+      />
       <span
         className={cn(
           "flex-1 text-[15px]",

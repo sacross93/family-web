@@ -234,7 +234,12 @@ function ShoppingRow({
 }) {
   return (
     <li className="group flex items-center gap-3 border-b border-line px-5 py-3 last:border-0">
-      <Checkbox checked={item.done} onChange={() => onToggle(item)} color={item.category} />
+      <Checkbox
+        checked={item.done}
+        onChange={() => onToggle(item)}
+        color={item.category}
+        label={item.name}
+      />
       <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", palette(item.category).dot)} />
       <span
         className={cn(
