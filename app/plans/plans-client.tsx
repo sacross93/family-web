@@ -100,6 +100,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
         emoji="🗺️"
         title="계획"
         description="여행도 주말도, 날짜별로 함께 그려봐요"
+        summary={plans.length > 0 ? `계획 ${plans.length}개` : undefined}
       >
         {/* 목록이 비면 아래 빈 화면의 초대가 같은 일을 한다 — 같은 버튼을 한 화면에
             두 번 두지 않는다(DESIGN.md §1 "화면당 강조는 하나만"). */}
@@ -163,8 +164,10 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
                       </p>
                     )}
                     <p className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-ink-faint">
-                      <ListChecks className="h-3.5 w-3.5" />
-                      일정 <span>{plan._count.items}</span>개
+                      <ListChecks className="h-3.5 w-3.5 shrink-0" />
+                      {/* 한 덩어리로 감싼다 — flex 안에서는 "일정", 숫자, "개" 가 각각
+                          flex 항목이 되어 `gap` 이 그 사이에 들어간다("일정 5 개"). */}
+                      <span>일정 {plan._count.items}개</span>
                     </p>
                   </div>
                 </Card>

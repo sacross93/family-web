@@ -39,11 +39,19 @@ export function ItemActions({
   actions,
   className,
   inline,
+  quiet,
 }: {
   actions: ItemAction[];
   className?: string;
   /** 카드 모서리에 얹지 않고 줄 안에 그대로 놓는다(목록 한 줄의 오른쪽 끝 등). */
   inline?: boolean;
+  /**
+   * 목록 안에서 쓸 때. 흰 알약 대신 글자색 아이콘만 남긴다.
+   *
+   * 줄마다 하나씩 있으면 흰 동그라미가 세로로 여섯 개 서서, 무엇을 보러 온 목록인지보다
+   * 점 세 개가 먼저 눈에 든다. 눌리는 넓이는 그대로 두고 **보이는 무게만** 던다.
+   */
+  quiet?: boolean;
 }) {
   const [at, setAt] = useState<{ top: number; right: number } | null>(null);
   const open = at !== null;
@@ -129,11 +137,12 @@ export function ItemActions({
       <div className="lg:hidden">
         <IconButton
           ref={btnRef}
-          variant="surface"
+          variant={quiet ? "ghost" : "surface"}
           size="sm"
           aria-label="더보기"
           aria-expanded={open}
           onClick={toggle}
+          className={quiet ? "text-ink-faint" : undefined}
         >
           <MoreHorizontal className="h-4 w-4" />
         </IconButton>

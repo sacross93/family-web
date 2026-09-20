@@ -226,12 +226,10 @@ export function CalendarClient({
         emoji="📅"
         title="캘린더"
         description="온 가족의 이번 달 일정을 한눈에"
+        summary={monthLabel}
       >
-        <span title="곧 지원돼요 (설정 필요)" className="inline-flex">
-          <Button variant="outline" size="md" disabled aria-label="구글 캘린더 연동 (곧 지원)">
-            구글 캘린더 연동
-          </Button>
-        </span>
+        {/* 구글 캘린더 연동은 아직 안 된다. 눌리지 않는 버튼이 폰에서 제일 좋은 자리를
+            차지하고 "일정 추가" 와 폭을 나눠 가지고 있었다 — 되면 그때 올린다. */}
         <Button onClick={() => openNew(new Date())}>
           <Plus className="h-4 w-4" /> 일정 추가
         </Button>

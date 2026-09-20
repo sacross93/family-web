@@ -304,7 +304,12 @@ export function TodosClient({
   // ── 렌더 ────────────────────────────────────
   return (
     <div>
-      <PageHeader emoji="📝" title="할일" description="그날그날 우리 가족이 할 일">
+      <PageHeader
+        emoji="📝"
+        title="할일"
+        description="그날그날 우리 가족이 할 일"
+        summary={total > 0 ? `${doneCount}/${total} 했어요` : "오늘"}
+      >
         {permission !== "unsupported" &&
           (permission === "granted" ? (
             <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-mint-soft px-3.5 text-sm font-semibold text-mint-ink">

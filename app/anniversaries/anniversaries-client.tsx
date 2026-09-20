@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
   PageHeader,
   Card,
-  CardTitle,
   Button,
-  Tag,
   Avatar,
   EmptyState,
   Modal,
@@ -97,7 +95,10 @@ export function AnniversariesClient({
     .map((item) => ({ item, d: dday(item.date, { recurring: item.recurring }) }))
     .sort(compareDecorated);
 
-  const featured = decorated.filter((x) => x.d.days >= 0).slice(0, 3);
+  // 크게 보여 주는 것은 **가장 가까운 하나뿐**이다.
+  // 전에는 셋을 큰 파스텔 카드로 그려, 폰에서 세 카드가 720px 을 먹고
+  // 48px 짜리 D-day 숫자 셋이 서로 목소리를 높였다(DESIGN §1 "과감함은 한 곳에").
+  const featured = decorated.filter((x) => x.d.days >= 0).slice(0, 1);
   // 위에 크게 실은 것은 아래에서 뺀다 — 6건 보려고 두 벌을 스크롤하지 않게.
   const featuredIds = new Set(featured.map((x) => x.item.id));
   const rest = decorated.filter((x) => !featuredIds.has(x.item.id));
@@ -194,19 +195,13 @@ export function AnniversariesClient({
 
   return (
     <div>
+      {/* 더하는 버튼은 아래 목록 머리글에 있다 — 폰에서 제목이 상단바로 올라가면
+          이 줄에 버튼 하나만 덩그러니 남는다(DESIGN §6). */}
       <PageHeader
         emoji="🎉"
         title="기념일"
         description="소중한 날들을 D-day로 챙겨요"
-      >
-        {/* 목록이 비면 아래 빈 화면의 초대가 같은 일을 한다 — 같은 버튼을 한 화면에
-            두 번 두지 않는다(DESIGN.md §1 "화면당 강조는 하나만"). */}
-        {items.length > 0 && (
-          <Button onClick={openAdd}>
-            <Plus className="h-4 w-4" /> 기념일 추가
-          </Button>
-        )}
-      </PageHeader>
+      />
 
       {items.length === 0 ? (
         <EmptyState
@@ -220,50 +215,48 @@ export function AnniversariesClient({
           }
         />
       ) : (
-        <div className="flex flex-col gap-8">
-          {/* 다가오는 D-day */}
-          {featured.length > 0 && (
-            <section>
-              <div className="mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <CardTitle>다가오는 D-day</CardTitle>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {featured.map(({ item, d }) => (
-                  <FeaturedCard
-                    key={item.id}
-                    item={item}
-                    d={d}
-                    onEdit={() => openEdit(item)}
-                    onRemove={() => remove(item.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+        <div className="flex flex-col gap-6">
+          {/* 가장 가까운 하루 — 이 화면의 한 가지 */}
+          {featured.map(({ item, d }) => (
+            <FeaturedCard
+              key={item.id}
+              item={item}
+              d={d}
+              onEdit={() => openEdit(item)}
+              onRemove={() => remove(item.id)}
+            />
+          ))}
 
-          {/* 그 밖의 날들 — featured 에 이미 실은 3건은 여기서 뺀다.
-              예전에는 `decorated` 를 통째로 다시 그려 같은 생일이 위아래로 두 번 나왔다. */}
-          {rest.length > 0 && (
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <CardTitle>{featured.length > 0 ? "그 밖의 날들" : "전체 기념일"}</CardTitle>
-              <Tag color="lavender" className="font-num">
-                {rest.length}
-              </Tag>
+          {rest.length > 0 ? (
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3 border-b border-line pb-3">
+                <h2 className="font-display text-xl font-bold text-ink">
+                  {featured.length > 0 ? "그 밖의 날들" : "기념일"}
+                </h2>
+                <Button size="sm" onClick={openAdd}>
+                  <Plus className="h-4 w-4" /> 기념일 추가
+                </Button>
+              </div>
+              <Card flush>
+                <ul className="flex flex-col">
+                  {rest.map(({ item, d }) => (
+                    <AnniversaryRow
+                      key={item.id}
+                      item={item}
+                      d={d}
+                      onEdit={() => openEdit(item)}
+                      onRemove={() => remove(item.id)}
+                    />
+                  ))}
+                </ul>
+              </Card>
+            </section>
+          ) : (
+            <div className="flex justify-end">
+              <Button size="sm" onClick={openAdd}>
+                <Plus className="h-4 w-4" /> 기념일 추가
+              </Button>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {rest.map(({ item, d }) => (
-                <ListCard
-                  key={item.id}
-                  item={item}
-                  d={d}
-                  onEdit={() => openEdit(item)}
-                  onRemove={() => remove(item.id)}
-                />
-              ))}
-            </div>
-          </section>
           )}
         </div>
       )}
@@ -407,7 +400,8 @@ export function AnniversariesClient({
   );
 }
 
-/* ── 다가오는 D-day: 큰 카드 ─────────────────────────── */
+/* ── 가장 가까운 하루 ─────────────────────────────────
+   이 화면에서 크게 말하는 것은 하나뿐이다. 나머지는 아래 줄로 내려간다. */
 function FeaturedCard({
   item,
   d,
@@ -419,57 +413,42 @@ function FeaturedCard({
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const pal = palette(item.color);
   const meta = typeMeta(item.type);
   const isToday = d.days === 0;
   const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
 
   return (
-    <Card
-      className={cn(
-        "group relative flex flex-col gap-4 border animate-fade-up",
-        pal.soft,
-        pal.border,
-        isToday && cn("ring-2 ring-offset-2", pal.ring)
-      )}
-    >
+    <section className="on-chrome relative rounded-xl bg-chrome p-6 sm:p-8">
       <CardActions onEdit={onEdit} onRemove={onRemove} />
 
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface/80 text-3xl shadow-sm",
-            isToday && "animate-float"
-          )}
-        >
+      <div className="flex items-center gap-2.5 pr-10">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/90 text-xl">
           {item.emoji}
         </span>
-        <div className="min-w-0 pt-0.5">
-          <p className="truncate text-lg font-bold text-ink">{item.title}</p>
-          <Tag color={item.color} dot className="mt-1.5">
-            {meta.emoji} {meta.label}
-          </Tag>
-        </div>
+        <p className="min-w-0 truncate font-display text-lg font-bold text-chrome-ink">
+          {item.title}
+        </p>
       </div>
 
-      {isToday ? (
-        <p className={cn("font-num text-3xl font-bold", pal.ink)}>오늘! {item.emoji}</p>
-      ) : (
-        <p className={cn("flex items-baseline gap-1", pal.ink)}>
-          <span className="font-num text-xl font-semibold">D-</span>
-          <span className="font-num text-5xl font-bold leading-none">{d.days}</span>
-        </p>
-      )}
+      <p className="mt-5 font-display text-6xl font-bold leading-none text-chrome-ink sm:text-7xl">
+        {isToday ? "오늘이에요" : d.label}
+      </p>
 
-      <div className="flex items-end justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm text-ink-soft">{kDate(d.nextDate)}</p>
-          {age > 0 && (
-            <p className={cn("mt-0.5 text-sm font-semibold", pal.ink)}>
-              🎂 올해 <span className="font-num">{age}</span>살
-            </p>
-          )}
-        </div>
+      {/* 강조색은 '지금 벌어지는 일' 에만(DESIGN §2). 여기가 그 자리다. */}
+      <p className="font-num mt-3 text-base text-accent">
+        {isToday
+          ? `${meta.label}을 축하해요 ${item.emoji}`
+          : `${kDate(d.nextDate)}까지 ${d.days}일`}
+      </p>
+
+      <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-4 text-sm text-chrome-faint">
+        {/* 가운뎃점으로 잇지 않는다(DESIGN §3) — 여백이 이미 구분을 한다. */}
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          <span>
+            {meta.emoji} {meta.label}
+          </span>
+          {age > 0 && <span className="font-num">올해 {age}살</span>}
+        </span>
         {item.member && (
           <Avatar
             emoji={item.member.emoji}
@@ -479,12 +458,14 @@ function FeaturedCard({
           />
         )}
       </div>
-    </Card>
+    </section>
   );
 }
 
-/* ── 전체 목록: 컴팩트 카드 ──────────────────────────── */
-function ListCard({
+/* ── 그 밖의 날들: 판 하나 안의 줄 ──────────────────────
+   전에는 하나하나가 카드였다. 카드 열둘은 스무 화면이 되고, 무엇이 가까운지
+   한눈에 안 들어온다. 줄로 세우면 날짜가 세로로 줄을 맞춘다. */
+function AnniversaryRow({
   item,
   d,
   onEdit,
@@ -502,58 +483,43 @@ function ListCard({
   const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
 
   return (
-    <Card
+    <li
       className={cn(
-        "group relative flex flex-col gap-3",
-        isPast && "opacity-70",
-        isToday && cn("ring-2 ring-offset-2", pal.ring, pal.soft)
+        "flex items-center gap-3 border-b border-line px-5 py-3 last:border-0",
+        isPast && "opacity-60",
+        isToday && pal.soft
       )}
     >
-      <CardActions onEdit={onEdit} onRemove={onRemove} />
-
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sunken text-2xl">
-          {item.emoji}
-        </span>
-        <div className="min-w-0 pr-8">
-          <p className="truncate font-bold text-ink">{item.title}</p>
-          <Tag color={item.color} dot className="mt-1">
-            {meta.emoji} {meta.label}
-          </Tag>
-        </div>
-      </div>
-
-      <div className="flex items-baseline justify-between gap-2">
-        <span className={cn("font-num text-2xl font-bold", pal.ink)}>
-          {isToday ? "오늘 🎉" : d.label}
-        </span>
-        <span className="shrink-0 text-xs text-ink-faint">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-sunken text-xl">
+        {item.emoji}
+      </span>
+      {/* 잘라내지 않고 접는다. 글자를 1.5배로 키우면 `truncate` 는 "3월 21일 (일) 올…"
+          처럼 반을 날려 버린다 — 줄이 한 줄 늘어나는 편이 낫다(DESIGN §9). */}
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-ink">{item.title}</p>
+        <p className="text-xs text-ink-faint">
           {kDateShort(d.nextDate)}
-        </span>
+          {age > 0 && ` 올해 ${age}살`}
+          {age === 0 && item.note ? ` ${item.note}` : ""}
+        </p>
       </div>
-
-      {(age > 0 || item.note || item.member) && (
-        <div className="flex items-center justify-between gap-2 border-t border-line pt-2.5">
-          <p className="min-w-0 flex-1 truncate text-xs text-ink-soft">
-            {age > 0 ? (
-              <>
-                올해 <span className="font-num font-semibold">{age}</span>살이 돼요
-              </>
-            ) : (
-              item.note
-            )}
-          </p>
-          {item.member && (
-            <Avatar
-              emoji={item.member.emoji}
-              color={item.member.color}
-              name={item.member.name}
-              size="xs"
-            />
-          )}
-        </div>
-      )}
-    </Card>
+      <span
+        className={cn(
+          "font-num shrink-0 text-sm font-bold",
+          isToday ? pal.ink : "text-ink-soft"
+        )}
+      >
+        {isToday ? `오늘 ${meta.emoji}` : d.label}
+      </span>
+      <ItemActions
+        inline
+        quiet
+        actions={[
+          { label: "수정", icon: Pencil, onClick: onEdit },
+          { label: "삭제", icon: Trash2, onClick: onRemove, danger: true },
+        ]}
+      />
+    </li>
   );
 }
 

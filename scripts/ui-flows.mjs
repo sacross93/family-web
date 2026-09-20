@@ -129,6 +129,29 @@ await page.getByRole("button", { name: "로그인" }).click();
 await page.waitForURL(BASE + "/");
 
 // ── 장보기 ──────────────────────────────────────────────
+// ── 지난 번에 흘린 것 치우기 ─────────────────────────────
+//
+// 한 단계가 실패하면 그 흐름이 만든 것이 남는다. 그러면 **다음 판이 엉뚱하게 실패한다** —
+// "지웠는데 서버엔 남아 있다" 는 사실 지난 판의 찌꺼기였다. 한 번 그랬다.
+// 시작할 때 MARK 가 붙은 것을 전부 걷어내면 몇 번을 돌려도 같은 결과가 나온다.
+{
+  const swept = await page.evaluate(async (mark) => {
+    const paths = ["anniversaries", "todos", "shopping", "plans", "albums", "board"];
+    let n = 0;
+    for (const path of paths) {
+      const list = await fetch(`/api/${path}`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+      for (const it of Array.isArray(list) ? list : []) {
+        const label = `${it.title ?? ""}${it.name ?? ""}${it.text ?? ""}${it.content ?? ""}`;
+        if (!label.includes(mark)) continue;
+        await fetch(`/api/${path}/${it.id}`, { method: "DELETE" }).catch(() => {});
+        n++;
+      }
+    }
+    return n;
+  }, MARK);
+  if (swept > 0) console.log(`(지난 판의 찌꺼기 ${swept}개를 치웠어요)`);
+}
+
 console.log("장보기");
 await page.goto(BASE + "/shopping", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
@@ -459,8 +482,9 @@ await step("기념일 추가 — D-day 가 계산된다", async () => {
   if (!/D-\d+/.test(t)) throw new Error("D-day 가 안 나온다");
 });
 await step("기념일 지우기", async () => {
-  const idx = await page.evaluate((m) => [...document.querySelectorAll("[class*='grid'] > *")].findIndex(n => (n.textContent||"").includes(m)), MARK + "기념");
-  await page.locator("[class*='grid'] > *").nth(idx).getByRole("button", { name: "더보기" }).click();
+  // 기념일은 카드 그리드에서 **판 하나 안의 줄**로 바뀌었다(겉모습 개편 3).
+  // 선택자를 안 고쳤더니 이 단계가 바로 걸렸다 — 검사가 제 일을 했다.
+  await page.locator("li", { hasText: MARK + "기념" }).first().getByRole("button", { name: "더보기" }).click();
   await page.waitForTimeout(350);
   await page.locator('[data-item-menu] button:has-text("삭제")').click();
   await page.waitForTimeout(1300);
