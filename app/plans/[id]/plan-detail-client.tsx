@@ -575,7 +575,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           onRemove={removeCheck}
         />
         <ChecklistSection
-          title="준비물 · 챙길 것"
+          title="준비물"
           emoji="🎒"
           color="peach"
           items={plan.checklist.filter((c) => c.kind === "packing")}
@@ -629,11 +629,14 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         <div className="flex flex-col gap-7">
           {groups.map((group) => (
             <section key={group.key} className="animate-fade-up">
-              <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-ink">
-                <CalendarDays className="h-4 w-4 text-ink-faint" />
-                {group.date ? kDate(group.date) : "미정"}
-                <span className="font-num text-sm font-semibold text-ink-faint">
-                  · {group.items.length}
+              {/* 날짜줄. 가운뎃점으로 개수를 잇지 않는다(DESIGN §3) — 오른쪽 끝에 놓는다. */}
+              <h3 className="mb-3 flex items-baseline gap-2 border-b border-line pb-2">
+                <CalendarDays className="h-4 w-4 shrink-0 self-center text-ink-faint" />
+                <span className="font-display text-lg font-bold text-ink">
+                  {group.date ? kDate(group.date) : "미정"}
+                </span>
+                <span className="ml-auto text-xs text-ink-faint">
+                  {group.items.length}개
                 </span>
               </h3>
 
@@ -710,24 +713,23 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
                               >
                                 {it.title}
                               </p>
-                              <div className="flex shrink-0 gap-0.5 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
-                                <IconButton
-                                  variant="ghost"
-                                  size="sm"
-                                  aria-label="일정 수정"
-                                  onClick={() => openEditItem(it)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </IconButton>
-                                <IconButton
-                                  variant="danger"
-                                  size="sm"
-                                  aria-label="일정 삭제"
-                                  onClick={() => removeItem(it.id)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </IconButton>
-                              </div>
+                              {/* 연필 + 휴지통 둘이 제목과 같은 줄을 먹어 폰에서
+                                  "발리로 출발하는 / 비행기" 처럼 제목이 두 줄로 끊겼다.
+                                  사이트의 다른 목록과 같은 `…` 하나로 모은다. */}
+                              <ItemActions
+                                inline
+                                quiet
+                                className="shrink-0"
+                                actions={[
+                                  { label: "수정", icon: Pencil, onClick: () => openEditItem(it) },
+                                  {
+                                    label: "삭제",
+                                    icon: Trash2,
+                                    onClick: () => removeItem(it.id),
+                                    danger: true,
+                                  },
+                                ]}
+                              />
                             </div>
                             {it.note && (
                               <div className="mt-1 text-sm text-ink-soft">
