@@ -87,6 +87,15 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - `components/markdown-editor.tsx`(툴바·단축키 ⌘B/I/K·미리보기·이미지 업로드·목록 자동이음) + `components/markdown-view.tsx`(react-markdown+remark-gfm). 렌더 스타일은 globals.css `.md-content`.
 - 적용처: 게시판 글(작성/수정/표시), 계획 설명·일정 메모. 새 글쓰기 UI엔 MarkdownEditor를 쓸 것.
 
+## 홈 화면에 추가 (PWA 겉면)
+- `app/manifest.ts`(이름은 `SiteConfig` 에서 — `/admin` 에서 바꾸면 홈 화면 글자도 바뀐다) ·
+  `app/apple-icon.png`(iOS 는 SVG 를 안 받는다. 없으면 **화면 캡처**가 홈 화면에 붙는다) ·
+  `public/icon-192.png`·`icon-512.png`(안드로이드 매니페스트).
+- **PNG 는 손으로 만들지 않는다.** `app/icon.svg` 가 원본이고 `node scripts/make-icons.mjs` 로 뽑는다.
+  모서리는 안 깎는다 — **기기가 알아서 깎는다**(먼저 둥글리면 두 번 깎여 흰 띠가 생긴다).
+- 매니페스트의 `background_color`·`theme_color` 와 `layout.tsx` 의 `themeColor` 는 CSS 변수를
+  못 읽어 **손으로 베낀 값**이다. 셋 다 `lib/design-doc.test.ts` 가 토큰과 대조한다.
+
 ## 사이트 커스터마이즈 (브랜드·홈·메뉴)
 - `SiteConfig`(싱글턴 id="main": siteName·tagline·brandEmoji/Image·heroSubtitle·heroEmoji/Image) + `NavItem`(href별 emoji·label·description 오버라이드).
 - 로더 `lib/site.ts`의 `getSiteConfig()`·`getNav()` — **DB 없으면 기본값(lib/nav, SITE_DEFAULTS) 폴백** → 시드 안 해도, 배포 DB에서도 동작.

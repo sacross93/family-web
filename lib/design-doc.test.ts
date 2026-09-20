@@ -61,6 +61,18 @@ describe("폰 상태바 색이 틀 색과 같은가", () => {
       token("chrome")
     );
   });
+
+  it("매니페스트의 두 색도 같은 토큰을 가리킨다 — 홈 화면에서 여는 순간 보이는 색이다", () => {
+    // `app/manifest.ts` 도 CSS 변수를 못 읽어 **손으로 베낀 값**이다. 홈 화면에 추가해
+    // 앱처럼 열면 이 두 색이 시작 화면과 상단을 칠한다 — 어긋나면 열자마자 다른 색이 번쩍인다.
+    const mf = readFileSync(join(process.cwd(), "app/manifest.ts"), "utf8");
+    const bg = mf.match(/background_color:\s*"(#[0-9a-fA-F]{6})"/);
+    const th = mf.match(/theme_color:\s*"(#[0-9a-fA-F]{6})"/);
+    expect(bg, "manifest.ts 에서 background_color 를 못 찾았어요").not.toBeNull();
+    expect(th, "manifest.ts 에서 theme_color 를 못 찾았어요").not.toBeNull();
+    expect(bg![1].toLowerCase(), "background_color 가 --color-paper 와 다릅니다").toBe(token("paper"));
+    expect(th![1].toLowerCase(), "theme_color 가 --color-chrome 과 다릅니다").toBe(token("chrome"));
+  });
 });
 
 describe("DESIGN.md 의 색이 실제 토큰과 같은가", () => {

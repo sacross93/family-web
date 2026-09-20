@@ -34,6 +34,9 @@ export async function generateMetadata(): Promise<Metadata> {
       template: `%s · ${site.siteName}`,
     },
     description: `사진, 계획, 캘린더, 할일을 함께 나누는 ${site.siteName} 가족만의 공간 🏡`,
+    // iOS 는 매니페스트를 안 본다 — 홈 화면에 추가했을 때 앱처럼 열리게 하려면 이쪽이 필요하다.
+    // 상태바는 `default`(밝음) — 우리 상단바가 연한 로즈라 검은 상태바는 어울리지 않는다.
+    appleWebApp: { capable: true, title: site.siteName, statusBarStyle: "default" },
   };
 }
 
