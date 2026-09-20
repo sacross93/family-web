@@ -303,7 +303,11 @@ export function TodosClient({
 
   // ── 렌더 ────────────────────────────────────
   return (
-    <div>
+    /* 한 줄짜리 목록이라 데스크톱에서 폭을 가둔다.
+       페이지 폭(max-w-6xl = 1152px)에 그대로 펼치면 이름과 수량이 1000px 떨어져
+       눈이 멀리 이동한다 — 읽는 화면이 아니라 훑는 화면인데도 그렇다.
+       머리글도 같이 가둬 왼쪽 줄을 맞춘다. */
+    <div className="mx-auto max-w-3xl">
       <PageHeader
         emoji="📝"
         title="할일"
