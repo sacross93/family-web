@@ -161,18 +161,22 @@ export function MarkdownEditor({
 
   return (
     <div className="overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-4 focus-within:ring-primary-soft">
-      {/* 툴바 */}
+      {/* 툴바
+          폰에서는 **다섯 개만** 남긴다. 단추를 40px 로 키우고 나니 아홉 개가 두 줄이 되어
+          툴바가 130px 를 차지했다 — "오늘 입덧이 심했다" 한 줄 적으러 온 화면에서
+          글 칸보다 도구가 더 크면 안 된다. 제목·체크리스트·인용·코드는 마우스가 있는
+          자리에서만 내놓는다(마크다운 문법으로 직접 쓸 수도 있다). */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-line px-2 py-1.5">
         <ToolBtn label="굵게 (⌘B)" onClick={() => wrap("**", "**")}><Bold className="h-4 w-4" /></ToolBtn>
         <ToolBtn label="기울임 (⌘I)" onClick={() => wrap("*", "*")}><Italic className="h-4 w-4" /></ToolBtn>
-        <ToolBtn label="제목" onClick={() => linePrefix("## ")}><Heading2 className="h-4 w-4" /></ToolBtn>
-        <span className="mx-1 h-4 w-px bg-line" />
+        <ToolBtn label="제목" onClick={() => linePrefix("## ")} desktopOnly><Heading2 className="h-4 w-4" /></ToolBtn>
+        <span className="mx-1 hidden h-4 w-px bg-line lg:block" />
         <ToolBtn label="목록" onClick={() => linePrefix("- ")}><List className="h-4 w-4" /></ToolBtn>
-        <ToolBtn label="체크리스트" onClick={() => linePrefix("- [ ] ")}><ListChecks className="h-4 w-4" /></ToolBtn>
-        <ToolBtn label="인용" onClick={() => linePrefix("> ")}><Quote className="h-4 w-4" /></ToolBtn>
-        <ToolBtn label="코드" onClick={() => wrap("`", "`")}><Code className="h-4 w-4" /></ToolBtn>
-        <span className="mx-1 h-4 w-px bg-line" />
-        <ToolBtn label="링크 (⌘K)" onClick={addLink}><Link2 className="h-4 w-4" /></ToolBtn>
+        <ToolBtn label="체크리스트" onClick={() => linePrefix("- [ ] ")} desktopOnly><ListChecks className="h-4 w-4" /></ToolBtn>
+        <ToolBtn label="인용" onClick={() => linePrefix("> ")} desktopOnly><Quote className="h-4 w-4" /></ToolBtn>
+        <ToolBtn label="코드" onClick={() => wrap("`", "`")} desktopOnly><Code className="h-4 w-4" /></ToolBtn>
+        <span className="mx-1 hidden h-4 w-px bg-line lg:block" />
+        <ToolBtn label="링크 (⌘K)" onClick={addLink} desktopOnly><Link2 className="h-4 w-4" /></ToolBtn>
         <ToolBtn label="사진" onClick={() => files.current?.click()} disabled={uploading}>
           <ImagePlus className="h-4 w-4" />
         </ToolBtn>
@@ -258,11 +262,14 @@ function ToolBtn({
   label,
   onClick,
   disabled,
+  desktopOnly,
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** 마우스가 있는 화면에서만 내놓는다 — 폰 툴바가 두 줄이 되면 글 칸보다 커진다. */
+  desktopOnly?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -275,7 +282,10 @@ function ToolBtn({
       // 폰·태블릿에서는 40px(DESIGN §9). 32px 툴바를 손가락으로 겨누면 옆 버튼이 눌린다.
       // 이 툴바는 접힌 작성칸 안에 있어서 **검사에 한 번도 안 잡혔다** — 모달·작성칸을
       // 열어 보게 하고서야 드러났다.
-      className="flex h-10 w-10 items-center justify-center rounded-md text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40 lg:h-8 lg:w-8"
+      className={cn(
+        "h-10 w-10 items-center justify-center rounded-md text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40 lg:h-8 lg:w-8",
+        desktopOnly ? "hidden lg:flex" : "flex",
+      )}
     >
       {children}
     </button>
