@@ -37,7 +37,7 @@ export const viewport: Viewport = {
   // 폰 상태바 색 = 상단바 색. globals.css 의 `--color-chrome`(연한 로즈)을 **손으로 베낀
   // 값**이다 — Viewport 는 CSS 변수를 못 읽는다. 틀 색을 바꾸면 여기도 같이 고칠 것
   // (이 줄이 옛 진한 자두 `#362c4e` 로 남아 있어서 폰 상태바만 혼자 진했다).
-  themeColor: "#fad9e6",
+  themeColor: "#f6cedd",
   width: "device-width",
   initialScale: 1,
 };

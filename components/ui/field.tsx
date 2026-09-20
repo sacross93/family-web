@@ -8,6 +8,7 @@ import type {
   ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
 
 /**
  * `Field` 가 만든 id 를 안쪽 컨트롤에 건네는 통로.
@@ -97,18 +98,21 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   const fieldId = useContext(FieldId);
   return (
-    <select
-      id={id ?? fieldId}
-      className={cn(FIELD_BASE, "h-11 cursor-pointer appearance-none pr-9", className)}
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236a6279' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 0.85rem center",
-      }}
-      {...props}
-    >
-      {children}
-    </select>
+    // 화살표를 **글자색으로** 그린다.
+    // 전에는 SVG 를 data URI 로 배경에 깔면서 색을 손으로 박아 뒀는데, 팔레트를 두 번
+    // 바꾸는 동안 그 값만 옛 색(#6a6279)에 남아 있었다. 토큰 값을 베껴 적으면 반드시 어긋난다.
+    <span className="relative block">
+      <select
+        id={id ?? fieldId}
+        className={cn(FIELD_BASE, "h-11 cursor-pointer appearance-none pr-9", className)}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+      />
+    </span>
   );
 }

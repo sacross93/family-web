@@ -49,6 +49,20 @@ describe("밝은 화면 하나뿐이라는 것을 브라우저에 알려 준다"
   });
 });
 
+describe("폰 상태바 색이 틀 색과 같은가", () => {
+  it("layout.tsx 의 themeColor 가 --color-chrome 과 같다", () => {
+    // `Viewport` 는 CSS 변수를 못 읽어 **손으로 베낀 값**이다. 팔레트를 두 번 바꾸는 동안
+    // 두 번 다 어긋나 있었다 — 폰 위쪽 상태바만 혼자 옛 색이었다(화면 안쪽은 멀쩡해서
+    // 스크린샷으로도 안 잡힌다). 베껴 적은 값은 반드시 어긋나므로 여기서 잡는다.
+    const layout = readFileSync(join(process.cwd(), "app/layout.tsx"), "utf8");
+    const m = layout.match(/themeColor:\s*"(#[0-9a-fA-F]{6})"/);
+    expect(m, "layout.tsx 에서 themeColor 를 못 찾았어요").not.toBeNull();
+    expect(m![1].toLowerCase(), "themeColor 가 --color-chrome 과 다릅니다").toBe(
+      token("chrome")
+    );
+  });
+});
+
 describe("DESIGN.md 의 색이 실제 토큰과 같은가", () => {
   it("문서에 적힌 색을 하나라도 찾는다 — 못 찾으면 이 검사가 헛돈다", () => {
     expect(documented().length).toBeGreaterThanOrEqual(8);
