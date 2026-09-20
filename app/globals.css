@@ -7,8 +7,9 @@
 
 @theme {
   /* ── 폰트 ── */
-  --font-sans: var(--font-pretendard), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fredoka), var(--font-pretendard), sans-serif;
+  /* Pretendard 는 app/pretendard.css 의 구간별 @font-face 로 들어온다 */
+  --font-sans: Pretendard, ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fredoka), Pretendard, sans-serif;
 
   /* ── 중립색 (종이 · 표면 · 잉크) ── */
   --color-paper: #fbfaf7;

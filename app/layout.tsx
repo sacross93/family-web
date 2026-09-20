@@ -1,18 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import localFont from "next/font/local";
 import { Fredoka } from "next/font/google";
+import "./pretendard.css";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/current-user";
 import { getSiteConfig, getNav } from "@/lib/site";
 import { agentConfig } from "@/lib/agent/config";
 
-const pretendard = localFont({
-  src: "./fonts/PretendardVariable.woff2",
-  variable: "--font-pretendard",
-  display: "swap",
-  weight: "45 920",
-});
+// Pretendard 는 `app/pretendard.css` 의 구간별 @font-face 로 불러온다 —
+// next/font/local 은 한 파일만 받을 수 있어 2.0MB 를 통째로 내려받게 된다.
+// 이름은 globals.css 의 --font-pretendard 가 가리킨다.
 
 const fredoka = Fredoka({
   subsets: ["latin"],
@@ -46,7 +43,7 @@ export default async function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${pretendard.variable} ${fredoka.variable} h-full antialiased`}
+      className={`${fredoka.variable} h-full antialiased`}
     >
       <body className="min-h-full font-sans">
         <AppShell user={user} site={site} nav={nav} agentEnabled={agentConfig().enabled}>
