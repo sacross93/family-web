@@ -14,6 +14,8 @@ import {
   CalendarDays,
   Sparkles,
   Clock,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import {
   Card,
@@ -988,8 +990,18 @@ function ChecklistSection({
   onRemove: (id: string) => void;
 }) {
   const [text, setText] = useState("");
+  // 끝낸 것과 추천은 접어 둔다 — 실제 가족 계획에서 준비물 51개 중 41개가 이미
+  // 체크돼 있었는데 전부 펼쳐져 있어, 정작 여행 중에 볼 여정이 여섯 화면 아래였다.
+  const [showDone, setShowDone] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const pal = palette(color);
-  const doneCount = items.filter((i) => i.done).length;
+  const todo = items.filter((i) => !i.done);
+  const done = items.filter((i) => i.done);
+  // 다 챙긴 칸은 통째로 접고 연다. 여행을 떠나고 나면 준비물은 볼 일이 없고
+  // 그날 어디 가는지(여정)가 궁금하다 — 끝난 칸이 화면을 차지하면 여정이 밀린다.
+  // 처음 그릴 때만 정한다: 마지막 항목을 체크했다고 칸이 눈앞에서 접히면 안 된다.
+  const [open, setOpen] = useState(items.length === 0 || todo.length > 0);
+  const doneCount = done.length;
   const remaining = suggestions.filter(
     (s) => !items.some((i) => i.text === s)
   );
@@ -1003,7 +1015,12 @@ function ChecklistSection({
 
   return (
     <Card className="flex flex-col gap-3">
-      <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-2.5 text-left"
+      >
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>
           {emoji}
         </span>
@@ -1013,40 +1030,70 @@ function ChecklistSection({
             {doneCount}/{items.length}
           </Tag>
         )}
-      </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-ink-faint transition",
+            items.length === 0 && "ml-auto",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open && (
+      <>
 
       {items.length === 0 ? (
         <p className="text-sm text-ink-faint">
           아래에 직접 적거나, 추천을 눌러 담아보세요.
         </p>
       ) : (
-        <ul className="flex flex-col">
-          {items.map((it) => (
-            <li
-              key={it.id}
-              className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0"
-            >
-              <Checkbox checked={it.done} onChange={() => onToggle(it)} color={color} size="sm" />
-              <span
-                className={cn(
-                  "flex-1 text-[15px]",
-                  it.done ? "text-ink-faint line-through" : "text-ink"
-                )}
+        <>
+          {todo.length > 0 && (
+            <ul className="flex flex-col">
+              {todo.map((it) => (
+                <ChecklistRow
+                  key={it.id}
+                  item={it}
+                  color={color}
+                  onToggle={onToggle}
+                  onRemove={onRemove}
+                />
+              ))}
+            </ul>
+          )}
+
+          {todo.length === 0 && (
+            <p className={cn("text-sm font-semibold", pal.ink)}>다 챙겼어요! 🎉</p>
+          )}
+
+          {done.length > 0 && (
+            <div className="flex flex-col">
+              <button
+                type="button"
+                onClick={() => setShowDone((v) => !v)}
+                aria-expanded={showDone}
+                className="flex items-center gap-1.5 self-start py-1 text-xs font-semibold text-ink-faint transition hover:text-ink"
               >
-                {it.text}
-              </span>
-              <IconButton
-                variant="danger"
-                size="sm"
-                aria-label="삭제"
-                onClick={() => onRemove(it.id)}
-                className="opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100"
-              >
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-            </li>
-          ))}
-        </ul>
+                <Check className="h-3.5 w-3.5" />
+                챙긴 것 <span className="font-num">{done.length}</span>개
+                <ChevronDown className={cn("h-3.5 w-3.5 transition", showDone && "rotate-180")} />
+              </button>
+              {showDone && (
+                <ul className="flex flex-col opacity-60">
+                  {done.map((it) => (
+                    <ChecklistRow
+                      key={it.id}
+                      item={it}
+                      color={color}
+                      onToggle={onToggle}
+                      onRemove={onRemove}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* 직접 추가 */}
@@ -1063,21 +1110,71 @@ function ChecklistSection({
         </Button>
       </div>
 
-      {/* 추천 항목 */}
+      {/* 추천 항목 — 목록이 비었을 때를 거드는 것이라, 이미 담은 게 있으면 접어 둔다.
+          칩 스물일곱 개가 늘 펼쳐져 있으면 정작 담은 것이 안 보인다. */}
       {remaining.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {remaining.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onAdd(s)}
-              className="rounded-full border border-line bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
-            >
-              + {s}
-            </button>
-          ))}
-        </div>
+        items.length === 0 || showSuggestions ? (
+          <div className="flex flex-wrap gap-1.5">
+            {remaining.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onAdd(s)}
+                className="rounded-full border border-line bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
+              >
+                + {s}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(true)}
+            className="flex items-center gap-1.5 self-start py-1 text-xs font-semibold text-ink-faint transition hover:text-ink"
+          >
+            추천 <span className="font-num">{remaining.length}</span>개 더 보기
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        )
+      )}
+      </>
       )}
     </Card>
+  );
+}
+
+/** 체크리스트 한 줄. 할 것과 챙긴 것이 같은 모양이어야 접었다 펴도 흔들리지 않는다. */
+function ChecklistRow({
+  item,
+  color,
+  onToggle,
+  onRemove,
+}: {
+  item: PlanChecklistItem;
+  color: PaletteKey;
+  onToggle: (item: PlanChecklistItem) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <li className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0">
+      <Checkbox checked={item.done} onChange={() => onToggle(item)} color={color} size="sm" />
+      <span
+        className={cn(
+          "flex-1 text-[15px]",
+          item.done ? "text-ink-faint line-through" : "text-ink"
+        )}
+      >
+        {item.text}
+      </span>
+      <IconButton
+        variant="danger"
+        size="sm"
+        aria-label="삭제"
+        onClick={() => onRemove(item.id)}
+        className="opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100"
+      >
+        <Trash2 className="h-4 w-4" />
+      </IconButton>
+    </li>
   );
 }
