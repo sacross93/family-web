@@ -20,6 +20,14 @@ export interface CatalogEntry {
   title: string;
   /** "2026-07 · 사진 12" 같은 보조 정보 */
   hint?: string;
+  /**
+   * 항목의 **본문**. 글이 본체인 것들(아기 기록·게시판 글·일정 메모)이 여기에 담는다.
+   *
+   * ⚠️ **시스템 목차(`catalog.ts`)는 이 값을 쓰지 않는다.** 목차는 16종이 4,000자 안에 다
+   * 들어가야 하는 자리라, 본문을 넣으면 한 종류가 다른 종류를 밀어낸다.
+   * 이 값은 `list_resource` 로 한 종류를 펼쳐 볼 때만 나간다 — "훑어보기"와 "읽기"를 가른다.
+   */
+  body?: string;
 }
 
 export interface CreateSpec {

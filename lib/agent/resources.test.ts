@@ -227,3 +227,33 @@ describe("아기 상세", () => {
     expect(data._count.entries).toBe(12);
   });
 });
+
+describe("글이 본체인 리소스는 본문을 싣는다", () => {
+  const find = (key: string) => RESOURCES.find((r) => r.key === key)!;
+  /** "더 있음" 꼬리는 항목이 아니라 표시라 본문이 없다. */
+  const items = async (key: string) => (await find(key).catalog()).filter((e) => e.title !== MORE_TITLE);
+
+  it("아기 기록이 개수가 아니라 기록들을 준다 — 교환일기를 다시 읽을 수 있어야 한다", async () => {
+    const entries = await items("babyEntry");
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) {
+      expect(e.title).toBeTruthy();
+      expect(typeof e.body).toBe("string");
+      expect(e.body!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("게시판 글이 본문을 싣는다", async () => {
+    const entries = await items("board");
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) expect(typeof e.body).toBe("string");
+  });
+
+  it("본문은 제목보다 짧지 않다 — 제목은 첫 줄을 자른 것이다", async () => {
+    for (const key of ["babyEntry", "board"]) {
+      for (const e of await items(key)) {
+        if (e.body) expect(e.body.length).toBeGreaterThanOrEqual(e.title.replace(/…$/, "").length);
+      }
+    }
+  });
+});

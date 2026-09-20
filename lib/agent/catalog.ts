@@ -57,6 +57,8 @@ export async function buildCatalog(
     if (s.value.length === 0) return;
     rows.push({
       prefix: `${r.label}(${s.value.length}): `,
+      // body 는 일부러 뺀다 — 목차는 "무엇이 있나" 를 보는 자리지 읽는 자리가 아니다.
+      // 본문은 list_resource 가 준다(registry.ts 의 CatalogEntry.body 주석).
       parts: s.value.map((e) => (e.hint ? `${e.title} ${e.hint}` : e.title)),
     });
   });

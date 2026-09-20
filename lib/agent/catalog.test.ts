@@ -204,3 +204,35 @@ describe("buildCatalog 극단적인 상한", () => {
     expect(out.length).toBeLessThanOrEqual(4000);
   });
 });
+
+describe("목차는 본문을 싣지 않는다", () => {
+  /** 글이 본체인 리소스들은 body 를 담는다. 목차는 그걸 무시해야 한다. */
+  const withBodies = [
+    {
+      key: "babyEntry",
+      label: "아기 기록",
+      listPath: "/baby",
+      catalog: async () => [
+        { id: "e1", title: "오늘 태동을 느꼈어요", hint: "일상 · 9/18", body: "아주 긴 본문이 여기 있습니다. ".repeat(50) },
+      ],
+    },
+    {
+      key: "todo",
+      label: "할일",
+      listPath: "/todos",
+      catalog: async () => [{ id: "t1", title: "우유 사기" }],
+    },
+  ];
+
+  it("본문이 목차 줄에 들어가지 않는다 — 들어가면 한 종류가 다른 종류를 밀어낸다", async () => {
+    const text = await buildCatalog(withBodies as never);
+    expect(text).toContain("오늘 태동을 느꼈어요");
+    expect(text).toContain("일상 · 9/18");
+    expect(text).not.toContain("아주 긴 본문이 여기 있습니다.");
+  });
+
+  it("본문이 길어도 다른 리소스가 밀려나지 않는다", async () => {
+    const text = await buildCatalog(withBodies as never);
+    expect(text).toContain("우유 사기");
+  });
+});

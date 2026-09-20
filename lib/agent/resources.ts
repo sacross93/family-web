@@ -4,6 +4,7 @@
 // 값 검증은 기존 API 라우트가 하므로 여기서 중복하지 않는다(빈 값은 undefined 로 넘겨 기본값을 살린다).
 
 import { prisma } from "@/lib/prisma";
+import { kindMeta } from "@/app/baby/baby-meta";
 import { dday, kDateShort, kTime, startOfDay } from "@/lib/date";
 import { NAV } from "@/lib/nav";
 import type { AgentResource, CatalogEntry } from "./registry";
@@ -445,7 +446,7 @@ export const RESOURCES: AgentResource[] = [
     label: "캘린더 일정",
     listPath: "/calendar",
     async catalog() {
-      const select = { id: true, title: true, start: true, allDay: true, location: true };
+      const select = { id: true, title: true, start: true, allDay: true, location: true, description: true };
       // 다가오는 일정 위주로 보여주되, 앞으로의 일정이 없으면 최근 지난 일정이라도 보여준다
       // (빈 목차는 "일정이 하나도 없다"는 잘못된 답으로 이어진다).
       let rows = await prisma.calendarEvent.findMany({
@@ -472,6 +473,7 @@ export const RESOURCES: AgentResource[] = [
             e.allDay ? "하루 종일" : kTime(e.start),
             e.location,
           ]),
+          ...(e.description ? { body: e.description } : {}),
         })),
         past ? PAST_TAKE : LIST_TAKE
       );
@@ -514,7 +516,7 @@ export const RESOURCES: AgentResource[] = [
     async catalog() {
       const rows = await prisma.anniversary.findMany({
         orderBy: { date: "asc" },
-        select: { id: true, title: true, date: true, type: true, recurring: true },
+        select: { id: true, title: true, date: true, type: true, recurring: true, note: true },
         take: LIST_TAKE,
       });
       // 저장된 원본 날짜를 그대로 쓰면 반복 기념일의 요일이 수십 년 전 요일이 된다.
@@ -538,6 +540,7 @@ export const RESOURCES: AgentResource[] = [
             a.d.label,
             a.recurring ? "매년" : null,
           ]),
+          ...(a.note ? { body: a.note } : {}),
         }));
       return capped(entries, LIST_TAKE);
     },
@@ -592,6 +595,7 @@ export const RESOURCES: AgentResource[] = [
           id: p.id,
           title: firstLine(p.content),
           hint: hintOf([kDateShort(p.createdAt), p.author?.name, p.pinned ? "고정" : null]),
+          body: p.content,
         })),
         LIST_TAKE
       );
@@ -706,9 +710,23 @@ export const RESOURCES: AgentResource[] = [
     key: "babyEntry",
     label: "아기 기록",
     listPath: "/baby",
+    // 개수만 세어 주던 자리다. 부부가 주고받는 교환일기인데 에이전트가 "12개" 라는 것밖에
+    // 몰라서, 자기가 적어 준 기록조차 다시 읽지 못했다.
     async catalog() {
-      const count = await prisma.babyEntry.count();
-      return count ? [{ title: `아기 기록 ${count}개` }] : [];
+      const rows = await prisma.babyEntry.findMany({
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        select: { id: true, kind: true, date: true, mood: true, content: true, author: { select: { name: true } } },
+        take: LIST_TAKE,
+      });
+      return capped(
+        rows.map((e) => ({
+          id: e.id,
+          title: firstLine(e.content),
+          hint: hintOf([kindMeta(e.kind).label, kDateShort(e.date), e.author?.name, e.mood]),
+          body: e.content,
+        })),
+        LIST_TAKE
+      );
     },
     create: {
       api: "/api/baby-entries",
