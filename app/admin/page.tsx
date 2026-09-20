@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/site";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -5,6 +6,10 @@ import { getSiteConfig, getNav } from "@/lib/site";
 import { AdminClient } from "./admin-client";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata() {
+  return { title: await pageTitle("/admin", "관리자") };
+}
 
 export default async function AdminPage() {
   const user = await getCurrentUser();

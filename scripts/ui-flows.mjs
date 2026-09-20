@@ -194,8 +194,10 @@ await page.waitForURL(BASE + "/");
 // 시작할 때 MARK 가 붙은 것을 전부 걷어내면 몇 번을 돌려도 같은 결과가 나온다.
 {
   const swept = await page.evaluate(async (mark) => {
-    // `baby-entries` 가 빠져 있었다 — 아기 기록만 찌꺼기가 쌓여도 안 치워졌다.
-    const paths = ["anniversaries", "todos", "shopping", "plans", "albums", "board", "baby-entries"];
+    // `baby-entries` 는 여기 못 넣는다 — 그 컬렉션에는 **GET 이 없다**(POST 만 있다).
+    // 넣었더니 405 가 콘솔 오류로 찍혔고, 목록을 못 받으니 치우지도 못했다.
+    // 대신 아기 기록은 만들 때 **id 를 받아 두었다가** 그 흐름 끝에서 직접 지운다(아래).
+    const paths = ["anniversaries", "todos", "shopping", "plans", "albums", "board"];
     let n = 0;
     for (const path of paths) {
       const list = await fetch(`/api/${path}`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
@@ -629,6 +631,19 @@ await step("기록 남기기를 열면 **쓰는 칸이 맨 위**에 있다", asy
   if (others > 0) throw new Error(`쓰는 칸 위에 정할 것이 ${others}개 있다 — 한 줄 적으러 왔는데`);
 });
 
+// 만든 기록의 id 를 잡아 둔다 — 지우기 단계가 실패해도 찌꺼기를 남기지 않으려고.
+// (컬렉션에 GET 이 없어서 나중에 id 로 찾을 방법이 없다. 만들 때 받아 두는 수밖에.)
+let babyEntryId = null;
+page.on("response", async (res) => {
+  if (res.request().method() !== "POST" || !res.url().includes("/api/baby-entries")) return;
+  try {
+    const j = await res.json();
+    if (j?.id) babyEntryId = j.id;
+  } catch {
+    /* 본문이 없을 수도 있다 */
+  }
+});
+
 await step("한 줄 적고 저장하면 일기에 남는다", async () => {
   await page.locator('[role="dialog"] textarea').first().fill(MARK + " 오늘 입덧이 좀 나아졌어요");
   await page.getByRole("button", { name: /^저장$/ }).last().click();
@@ -709,6 +724,15 @@ await step("아기가 홈에 없으면 한 번 눌러 켤 수 있다", async () 
 });
 
 // ── 꾸미기 스티커 ────────────────────────────────────────
+// 지우기 단계가 어떤 이유로든 실패했으면 여기서 확실히 치운다.
+if (babyEntryId) {
+  const gone = await page.evaluate(
+    (id) => fetch(`/api/baby-entries/${id}`, { method: "DELETE" }).then((r) => r.status).catch(() => 0),
+    babyEntryId
+  );
+  if (gone === 200 || gone === 204) console.log("  (남아 있던 아기 기록을 치웠어요)");
+}
+
 console.log("꾸미기");
 await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {
   // 자리는 xPct(가운데, %)로 저장된다. 같은 값이 화면 폭에 따라 다른 자리를 뜻한다:
@@ -750,6 +774,31 @@ await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 �
 // **띄어쓰기 없는 긴 영단어 하나**가 홈의 쪽지 격자를 벌렸다. 격자 칸의 기본
 // `min-width: auto` 는 "내용의 최소 너비" 라서, `overflow-wrap` 으로는 못 줄인다
 // (316px 칸에 397px 카드가 들어가 오른쪽이 잘렸다 → `min-w-0` 으로 고쳤다).
+// ── 두 번 지우기 ─────────────────────────────────────────
+// 공유 목록이다 — **두 사람이 같은 항목을 동시에 지우는 일이 실제로 있다.**
+// 예전엔 뒤쪽 요청이 prisma P2025 로 **500** 을 받았고, 화면은 `!res.ok` 를 보고
+// 낙관적 삭제를 되돌려 **지운 것이 되살아났다.** 이미 없으면 그걸로 된 것이다.
+console.log("두 번 지우기");
+await step("같은 항목을 두 번 지워도 되살아나지 않는다", async () => {
+  const r = await page.evaluate(async (mark) => {
+    const made = await fetch("/api/shopping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: mark + "두번", quantity: "1개" }),
+    }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!made?.id) return { err: "못 만들었다" };
+    const first = await fetch(`/api/shopping/${made.id}`, { method: "DELETE" }).then((x) => x.status);
+    const second = await fetch(`/api/shopping/${made.id}`, { method: "DELETE" }).then((x) => x.status);
+    const list = await fetch("/api/shopping").then((x) => (x.ok ? x.json() : [])).catch(() => []);
+    const left = (Array.isArray(list) ? list : []).filter((i) => (i.name || "").includes(mark)).length;
+    return { first, second, left };
+  }, MARK);
+  if (r.err) throw new Error(r.err);
+  if (r.first !== 200) throw new Error(`첫 삭제가 ${r.first}`);
+  if (r.second >= 500) throw new Error(`두 번째 삭제가 ${r.second} — 화면은 이걸 보고 지운 것을 되살린다`);
+  if (r.left !== 0) throw new Error(`${r.left}개가 남아 있다`);
+});
+
 console.log("긴 글자");
 {
   const LONG = {

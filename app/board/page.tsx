@@ -1,7 +1,12 @@
+import { pageTitle } from "@/lib/site";
 import { prisma } from "@/lib/prisma";
 import { BoardClient } from "./board-client";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata() {
+  return { title: await pageTitle("/board", "게시판") };
+}
 
 export default async function BoardPage() {
   const [posts, members] = await Promise.all([

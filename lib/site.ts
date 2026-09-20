@@ -64,3 +64,24 @@ export async function getNav(): Promise<NavItem[]> {
     return DEFAULT_NAV;
   }
 }
+
+/**
+ * 그 화면의 **브라우저 탭 제목**.
+ *
+ * 열 화면이 전부 `포동 · 우리 가족 공간` 한 줄이었다 — 탭도, 즐겨찾기도, 방문 기록도,
+ * 뒤로가기 목록도 전부 같은 글자라 어느 게 어느 화면인지 알 수 없었다.
+ *
+ * 이름은 **NAV 에서 가져온다.** 가족이 `/admin` 에서 메뉴 이름을 바꾸면 탭 제목도 같이
+ * 바뀐다 — 화면마다 글자를 손으로 적어 두면 그때부터 갈라진다(AGENTS.md: 목록을 따로
+ * 만들지 말 것). NAV 에 없는 화면(`/admin` 등)은 `fallback` 을 쓴다.
+ */
+export async function pageTitle(href: string, fallback?: string): Promise<string> {
+  try {
+    const nav = await getNav();
+    const found = nav.find((n) => n.href === href);
+    if (found?.label) return found.label;
+  } catch {
+    /* DB 가 없어도 제목은 나와야 한다 */
+  }
+  return fallback ?? href;
+}

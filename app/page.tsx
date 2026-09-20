@@ -21,6 +21,10 @@ import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 
+// 홈에는 `generateMetadata` 를 두지 않는다. `title.template` 은 **자식 구간**에만 붙어서,
+// 루트와 같은 구간인 이 파일에 제목을 주면 ` · 포동` 이 안 붙고 "홈" 한 글자가 된다.
+// 루트 레이아웃의 기본값(`포동 · 우리 가족 공간`)이 홈의 제목으로 알맞다.
+
 /** 마크다운 본문에서 홈 카드용 한 줄: 이미지 문법 제거, 첫 비어있지 않은 줄, 서식 접두 제거 */
 function firstLine(md: string): string {
   const line = md

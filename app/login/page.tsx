@@ -4,8 +4,9 @@ import { LoginForm } from "./login-form";
 import { getSiteConfig } from "@/lib/site";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const site = await getSiteConfig();
-  return { title: `로그인 · ${site.siteName}` };
+  // 이름만 준다 — 뒤의 ` · 포동` 은 루트 레이아웃의 `title.template` 이 붙인다.
+  // 여기서 사이트 이름까지 적으면 "로그인 · 포동 · 포동" 이 된다.
+  return { title: "로그인" };
 }
 
 export default async function LoginPage() {

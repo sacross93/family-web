@@ -68,7 +68,10 @@ export function BabyHero({
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-xl">
             {baby.emoji}
           </span>
-          <p className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</p>
+          {/* 이 화면의 `h1`. 다른 화면은 `PageHeader` 가 만들어 주는데 여기는 자체 히어로라
+              **h1 이 아예 없었다** — 스크린리더로 들어오면 이 화면이 무엇인지 말해 주는 줄이
+              하나도 없다. 가장 큰 글자(주차)가 아니라 **이름**이 이 화면의 제목이다. */}
+          <h1 className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</h1>
         </div>
 
         {born ? (

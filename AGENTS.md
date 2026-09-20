@@ -15,6 +15,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 색상은 `lib/colors.ts`의 `palette(key)`로만. `"bg-"+key` 식 동적 클래스 조합 금지 (Tailwind v4가 스캔 못 함).
 - UI는 `@/components/ui` 배럴에서 import. 임의 HEX/그림자/폰트 추가 금지 (토큰은 `app/globals.css`).
 - 날짜는 `lib/date.ts` 헬퍼(`kDate`, `dday`, `ageFrom` …). 타입은 `lib/types.ts`.
+- **DELETE 는 두 번 불러도 같은 결과여야 한다.** 라우트에서 `prisma.X.delete()` 를 쓰지 말고 **`deleteMany({ where: { id } })`** 를 쓸 것 — 없는 행에 `delete` 를 걸면 P2025 가 던져져 **500** 이 되고, 화면은 `!res.ok` 를 보고 낙관적 삭제를 되돌려 **지운 것이 되살아난다.** 공유 목록이라 실제로 일어난다(두 사람이 같은 항목을 동시에 지울 때·연결이 끊겼다 다시 눌렀을 때). `ui-flows` 가 확인한다.
 - 데이터 패턴: `app/<기능>/page.tsx`(서버, prisma로 read, `export const dynamic="force-dynamic"`) → `<기능>-client.tsx`("use client", 낙관적 업데이트 + `/api/...` fetch). 예시: `app/shopping/*`.
 - **Next 16 동적 라우트 params는 Promise**: `{ params }: { params: Promise<{ id: string }> }` → `await params`.
 - 사진은 `<img loading="lazy">` (eslint 허용). 업로드는 `public/uploads/`(git 제외).

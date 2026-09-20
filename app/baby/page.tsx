@@ -1,7 +1,12 @@
+import { pageTitle } from "@/lib/site";
 import { prisma } from "@/lib/prisma";
 import { BabyClient } from "./baby-client";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata() {
+  return { title: await pageTitle("/baby", "아기") };
+}
 
 export default async function BabyPage() {
   const [baby, members] = await Promise.all([

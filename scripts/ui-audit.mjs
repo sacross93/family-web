@@ -896,11 +896,42 @@ for (const { w, h, tag } of WIDTHS) {
   }
 }
 
+// ── 탭 제목과 제목 구조 ──────────────────────────────────
+// 열 화면이 전부 `포동 · 우리 가족 공간` 한 줄이었다 — 탭도, 즐겨찾기도, 방문 기록도,
+// 뒤로가기 목록도 같은 글자라 어느 게 어느 화면인지 알 수 없었다.
+// `/baby` 는 `h1` 이 아예 없었다(자체 히어로라 `PageHeader` 를 안 쓴다) — 스크린리더로
+// 들어오면 이 화면이 무엇인지 말해 주는 줄이 하나도 없다.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  if (USER && PASS) {
+    await page.goto(BASE + "/login");
+    await page.locator('input[autocomplete="username"]').fill(USER);
+    await page.locator('input[autocomplete="current-password"]').fill(PASS);
+    await page.getByRole("button", { name: "로그인" }).click();
+    await page.waitForURL(BASE + "/", { timeout: 15000 });
+  }
+  const seen = new Map();
+  for (const path of PATHS) {
+    await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
+    const title = (await page.title()).trim();
+    const h1 = await page.evaluate(() => document.querySelectorAll("h1").length);
+    if (!title) problems.push(`${path}: 탭 제목이 비었다`);
+    else {
+      const other = seen.get(title);
+      if (other) problems.push(`${path}: 탭 제목이 ${other} 과 같다 — "${title}"`);
+      else seen.set(title, path);
+    }
+    if (h1 !== 1) problems.push(`${path}: h1 이 ${h1}개 (하나여야 한다)`);
+  }
+  await ctx.close();
+}
+
 await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA · 판이 바탕에서 떠 보임 · 버튼 글자가 한 줄 · 꾸미기 모드도 정상");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA · 판이 바탕에서 떠 보임 · 버튼 글자가 한 줄 · 꾸미기 모드도 정상 · 화면마다 탭 제목이 다르고 h1 이 하나");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

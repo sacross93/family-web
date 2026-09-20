@@ -28,7 +28,11 @@ const display = Jua({
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getSiteConfig();
   return {
-    title: `${site.siteName} · ${site.tagline}`,
+    title: {
+      // 화면마다 `generateMetadata` 로 제 이름만 주면 여기서 ` · 포동` 이 붙는다.
+      default: `${site.siteName} · ${site.tagline}`,
+      template: `%s · ${site.siteName}`,
+    },
     description: `사진, 계획, 캘린더, 할일을 함께 나누는 ${site.siteName} 가족만의 공간 🏡`,
   };
 }
