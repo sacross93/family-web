@@ -382,8 +382,8 @@ export default async function HomePage() {
                 <div key={t.id} className="flex items-center gap-2 text-sm">
                   <span
                     className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[0.625rem] text-white",
-                      t.done ? "bg-rose" : "border-2 border-line-strong",
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[0.625rem] text-ink",
+                      t.done ? "bg-rose" : "border-2 border-control",
                     )}
                   >
                     {t.done && "✓"}

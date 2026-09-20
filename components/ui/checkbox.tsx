@@ -29,8 +29,10 @@ export function CheckCircle({
       className={cn(
         "flex shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200",
         size === "sm" ? "h-5 w-5" : "h-6 w-6",
+        // 체크 표시는 **잉크**로. 흰 체크는 파스텔 동그라미 위에서 1.3~1.8:1 이라
+        // 장보기에서 담았는지 아닌지가 눈으로 안 잡혔다(버터 1.28). 잉크는 7~10:1.
         checked
-          ? cn(pal.dot, "border-transparent text-white")
+          ? cn(pal.dot, "border-transparent text-ink")
           : "border-control bg-surface text-transparent",
         className
       )}
