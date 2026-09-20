@@ -745,6 +745,21 @@ for (const { w, h, tag } of WIDTHS) {
     for (const path of PATHS) {
       await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
       for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}: 대비 부족 — ${bad}`);
+
+      // **모달 안도 본다.** 겹쳐 뜨는 판은 목록 화면을 훑는 것만으로는 한 번도 안 재진다 —
+      // 오류 토스트가 페이지와 1.02:1 인 채로 오래 살아남은 것이 그래서였다(그건 눈으로 찾았다).
+      const opener = page.getByRole("button", { name: /추가|만들기|남기기|새 / }).first();
+      if (await opener.isVisible().catch(() => false)) {
+        await opener.click().catch(() => {});
+        await page.waitForTimeout(600);
+        if (await page.locator('[role="dialog"]').first().isVisible().catch(() => false)) {
+          for (const bad of await page.evaluate(scan)) {
+            problems.push(`${tag} ${path}(모달): 대비 부족 — ${bad}`);
+          }
+        }
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(350);
+      }
     }
     await ctx.close();
   }

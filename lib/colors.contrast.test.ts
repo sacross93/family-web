@@ -210,6 +210,22 @@ describe("글자 대비", () => {
     }
   });
 
+  it("대화의 두 말풍선이 바탕에서도, 서로에게서도 보인다 — 누가 한 말인지 모양으로 알아야 한다", () => {
+    // 이 자리는 두 번 무너졌다. 처음엔 포동이의 **흰** 카드가 **흰** 시트 위에 얹혀
+    // 1.24:1 이었고(대화 바탕을 `paper` 로 내려 고쳤다), 그 다음엔 내 말풍선이
+    // `primary-soft` 라 그 `paper` 위에서 **1.04:1** 이 됐다 — 풍선은 사라지고
+    // 로즈 글자만 떠 있었다. 글자 대비만 재면 둘 다 통과한다(5.7:1). 판을 따로 봐야 한다.
+    const THREAD = "paper";
+    const MIN = 1.15; // 이 판의 최소 단차(DESIGN.md §2: 판↔바탕 1.157)
+    for (const plate of ["surface", "chrome"]) {
+      const r = contrast(token(plate), token(THREAD));
+      expect(r, `말풍선 ${plate} on ${THREAD} = ${r.toFixed(3)}`).toBeGreaterThanOrEqual(MIN);
+    }
+    // 둘이 서로 달라야 누가 한 말인지 알 수 있다.
+    const between = contrast(token("surface"), token("chrome"));
+    expect(between, `내 말풍선 vs 포동이 카드 = ${between.toFixed(3)}`).toBeGreaterThanOrEqual(MIN);
+  });
+
   it("토스트가 페이지에서 떠 보인다 — 3초 뒤 사라지는 판이 바탕과 같은 색이면 못 본다", () => {
     // 토스트는 본문 위 어디에나 뜬다: 페이지(paper)·흰 판(surface)·틀(chrome).
     // 옛 오류 토스트는 `danger-soft` 라 페이지 위에서 **1.02:1** 이었다 — 테두리와

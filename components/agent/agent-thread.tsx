@@ -209,9 +209,12 @@ export function AgentThread({
                 <div
                   className={cn(
                     "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-xl rounded-br-sm px-4 py-2.5 text-[0.9375rem] leading-relaxed",
-                    // 내가 한 말은 **브랜드 로즈**로. 사이트 전체가 핑크가 된 뒤로
-                    // 라벤더 풍선은 혼자 다른 집 물건 같았다. 색은 여기서만 고른다.
-                    "bg-primary-soft text-primary-ink",
+                    // 내가 한 말은 **로즈 판**, 포동이 말은 흰 판. 둘을 색으로 가른다.
+                    // `primary-soft` 였을 때 대화 바탕(`paper`)과 **1.04:1** 이라
+                    // 풍선 모양이 아예 안 보이고 로즈 글자만 떠 있는 것처럼 보였다
+                    // (포동이의 흰 카드는 1.16 으로 이 판의 최소 단차다 — DESIGN.md §2).
+                    // `chrome` 은 1.23 으로 그 단차를 넘고, 글자도 8.9:1 로 훨씬 편하다.
+                    "bg-chrome text-chrome-ink",
                   )}
                 >
                   {/* 붙인 사진은 글 위에. next/image 가 아니라 <img> 를 쓰는 건 이 저장소 규칙이다(AGENTS.md). */}
