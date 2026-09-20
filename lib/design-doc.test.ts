@@ -40,6 +40,15 @@ function documented(): { name: string; hex: string; line: number }[] {
   return out;
 }
 
+describe("밝은 화면 하나뿐이라는 것을 브라우저에 알려 준다", () => {
+  it("color-scheme: light 를 선언한다", () => {
+    // 선언하지 않으면 브라우저 기본 UI(날짜 고르개 팝업·선택 목록·자동완성 칠·스크롤바)가
+    // **폰의 설정**을 따른다 — 다크 모드 폰에서 우리 흰 입력칸 위로 어두운 팝업이 떨어진다.
+    // 화면으로는 안 잡힌다(팝업은 스크린샷에 안 찍힌다). 그래서 선언 여부로 잰다.
+    expect(css).toMatch(/color-scheme:\s*light/);
+  });
+});
+
 describe("DESIGN.md 의 색이 실제 토큰과 같은가", () => {
   it("문서에 적힌 색을 하나라도 찾는다 — 못 찾으면 이 검사가 헛돈다", () => {
     expect(documented().length).toBeGreaterThanOrEqual(8);
