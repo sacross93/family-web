@@ -328,7 +328,11 @@ export default async function HomePage() {
                         태어난 지
                       </Tag>
                     )}
-                    <span className="font-num text-3xl font-bold leading-none text-ink">
+                    {/* `font-num`(고딕) 이 아니라 `font-display`(주아). 같은 "8주 2일" 인데
+                        `/baby` 히어로는 주아 60px, 여기 홈 카드는 고딕 30px 이라 **사이트의
+                        간판 숫자가 두 글꼴로 갈라져 있었다.** 30px 은 제목 글꼴 하한(18px)
+                        위라 주아가 뭉치지 않는다. 자릿수 정렬(tnum)은 한 줄짜리라 필요 없다. */}
+                    <span className="font-display text-3xl font-bold leading-none text-ink">
                       {born
                         ? `${daysSinceBirth(baby.birthDate!)}일`
                         : weekLabel(p)}
