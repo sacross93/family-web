@@ -25,6 +25,9 @@ export function Modal({
 }) {
   const panel = useFocusTrap<HTMLDivElement>(open);
   const [mounted, setMounted] = useState(false);
+  // 포털은 **브라우저에 붙은 뒤에만** 그릴 수 있다(서버에는 document 가 없다).
+  // 이 한 번의 추가 렌더가 이 장치의 값이다.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {

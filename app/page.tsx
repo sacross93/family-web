@@ -276,7 +276,6 @@ export default async function HomePage() {
         </div>
         {site.heroImageUrl ? (
           <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md sm:h-28 sm:w-28">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={site.heroImageUrl}
               alt=""
@@ -534,7 +533,6 @@ export default async function HomePage() {
                   key={p.id}
                   className="relative aspect-square overflow-hidden rounded-md bg-sunken ring-1 ring-line"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={p.url}
                     alt={p.caption ?? "사진"}

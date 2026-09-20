@@ -132,6 +132,8 @@ export function TodosClient({
 
   // 알림 권한 상태 파악 (클라 전용)
   useEffect(() => {
+    // 알림 권한은 브라우저가 쥐고 있다 — 서버에서는 알 수 없어 붙은 뒤에 읽는다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPermission(notificationPermission());
   }, []);
 

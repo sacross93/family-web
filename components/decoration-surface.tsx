@@ -96,6 +96,8 @@ export function DecorationSurface({
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => alive && setItems(data))
       .catch(() => {});
+    // 표면이 바뀌면 고른 스티커도 의미가 없어진다. 같은 효과 안에서 함께 비운다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedId(null);
     return () => {
       alive = false;
@@ -258,7 +260,6 @@ export function DecorationSurface({
           touchAction: "none",
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={d.url}
           alt=""

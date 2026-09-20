@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MoreHorizontal, MessageCircle } from "lucide-react";
 
-import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { TAB_COUNT, isNavActive, type NavItem } from "@/lib/nav";
 
@@ -48,7 +47,6 @@ export function BottomTabs({
       <ul className="flex h-14 items-stretch">
         {tabs.map((item) => {
           const active = isNavActive(pathname, item.href);
-          const pal = palette(item.color);
           return (
             <li key={item.href} className="flex-1">
               <Link

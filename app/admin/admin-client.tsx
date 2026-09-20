@@ -206,7 +206,6 @@ function IconField({
         {/* 미리보기 */}
         <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-sunken text-3xl ring-1 ring-line">
           {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             emoji || "🙂"
@@ -468,7 +467,6 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
                 {list.map((d) => (
                   <div key={d.id} className="group relative overflow-hidden rounded-md border border-line bg-sunken">
                     <div className="flex aspect-square items-center justify-center p-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={d.url}
                         alt=""

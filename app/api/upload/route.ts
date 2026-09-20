@@ -24,7 +24,10 @@ function extFor(file: File): string {
 }
 
 // 프로덕션(Vercel): Blob 토큰이 있으면 클라우드 저장. 로컬: public/uploads.
-const useBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+// 이름을 `useBlob` 으로 두면 안 된다 — `use` 로 시작하면 eslint 가 **리액트 훅으로 보고**
+// "훅을 async 함수 안에서 부를 수 없다" 같은 **헛된 오류 두 개**를 낸다. 여긴 API 라우트고
+// 이건 그냥 환경변수를 보는 함수다. 헛된 오류는 진짜 오류를 묻는다.
+const blobConfigured = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!file.type.startsWith("image/")) continue;
     const filename = `${randomUUID()}${extFor(file)}`;
 
-    if (useBlob()) {
+    if (blobConfigured()) {
       // ── 클라우드(Vercel Blob) 저장 ──
       const blob = await put(`uploads/${filename}`, file, {
         access: "public",

@@ -17,7 +17,8 @@ export function MarkdownView({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ node, ...props }) => (
+          // `node` 는 스프레드에서 **빼내려고** 꺼낸다(DOM 에 넘기면 안 되는 값이다).
+          a: ({ node: _node, ...props }) => (
             <a target="_blank" rel="noreferrer noopener" {...props} />
           ),
         }}

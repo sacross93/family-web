@@ -486,8 +486,10 @@ function EditAlbumModal({
   const [busy, setBusy] = useState(false);
 
   // 모달을 열 때마다 현재 앨범 값으로 초기화
+  // 모달을 열 때마다 **지금 앨범 값**으로 되돌린다(고치다 닫은 흔적이 남지 않게).
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(album.title);
       setDescription(album.description ?? "");
       setEmoji(album.emoji);
@@ -613,6 +615,8 @@ function Lightbox({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // 다른 사진으로 넘어가면 캡션 칸도 그 사진 것으로 바꾼다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCaption(photo?.caption ?? "");
   }, [photo?.id, photo?.caption]);
 

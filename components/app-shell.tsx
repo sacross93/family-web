@@ -78,7 +78,6 @@ function Brand({ site }: { site: SiteConfigData }) {
     <Link href="/" className="flex items-center gap-2.5 px-1 py-1">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl">
         {site.brandImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={site.brandImageUrl}
             alt=""
@@ -179,7 +178,10 @@ export function AppShell({
   const drawer = useFocusTrap<HTMLElement>(open);
   const pathname = usePathname();
 
+  // 페이지를 옮기면 드로어를 닫는다. **라우터가 React 바깥에서 바뀌는 것**이라
+  // 효과가 맞는 도구다 — 링크마다 닫기를 붙이면 빠뜨리는 링크가 반드시 생긴다.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpen(false);
   }, [pathname]);
 
@@ -200,6 +202,8 @@ export function AppShell({
 
   // 편집 상태는 페이지를 옮겨도 유지된다(스티커를 여러 페이지에 이어서 붙이는 흐름).
   useEffect(() => {
+    // localStorage 는 서버에 없다 — 초기값으로 읽으면 서버가 그린 것과 어긋난다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (localStorage.getItem(DECOR_EDIT_KEY) === "1") setDecorating(true);
   }, []);
   useEffect(() => {

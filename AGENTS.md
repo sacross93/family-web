@@ -26,6 +26,16 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - **떠 있는 버튼을 두지 않는다.** 하단 탭바(화면 가장자리) 말고는 아무것도 화면에 띄우지 말 것. 콘텐츠 한가운데에 떠 있는 버튼은 그 밑에 깔린 것을 **누를 수 없게** 만든다 — 우하단 `물어보기` 가 아기 기록의 `…` 를 정확히 덮어서, 일기를 고치려고 누르면 AI 채팅이 열렸다. 지금 `포동이` 는 탭바 안(폰)·사이드바(데스크톱)에 있다. 새 기능도 같은 자리를 찾을 것.
 - **메뉴·툴팁·팝오버는 `document.body` 로 내보낸다**(portal). 제자리에 그리면 조상의 `overflow-hidden` 이 잘라 아래 항목을 아예 못 누르고, 조상에 `transform` 이 있으면 `fixed` 기준이 어긋난다. `components/ui/item-actions.tsx` 가 본보기.
 
+## 린트
+- `npm run lint` 는 **0건이어야 한다.** 오늘까지 21건(오류 9·경고 12)이 늘 떠 있었고,
+  그러면 **진짜 오류가 그 안에 묻힌다.** 0으로 맞춰 뒀으니 새로 뜨는 것은 새 문제다.
+- `react-hooks/set-state-in-effect` 를 끌 때는 **왜 효과가 맞는 도구인지 한 줄로 적을 것**
+  (지금 8곳: localStorage·알림 권한·포털 마운트·라우트 변경·모달 초기화 등 **React 바깥의
+  것과 맞추는** 자리들이다). 이유 없이 끄면 규칙이 아니라 소음이 된다.
+- 이름을 `use...` 로 시작하지 말 것 — 리액트 컴포넌트가 아닌데도 eslint 가 훅으로 보고
+  헛된 오류를 낸다(`app/api/upload/route.ts` 의 `useBlob` 이 그랬다 → `blobConfigured`).
+- `_` 로 시작하는 이름은 **일부러 안 쓰는 것**이라는 약속을 eslint 설정이 안다.
+
 ## DB / 실행
 - 로컬: `postgresql://ascentai@localhost:5432/podong` (Homebrew `postgresql@16`, `brew services start postgresql@16`).
 - `npm run dev` · `npm run db:push` · `npm run db:seed` · `npm run db:reset` · `npm run db:studio`.
