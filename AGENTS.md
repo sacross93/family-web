@@ -30,10 +30,10 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - `npm run dev` · `npm run db:push` · `npm run db:seed` · `npm run db:reset` · `npm run db:studio`.
 
 ## 로그인 / 인증 (적용됨)
-- 아이디·비밀번호 로그인. `AppUser`(bcrypt) + jose 세션 쿠키. 전 페이지를 `middleware.ts`가 보호.
+- 아이디·비밀번호 로그인. `AppUser`(bcrypt) + jose 세션 쿠키. 전 페이지를 `proxy.ts`가 보호.
 - 세션 로직: `lib/session.ts`(edge-safe, next/headers 금지) · 서버 조회: `lib/current-user.ts`의 `getCurrentUser()`.
 - 새 계정: `npm run user:add`. 공유 계정 `wlsdud022`(관리자). 모든 IP 접속: `npm run dev:lan`.
-- `middleware.ts`는 `lib/session.ts`만 import (jose). prisma/next-headers/bcrypt는 route(nodejs)에서만.
+- `proxy.ts`(Next 16 에서 `middleware` 가 이 이름으로 바뀜)는 `lib/session.ts`만 import (jose). prisma/next-headers/bcrypt는 route(nodejs)에서만 — v16 부터 proxy 가 Node 런타임이 기본이라도 여기는 가볍게 둔다.
 
 ## 아기 페이지 (`/baby`)
 - 모델 `Baby`(태명·예정일·출생일·showOnHome) · `BabyEntry`(kind: diary|checkup|letter, 작성자=FamilyMember) · `BabyChecklistItem`. 사진은 마크다운 이미지로.
@@ -59,7 +59,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
   - 가상 경로 `/decorations`·`/family` 는 링크로 만들지 않는다 — `components/agent/agent-thread.tsx` 의 `canVisit()`. `listPath` 자리를 채우려고 둔 값이라 **그런 페이지가 없다**(`app/decorations/`·`app/family/` 부재). 타입으로는 못 막으니 이 함수가 유일한 방어선이다.
   - assistant 의 `toolCalls` ↔ tool 의 `toolCallId` 를 **짝째로** 저장한다 — `app/api/agent/route.ts` + `lib/agent/chat-store.ts`. 짝이 깨지면 네이티브 도구 모드가 그 경계에서 죽는다. 같은 밀리초의 순서는 `orderBy: [{createdAt:desc},{id:desc}]` 의 cuid 단조성에 기댄다.
   - `app/api/agent/route.ts` 의 `maxDuration = 60` — 토큰 갱신 HTTP 타임아웃(8초)×2 + 여유. 갱신이 트랜잭션 안에서 일어나므로 중간에 함수가 죽으면 refresh_token 이 영구히 죽는다.
-  - `agentConfig().enabled` 는 **POST `/api/agent` 만** 검사한다(403 "아직 준비 중이에요."). `chats/*`·`undo` 는 **일부러** 안 건다 — 기능을 꺼도 남은 대화는 지울 수 있어야 하고 로그인은 `middleware.ts` 가 이미 강제한다. "빠졌다"고 채우지 말 것.
+  - `agentConfig().enabled` 는 **POST `/api/agent` 만** 검사한다(403 "아직 준비 중이에요."). `chats/*`·`undo` 는 **일부러** 안 건다 — 기능을 꺼도 남은 대화는 지울 수 있어야 하고 로그인은 `proxy.ts` 가 이미 강제한다. "빠졌다"고 채우지 말 것.
   - 되돌리기는 `{resource, id}` 만 받는다 — `app/api/agent/undo/route.ts`. 경로는 서버가 `findResource(key)?.create?.undoApi(id)` 로만 만들고, `id` 는 `/^[A-Za-z0-9_-]{1,64}$/` 만 통과한다(`../site-config` 가 지나가면 화이트리스트가 무의미해진다). 대상의 5xx 는 502 로 번역해 우리 라우트가 500 으로 남지 않게 한다.
 - **2단계가 아직 안 지킨 것** — 하게 되면 여기서 지운다.
   - **도구 결과 본문 줄이기.** `loop.ts` 가 `JSON.stringify(result)` 로 대화에 넣고 라우트는 `LoopEvent` 만 보므로 줄일 자리는 도구·루프뿐이다. 지금은 `read_url` 만 `fetchMaxChars` 로 잘리고 `open_page` 의 상세는 상한이 없다.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sweepUploads } from "@/lib/uploads";
 import { getCurrentUser } from "@/lib/current-user";
 
 export const runtime = "nodejs";
@@ -47,6 +48,10 @@ export async function DELETE(
   const auth = await authorize(id);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
+  // 스티커 그림도 올린 파일이다 — 떼면 파일도 지운다.
+  // 같은 그림을 여러 곳에 붙였을 수 있어 참조를 세고 지운다(sweepUploads).
+  const before = await prisma.decoration.findUnique({ where: { id }, select: { url: true } });
   await prisma.decoration.delete({ where: { id } });
+  await sweepUploads([before?.url]);
   return NextResponse.json({ ok: true });
 }
