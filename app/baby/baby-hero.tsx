@@ -93,18 +93,32 @@ export function BabyHero({
                 : `${p.dueDays}일 남았어요`}
             </p>
 
-            <div
-              className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-              aria-label="임신 진행"
-            >
+            {/* 막대 위를 아기가 걸어간다.
+                이모지 하나가 "지금 여기" 를 말한다 — 퍼센트를 읽지 않아도 눈에 들어오고,
+                이 집에서 가장 중요한 한 가지라 꾸밀 값어치가 있는 유일한 자리다.
+                `overflow-hidden` 을 벗겨야 이모지가 막대 밖으로 나온다. 대신 채움에만
+                `rounded-full` 을 준다. 양 끝에서 이모지가 잘리지 않게 자리를 가둔다. */}
+            <div className="relative mt-7">
               <div
-                className={cn("h-full rounded-full transition-all", pal.dot)}
-                style={{ width: `${pct}%` }}
-              />
+                className="h-1.5 w-full overflow-hidden rounded-full bg-white"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+                aria-label="임신 진행"
+              >
+                <div
+                  className={cn("h-full rounded-full transition-all", pal.dot)}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-2.5 -translate-x-1/2 text-base transition-all"
+                style={{ left: `clamp(0.75rem, ${pct}%, calc(100% - 0.75rem))` }}
+              >
+                {baby.emoji}
+              </span>
             </div>
             {/* 막대의 양 끝이 곧 설명이다 — 왼쪽은 지금, 오른쪽은 만나는 날.
                 가운뎃점으로 이어 붙인 메타 줄보다 읽는 순서가 분명하다. */}
