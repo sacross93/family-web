@@ -80,6 +80,19 @@ describe("글자 대비", () => {
     expect(b / c).toBeGreaterThan(1.3);
   });
 
+  it("판이 바탕에서 떠 보인다 — 흰 판과 종이가 같은 색이면 화면이 죽이 된다", () => {
+    // 핑크 파스텔로 칠하고 나서 흰 판 vs 종이가 **1.078** 이었다. 카드 테두리(1.15)도
+    // 옅은 핑크라, 목록이 배경에 녹아 어디까지가 한 판인지 눈으로 잡히지 않았다.
+    // 대비 기준(4.5/3)은 **글자** 이야기라 여기엔 안 맞는다 — 넓은 면끼리는
+    // 훨씬 작은 차이로도 구별되지만, 1.08 은 그 아래다.
+    const lift = contrast(token("surface"), token("paper"));
+    expect(lift, `surface vs paper = ${lift.toFixed(3)}`).toBeGreaterThanOrEqual(1.12);
+
+    // 틀(상단바·탭바·히어로)도 바탕과 구별돼야 한다.
+    const frame = contrast(token("chrome"), token("paper"));
+    expect(frame, `chrome vs paper = ${frame.toFixed(3)}`).toBeGreaterThanOrEqual(1.12);
+  });
+
   it("가라앉은 칸(sunken) 위에서도 3:1 은 넘는다", () => {
     for (const fg of ["ink", "ink-soft", "ink-faint"]) {
       const r = contrast(token(fg), token("sunken"));

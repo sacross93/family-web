@@ -14,12 +14,14 @@ import { cn } from "@/lib/utils";
  *   배경색은 부르는 쪽이 준다(`className="bg-chrome"` 처럼) — 동적 조합 금지 규칙 때문.
  * - `photo` — 사진. 여백도 테두리도 없이 내용이 판을 꽉 채운다.
  *
- * **그림자는 판에 쓰지 않는다.** 정말로 떠 있는 것(모달·메뉴·알림)만 그림자를 갖는다.
+ * **그림자는 얕게, 로즈 기운으로.** 밝은 핑크 바탕에서는 흰 판이 바탕과 1.08:1 이라
+ * 테두리만으로는 판이 보이지 않는다(진한 판이던 시절과 반대다). 회색 그림자는
+ * 파스텔 위에서 때처럼 보이므로 `--shadow-card` 하나만 쓴다.
  */
 type Variant = "plain" | "tile" | "photo";
 
 const VARIANTS: Record<Variant, string> = {
-  plain: "rounded-lg border border-line bg-surface",
+  plain: "rounded-lg border border-line bg-surface shadow-card",
   tile: "rounded-lg",
   photo: "overflow-hidden rounded-md",
 };

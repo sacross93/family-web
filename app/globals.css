@@ -22,15 +22,15 @@
   --font-display: var(--font-display-face), Pretendard, sans-serif;
 
   /* ── 바탕 · 판 · 틀 ── */
-  --color-paper: #fdf4f8; /* 페이지 바탕 — 아주 옅은 핑크 종이 */
+  --color-paper: #fbeaf2; /* 페이지 바탕 — 아주 옅은 핑크 종이 */
   --color-surface: #ffffff; /* 내용 판 */
-  --color-sunken: #fbe9f0; /* 판 안에서 한 단 들어간 자리 */
+  --color-sunken: #f9e2ec; /* 판 안에서 한 단 들어간 자리 */
   /* 틀(사이드바·상단바·탭바·히어로). 연한 로즈 — 흰 판 옆에 나란히 서는 파스텔이다.
      **밝은 배경**이라 틀 위에서도 글자는 어두운 쪽을 쓴다(예전 진한 자두의 반대).
      그래도 ink 세 벌을 그대로 옮겨 쓰지는 않는다: `ink-faint` 는 이 로즈 위에서
      4.3 : 1 로 AA 에 못 미친다 — 그래서 `chrome-faint` 가 따로 있다. */
-  --color-chrome: #fad9e6; /* 연한 로즈 — 틀·히어로 */
-  --color-chrome-soft: #f6c9da; /* 틀 위에서 한 단 뜬 자리(눌린 탭·호버) */
+  --color-chrome: #f6cedd; /* 연한 로즈 — 틀·히어로 */
+  --color-chrome-soft: #f1bed1; /* 틀 위에서 한 단 뜬 자리(눌린 탭·호버) */
   --color-chrome-ink: #3e2f36; /* 틀 위 글자 — 9.7 : 1 */
   --color-chrome-faint: #6e5560; /* 틀 위 흐린 글자 — 5.2 : 1 */
 
@@ -41,21 +41,21 @@
   --color-ink: #3e2f36; /* 흰 판 12.6 : 1 */
   --color-ink-soft: #5e4650; /* 8.5 : 1 */
   --color-ink-faint: #7a606c; /* 5.7 : 1 (들어간 자리 4.9) */
-  --color-line: #f4e2ea;
-  --color-line-strong: #ebd0dd;
+  --color-line: #f2dce6;
+  --color-line-strong: #e8c8d8;
 
   /* ── 브랜드 / 주요 액션 (로즈) ──
      흰 글자가 AA(4.5:1)를 넘는 선에서 가장 밝은 로즈를 골랐다 — 버튼 글씨가 기준에
      못 미치면 브랜드고 뭐고 안 읽힌다(예전 보라 #7a6cf0 이 4.01:1 로 그랬다). */
   --color-primary: #be4571; /* 로즈. 흰 글자 4.9 : 1 */
-  --color-primary-hover: #a93a63;
+  --color-primary-hover: #9c3459;
   --color-primary-soft: #fce4ee;
-  --color-primary-ink: #a93a63; /* soft 위 5.0 : 1 */
+  --color-primary-ink: #9c3459; /* 틀 위 4.9:1 · soft 위 5.7:1 */
 
   /* ── 강조 한 색 ──
      '지금 벌어지고 있는 일' 에만 쓴다 — 주차 숫자, 오늘, 진행 막대.
      글자로 쓰지 않는다: 흰 판에서 3.9:1 로 AA(4.5)에 못 미친다. 글자엔 accent-ink. */
-  --color-accent: #c2691f; /* 따뜻한 살구 — 막대·점. 틀 위 3.0:1 로 여유가 없다 */
+  --color-accent: #b35f18; /* 살구. 틀 위 3.2:1 — 막대·점용 */
   --color-accent-ink: #8a4410; /* 글자용 — 흰 판 7.2 : 1 */
   --color-accent-soft: #fdeadb;
 
@@ -109,6 +109,11 @@
   /* 남아 있는 shadow-sm 자리는 Tailwind 기본(회색)으로 떨어지지 않게 우리 색으로 못박는다.
      새로 쓰지 말 것 — 판에는 그림자를 쓰지 않는다. */
   --shadow-sm: 0 1px 2px rgba(120, 70, 95, 0.05);
+  /* 판이 바탕에서 뜨는 그림자.
+     밝은 핑크 바탕에서는 흰 판이 바탕과 1.08:1 이라 **테두리만으로는 판이 안 보인다** —
+     진한 자두 판에서 "그림자는 판에 쓰지 않는다" 고 정했던 규칙이 여기서는 반대로 작동한다.
+     대신 회색이 아니라 로즈 기운으로, 아주 얕게. 회색 그림자는 파스텔 위에서 때처럼 보인다. */
+  --shadow-card: 0 2px 10px -4px rgba(190, 69, 113, 0.16), 0 1px 3px -1px rgba(190, 69, 113, 0.1);
   --shadow-md: 0 4px 16px -4px rgba(120, 70, 95, 0.14), 0 2px 6px -3px rgba(120, 70, 95, 0.08);
   --shadow-lg: 0 14px 34px -10px rgba(120, 70, 95, 0.22), 0 4px 10px -4px rgba(120, 70, 95, 0.1);
 
