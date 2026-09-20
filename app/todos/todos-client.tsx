@@ -647,7 +647,10 @@ function TodoRow({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "truncate text-[0.9375rem]",
+              // `truncate`(한 줄 말줄임)가 아니라 두 줄까지 — 글자를 키워 쓰는 사람에게
+              // 한 줄 말줄임은 **제목의 60%를 숨긴다**(1.5배에서 247px 짜리가 106px 칸에 들어갔다).
+              // 보통 크기에서는 대부분 한 줄에 들어가므로 보이는 모습은 그대로다.
+              "line-clamp-2 text-[0.9375rem]",
               done
                 ? "text-ink-faint line-through"
                 : todo.priority === "low"

@@ -289,6 +289,22 @@ const probeTapTargets = () => {
     if (r.width < 4 || r.height < 4) continue;
     if (r.top < topBar + 24 || r.bottom > innerHeight - bottomBar - 24) continue;
     if (skip(el) || getComputedStyle(el).visibility === "hidden") continue;
+    // **문장 속 인라인 링크는 재지 않는다** — WCAG 2.5.8 의 inline 예외다.
+    // 글 한가운데 낱말 링크를 40px 로 키우면 문단이 망가진다(홈의 "콩이 8주 2일" 한 줄이 그렇다).
+    // "옆에 다른 글자가 같이 있는, 인라인으로 흐르는 링크" 만 뺀다 — 혼자 서 있는 링크는 그대로 잰다.
+    // 옆에 **다른 글자나 인라인 조각**이 같이 흐르면 문장 속이다. 이웃이 `<span>` 인 경우도
+    // 있다(홈의 "콩이 8주 2일" 이 그렇다) — 텍스트 노드만 세면 못 잡는다.
+    // 플렉스 툴바의 아이콘 링크는 여기 안 걸린다: 플렉스 자식은 display 가 블록화되므로
+    // 아래 `inline` 검사에서 떨어져 나간다.
+    if (el.tagName === "A" && el.parentElement && getComputedStyle(el).display.startsWith("inline")) {
+      const beside = [...el.parentElement.childNodes].some(
+        (n) =>
+          n !== el &&
+          ((n.nodeType === 3 && n.nodeValue.trim()) ||
+            (n.nodeType === 1 && getComputedStyle(n).display.startsWith("inline")))
+      );
+      if (beside) continue;
+    }
     const label = (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().replace(/\s+/g, " ").slice(0, 20);
 
     // 한가운데를 눌렀을 때 자기가 잡히는가 (넓힌 영역끼리 겹쳐 남의 것을 훔치는 경우).
@@ -842,6 +858,16 @@ for (const { w, h, tag } of WIDTHS) {
       // **꾸미기 모드도 본다.** 감사가 한 번도 안 들어가 본 화면이고, 실제로 거기서
       // `사진 추가` 가 두 줄로 접히고 `완료` 가 36px(규칙은 40px)이었다.
       const deco = page.getByRole("button", { name: /^(꾸미기|이 페이지 꾸미기)$/ }).first();
+      // 꾸미기를 켜기 **전에** 있던 조작들을 적어 둔다 — 켠 뒤에 새로 생긴 것만 재려고.
+      // 본문의 체크 동그라미까지 재면 뜻이 없다: 스티커 층이 위에 깔려 `elementFromPoint`
+      // 로 짚어 나가는 측정이 막혀 24×24 로 나오는데, 꾸미는 중에 할일을 누를 일도 없다.
+      const beforeDeco = new Set(
+        await page.evaluate(() =>
+          [...document.querySelectorAll("button, a[href], [role='checkbox']")].map(
+            (e) => (e.getAttribute("aria-label") || e.textContent || e.tagName).trim().slice(0, 20)
+          )
+        )
+      );
       if (await deco.isVisible().catch(() => false)) {
         await deco.click().catch(() => {});
         await page.waitForTimeout(700);
@@ -849,21 +875,15 @@ for (const { w, h, tag } of WIDTHS) {
         if (await page.getByRole("button", { name: "마치기" }).first().isVisible().catch(() => false)) decoVisits++;
         for (const bad of await page.evaluate(wrapped)) problems.push(`${tag} ${path}(꾸미기): 버튼 글자가 접힌다 — ${bad}`);
         for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}(꾸미기): 대비 부족 — ${bad}`);
-        for (const small of await page.evaluate(() => {
-          const out = [];
-          for (const el of document.querySelectorAll("button,a[href]")) {
-            if (el.closest("nextjs-portal")) continue;
-            const b = el.getBoundingClientRect();
-            if (b.width < 8 || b.height < 8) continue;
-            if (getComputedStyle(el).visibility === "hidden") continue;
-            if (b.width < 40 || b.height < 40) {
-              out.push(`"${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 14)}" ${Math.round(b.width)}×${Math.round(b.height)}`);
-            }
-          }
-          return [...new Set(out)].slice(0, 4);
-        })) {
+        // 탭 타깃은 **같은 probe** 로 잰다. 손으로 쓴 스캔은 globals.css 가 넓혀 둔 누름 영역을
+        // 모르고 보이는 크기만 재서, 24px 짜리 체크 동그라미를 전부 오류로 올렸다.
+        if (w < 1024) {
           // 데스크톱은 마우스라 36px 을 허용한다(DESIGN.md §9) — 폰에서만 잡는다.
-          if (w < 1024) problems.push(`${tag} ${path}(꾸미기): "${small}" 이 40px 아래`);
+          const { small } = await page.evaluate(probeTapTargets);
+          for (const s of small) {
+            if (beforeDeco.has(s.label)) continue; // 꾸미기가 만든 것만 — 본문은 이미 위에서 쟀다
+            problems.push(`${tag} ${path}(꾸미기): "${s.label}" 이 작다 — 눌림 ${s.눌림}`);
+          }
         }
         await page.getByRole("button", { name: "마치기" }).first().click().catch(() => {});
         // 편집 상태는 localStorage 에 남는다 — 다음 화면이 꾸미기로 열리지 않게 지운다.

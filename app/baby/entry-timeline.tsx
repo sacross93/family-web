@@ -96,7 +96,10 @@ export function EntryTimeline({
                 return (
                   <Card
                     key={e.id}
-                    className={cn("group flex flex-col gap-3", isLetter && cn(palette("rose").soft, "border-transparent"))}
+                    // 편지는 로즈 판인데 페이지도 분홍이라 **ΔE 2.9** — 카드가 아예 안 보였다
+                    // (테두리를 일부러 지워 뒀다). 게시판 쪽지와 같은 해법: **제 기본색 테두리**.
+                    // 채움을 진하게 하면 편지의 부드러움이 죽는다. 판은 채움 아니면 가장자리다.
+                    className={cn("group flex flex-col gap-3", isLetter && cn(palette("rose").soft, palette("rose").border))}
                   >
                     <div className="flex items-center gap-2.5">
                       <Avatar emoji={e.author?.emoji} color={e.author?.color} name={e.author?.name} size="sm" />
