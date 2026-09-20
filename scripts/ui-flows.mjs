@@ -116,6 +116,12 @@ const openMenu = async (root, text) => {
 const menuItem = (label) => page.locator(`[data-item-menu] button:has-text("${label}")`);
 const text = () => page.evaluate(() => document.body.innerText);
 
+// 올린 파일이 실제로 지워지는지 — DB 행만 지우고 파일을 남기면 무료 용량을 계속 먹고,
+// 주소를 아는 사람은 "지운" 사진을 그대로 볼 수 있다.
+const uploadDir = join(process.cwd(), "public", "uploads");
+const fileCount = () =>
+  existsSync(uploadDir) ? readdirSync(uploadDir).filter((f) => !f.startsWith(".")).length : 0;
+
 await page.goto(BASE + "/login");
 await page.getByRole("textbox", { name: "아이디" }).fill(USER);
 await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
@@ -204,6 +210,42 @@ await step("고치기", async () => {
   if (!(await text()).includes("된장찌개")) throw new Error("고친 게 안 보인다");
 });
 
+await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 쓰면 남는다", async () => {
+  const base = fileCount();
+  // 사진이 든 쪽지 하나
+  await page.getByRole("button", { name: /한마디 남기기/ }).click();
+  await page.waitForTimeout(600);
+  await page.locator("textarea").first().fill(MARK + "사진A");
+  await page.locator('input[type="file"]').first().setInputFiles(IMG);
+  await page.waitForTimeout(2500);
+  const url = (await page.locator("textarea").first().inputValue()).match(/!\[\]\(([^)]+)\)/)?.[1];
+  if (!url) throw new Error("사진이 본문에 안 들어갔다");
+  await page.getByRole("button", { name: /붙이기/ }).click();
+  await page.waitForTimeout(1500);
+  if (fileCount() !== base + 1) throw new Error("파일이 안 생겼다");
+
+  // 같은 사진을 쓰는 쪽지 하나 더
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /한마디 남기기/ }).click();
+  await page.waitForTimeout(600);
+  await page.locator("textarea").first().fill(`${MARK}사진B ![](${url})`);
+  await page.getByRole("button", { name: /붙이기/ }).click();
+  await page.waitForTimeout(1500);
+
+  // 한쪽만 지우면 사진은 남아야 한다
+  await openMenu(NOTES, MARK + "사진A");
+  await menuItem("삭제").click();
+  await page.waitForTimeout(1800);
+  if (fileCount() !== base + 1) throw new Error("다른 글이 쓰는 사진을 지워 버렸다");
+
+  // 마지막까지 지우면 사진도 지워진다
+  await page.reload({ waitUntil: "networkidle" });
+  await openMenu(NOTES, MARK + "사진B");
+  await menuItem("삭제").click();
+  await page.waitForTimeout(1800);
+  if (fileCount() !== base) throw new Error("아무도 안 쓰는데 사진이 남았다");
+});
+
 await step("지우기 — 새로고침해도 안 되살아난다", async () => {
   await openMenu(NOTES, MARK);
   await menuItem("삭제").click();
@@ -276,13 +318,8 @@ await step("계획 지우기", async () => {
 });
 
 
-// 올린 파일이 실제로 지워지는지 — DB 행만 지우고 파일을 남기면 무료 용량을 계속 먹고,
-// 주소를 아는 사람은 "지운" 사진을 그대로 볼 수 있다.
-const uploadDir = join(process.cwd(), "public", "uploads");
-const fileCount = () => (existsSync(uploadDir) ? readdirSync(uploadDir).filter((f) => !f.startsWith(".")).length : 0);
-const filesBefore = fileCount();
-
 console.log("앨범");
+const filesBefore = fileCount();
 await page.goto(BASE + "/albums", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
 await step("앨범 만들기", async () => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { imageUrlsIn, sweepUploads } from "@/lib/uploads";
 
 export async function PATCH(
   req: NextRequest,
@@ -20,7 +21,13 @@ export async function PATCH(
   if (typeof body.done === "boolean") data.done = body.done;
   if (typeof body.sortOrder === "number") data.sortOrder = body.sortOrder;
 
+  const prev =
+    "note" in data
+      ? await prisma.planItem.findUnique({ where: { id }, select: { note: true } })
+      : null;
+
   const item = await prisma.planItem.update({ where: { id }, data });
+  if (prev) await sweepUploads(imageUrlsIn(prev.note));
   return NextResponse.json(item);
 }
 
@@ -29,6 +36,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const before = await prisma.planItem.findUnique({ where: { id }, select: { note: true } });
   await prisma.planItem.delete({ where: { id } });
+  await sweepUploads(imageUrlsIn(before?.note));
   return NextResponse.json({ ok: true });
 }

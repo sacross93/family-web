@@ -60,3 +60,43 @@ describe("removeUploads — 같은 주소를 두 번 지우지 않는다", () =>
     expect(await removeUploads([])).toBe(true);
   });
 });
+
+describe("imageUrlsIn — 글 속 사진 주소", () => {
+  it("마크다운 이미지", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    expect(imageUrlsIn("앞\n![](/uploads/a.png)\n뒤")).toEqual(["/uploads/a.png"]);
+    expect(imageUrlsIn("![설명](/uploads/b.webp)")).toEqual(["/uploads/b.webp"]);
+  });
+
+  it("제목이 붙은 것과 꺾쇠로 감싼 것", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    expect(imageUrlsIn('![](/uploads/c.png "우리 아기")')).toEqual(["/uploads/c.png"]);
+    expect(imageUrlsIn("![](</uploads/d.png>)")).toEqual(["/uploads/d.png"]);
+  });
+
+  it("<img> 태그도", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    expect(imageUrlsIn('<img src="/uploads/e.png" alt="x">')).toEqual(["/uploads/e.png"]);
+  });
+
+  it("여러 장, 같은 것은 한 번만", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    expect(imageUrlsIn("![](/uploads/a.png) ![](/uploads/b.png) ![](/uploads/a.png)")).toEqual([
+      "/uploads/a.png",
+      "/uploads/b.png",
+    ]);
+  });
+
+  it("링크는 사진이 아니다", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    // `[글자](주소)` 는 링크다. 느낌표가 붙은 것만 사진.
+    expect(imageUrlsIn("[네이버](https://naver.com)")).toEqual([]);
+  });
+
+  it("빈 값", async () => {
+    const { imageUrlsIn } = await import("@/lib/uploads");
+    expect(imageUrlsIn(null)).toEqual([]);
+    expect(imageUrlsIn("")).toEqual([]);
+    expect(imageUrlsIn("사진 없는 글")).toEqual([]);
+  });
+});
