@@ -11,7 +11,9 @@ export const KIND_META: Record<
     label: "일상",
     emoji: "📝",
     color: "mint",
-    placeholder: "오늘 몸은 어땠어요? 남편은 무엇을 해줬나요?",
+    // 교환일기다 — **둘 다 쓴다.** "남편은 무엇을 해줬나요?" 라고 물으면
+    // 남편이 자기 이름으로 쓸 때 말이 어긋난다. 누가 열어도 맞는 말로 둔다.
+    placeholder: "오늘 어땠어요? 몸 상태도, 떠오른 생각도 좋아요.",
   },
   checkup: {
     label: "검진",
