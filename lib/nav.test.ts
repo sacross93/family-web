@@ -36,11 +36,17 @@ describe("폰 하단 탭", () => {
     expect(NAV[0].href).toBe("/");
   });
 
-  it("매일 쓰는 것이 탭에 있다", () => {
-    const tabHrefs = NAV.slice(0, TAB_COUNT).map((n) => n.href);
-    for (const href of ["/", "/todos", "/shopping"]) {
-      expect(tabHrefs, `${href} 가 탭에 없다`).toContain(href);
-    }
+  it("탭은 추측이 아니라 실제로 쓰는 것을 가리킨다", () => {
+    // 처음에는 "가족 사이트라면 대개 이렇겠지" 하고 할일·장보기·사진첩을 앞에 뒀다.
+    // 배포본을 세어 보니 할일 0 · 사진첩 0 · 기념일 0 · 게시판 0 이고 채워져 있는 건
+    // 아기 기록과 계획뿐이었다 — 탭 넷 중 셋이 빈 곳을 가리키고 있었다.
+    // 이 줄은 그 결정을 못 박아 둔다. 쓰임이 달라지면 lib/nav.ts 와 여기를 같이 고친다.
+    expect(NAV.slice(0, TAB_COUNT).map((n) => n.href)).toEqual([
+      "/",
+      "/baby",
+      "/shopping",
+      "/plans",
+    ]);
   });
 
   it("탭에 없는 메뉴도 하나도 빠지지 않는다 — 나머지는 더보기로 간다", () => {

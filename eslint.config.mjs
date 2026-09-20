@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright MCP 가 쓰는 폴더(스크린샷·임시 스크립트). git 도 무시한다.
+    ".playwright-mcp/**",
   ]),
 ]);
 

@@ -191,9 +191,13 @@ export function AnniversariesClient({
         title="기념일"
         description="소중한 날들을 D-day로 챙겨요"
       >
-        <Button onClick={openAdd}>
-          <Plus className="h-4 w-4" /> 기념일 추가
-        </Button>
+        {/* 목록이 비면 아래 빈 화면의 초대가 같은 일을 한다 — 같은 버튼을 한 화면에
+            두 번 두지 않는다(DESIGN.md §1 "화면당 강조는 하나만"). */}
+        {items.length > 0 && (
+          <Button onClick={openAdd}>
+            <Plus className="h-4 w-4" /> 기념일 추가
+          </Button>
+        )}
       </PageHeader>
 
       {items.length === 0 ? (

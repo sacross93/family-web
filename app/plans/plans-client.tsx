@@ -96,9 +96,13 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
         title="계획"
         description="여행도 주말도, 날짜별로 함께 그려봐요"
       >
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" /> 새 계획
-        </Button>
+        {/* 목록이 비면 아래 빈 화면의 초대가 같은 일을 한다 — 같은 버튼을 한 화면에
+            두 번 두지 않는다(DESIGN.md §1 "화면당 강조는 하나만"). */}
+        {plans.length > 0 && (
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" /> 새 계획
+          </Button>
+        )}
       </PageHeader>
 
       {plans.length === 0 ? (

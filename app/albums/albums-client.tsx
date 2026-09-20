@@ -85,9 +85,13 @@ export function AlbumsClient({
         title="사진첩"
         description="테마별로 모아 보는 우리 가족의 추억"
       >
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="h-4 w-4" /> 새 앨범
-        </Button>
+        {/* 목록이 비면 아래 빈 화면의 초대가 같은 일을 한다 — 같은 버튼을 한 화면에
+            두 번 두지 않는다(DESIGN.md §1 "화면당 강조는 하나만"). */}
+        {albums.length > 0 && (
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" /> 새 앨범
+          </Button>
+        )}
       </PageHeader>
 
       {albums.length === 0 ? (
