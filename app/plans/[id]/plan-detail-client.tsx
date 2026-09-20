@@ -1081,7 +1081,7 @@ function ChecklistSection({
                 type="button"
                 onClick={() => setShowDone((v) => !v)}
                 aria-expanded={showDone}
-                className="flex items-center gap-1.5 self-start py-1 text-xs font-semibold text-ink-faint transition hover:text-ink"
+                className="flex h-10 items-center gap-1.5 self-start text-xs font-semibold text-ink-faint transition hover:text-ink lg:h-7"
               >
                 <Check className="h-3.5 w-3.5" />
                 챙긴 것 <span className="font-num">{done.length}</span>개
@@ -1141,7 +1141,7 @@ function ChecklistSection({
           <button
             type="button"
             onClick={() => setShowSuggestions(true)}
-            className="flex items-center gap-1.5 self-start py-1 text-xs font-semibold text-ink-faint transition hover:text-ink"
+            className="flex h-10 items-center gap-1.5 self-start text-xs font-semibold text-ink-faint transition hover:text-ink lg:h-7"
           >
             추천 <span className="font-num">{remaining.length}</span>개 더 보기
             <ChevronDown className="h-3.5 w-3.5" />

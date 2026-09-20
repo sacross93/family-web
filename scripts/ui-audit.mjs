@@ -222,29 +222,45 @@ const probeTapTargets = () => {
     };
   };
 
+  // 화면 위아래에 붙어 있는 막대의 실제 높이 — 그 안쪽에 걸친 요소는 재지 않는다.
+  // 막대에 가려진 채로 재면 위로 짚어 나가는 측정이 막혀 실제보다 작게 나온다.
+  let topBar = 0, bottomBar = 0;
+  for (const e of document.querySelectorAll("body *")) {
+    const st = getComputedStyle(e);
+    if (st.position !== "fixed" && st.position !== "sticky") continue;
+    const br = e.getBoundingClientRect();
+    if (br.width < innerWidth - 2 || br.height < 8) continue;
+    if (br.top <= 1) topBar = Math.max(topBar, br.bottom);
+    if (br.bottom >= innerHeight - 1) bottomBar = Math.max(bottomBar, innerHeight - br.top);
+  }
+
   const small = [];
   const stolen = [];
   const seen = new Set();
   for (const el of document.querySelectorAll("button, a[href], [role='checkbox'], input:not([type='hidden'])")) {
     const r = el.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4 || r.top < 0 || r.bottom > innerHeight) continue;
+    // 화면 가장자리에 걸친 것은 재지 않는다 — 위/아래로 짚어 나가는 측정이 화면 밖에서
+    // 잘려 실제보다 작게 나온다. 여러 스크롤 위치에서 훑으므로 언젠가는 가운데에 온다.
+    if (r.width < 4 || r.height < 4) continue;
+    if (r.top < topBar + 24 || r.bottom > innerHeight - bottomBar - 24) continue;
     if (skip(el) || getComputedStyle(el).visibility === "hidden") continue;
     const label = (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().replace(/\s+/g, " ").slice(0, 20);
 
     // 한가운데를 눌렀을 때 자기가 잡히는가 (넓힌 영역끼리 겹쳐 남의 것을 훔치는 경우).
-    // 하단 탭바에 깔린 것은 뺀다 — 화면 가장자리에 늘 있는 것이고, 조금만 굴리면 나온다
-    // (가려짐 검사와 같은 기준).
-    const inBottomBar = (node) => {
+    // 화면 위아래에 늘 붙어 있는 막대(상단바·하단 탭바)에 깔린 것은 뺀다 —
+    // 조금만 굴리면 나온다. 가려짐 검사와 같은 기준이다.
+    const inEdgeBar = (node) => {
       for (let e = node; e; e = e.parentElement) {
         const st = getComputedStyle(e);
-        if (st.position !== "fixed") continue;
+        if (st.position !== "fixed" && st.position !== "sticky") continue;
         const br = e.getBoundingClientRect();
-        if (br.left <= 1 && br.right >= innerWidth - 1 && br.bottom >= innerHeight - 1) return true;
+        const fullWidth = br.left <= 1 && br.right >= innerWidth - 1;
+        if (fullWidth && (br.bottom >= innerHeight - 1 || br.top <= 1)) return true;
       }
       return false;
     };
     const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    if (top && !skip(top) && !inBottomBar(top) && top !== el && !el.contains(top) && !top.contains(el)) {
+    if (top && !skip(top) && !inEdgeBar(top) && top !== el && !el.contains(top) && !top.contains(el)) {
       stolen.push({ label, by: (top.getAttribute("aria-label") || top.textContent || top.tagName).trim().slice(0, 20) });
     }
 
@@ -316,15 +332,28 @@ for (const { w, h, tag } of WIDTHS) {
     }
 
     // 탭 타깃은 폰에서만 문제다(마우스는 정확하다).
+    // **페이지를 끝까지 굴려 가며** 본다 — 첫 화면만 재면 스크롤 아래의 작은 것을 놓친다.
+    // (계획 준비물의 20px 체크 동그라미가 그래서 안 잡혔다.)
     if (w < 1024) {
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(200);
-      const { small, stolen } = await page.evaluate(probeTapTargets);
-      for (const s2 of small) {
-        problems.push(`${tag} ${path}: "${s2.label}" 이 작다 — 보임 ${s2.보임}, 눌림 ${s2.눌림} (40px 이상이어야)`);
-      }
-      for (const s2 of stolen) {
-        problems.push(`${tag} ${path}: "${s2.label}" 한가운데를 누르면 "${s2.by}" 가 눌린다`);
+      const seenTap = new Set();
+      const steps = await page.evaluate((vh) =>
+        Math.min(12, Math.ceil(document.documentElement.scrollHeight / (vh * 0.8))), h);
+      for (let i = 0; i < Math.max(1, steps); i++) {
+        await page.evaluate(([vh, n]) => window.scrollTo(0, vh * 0.8 * n), [h, i]);
+        await page.waitForTimeout(200);
+        const { small, stolen } = await page.evaluate(probeTapTargets);
+        for (const s2 of small) {
+          const key = "s" + s2.label + s2.보임;
+          if (seenTap.has(key)) continue;
+          seenTap.add(key);
+          problems.push(`${tag} ${path}: "${s2.label}" 이 작다 — 보임 ${s2.보임}, 눌림 ${s2.눌림} (40px 이상이어야)`);
+        }
+        for (const s2 of stolen) {
+          const key = "t" + s2.label + s2.by;
+          if (seenTap.has(key)) continue;
+          seenTap.add(key);
+          problems.push(`${tag} ${path}: "${s2.label}" 한가운데를 누르면 "${s2.by}" 가 눌린다`);
+        }
       }
     }
 

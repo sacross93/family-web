@@ -144,7 +144,7 @@ function EmptyRow({
           <Link
             key={s.href}
             href={s.href}
-            className="flex items-center gap-1.5 rounded-full bg-sunken px-3 py-2 text-sm font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
+            className="flex h-10 items-center gap-1.5 rounded-full bg-sunken px-3.5 text-sm font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
           >
             <span>{s.emoji}</span>
             {s.label}
