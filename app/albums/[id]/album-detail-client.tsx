@@ -138,12 +138,12 @@ export function AlbumDetailClient({
               src={album.coverUrl}
               alt=""
               aria-hidden
-              className="absolute inset-0 h-full w-full object-cover opacity-25"
+              className="absolute inset-0 h-full w-full object-cover opacity-15"
               loading="lazy"
             />
-            {/* 표지 위에 글씨가 놓인다. 사진이 무엇일지 모르므로 한 겹 덮어
-                어떤 사진이 와도 글씨가 읽히게 한다(밝은 사진에서 대비가 무너진다). */}
-            <span aria-hidden className="absolute inset-0 bg-white/70" />
+            {/* 덮개를 뗐다. 틀이 밝아진 뒤로 흰 겹을 얹으니 히어로가 **표백된 것처럼**
+                희어져 로즈가 사라졌다. 대신 표지를 15% 로 낮춘다 — 가장 어두운 사진이
+                와도 제목 6.4:1, 아래 한 줄 5.1:1 로 읽힌다(아래 줄은 진한 쪽으로 쓴다). */}
           </>
         )}
         <div className="relative z-10 flex items-start justify-between gap-4">
@@ -162,7 +162,7 @@ export function AlbumDetailClient({
               )}
               {/* 예전에는 색 이름표("라벤더")와 가운뎃점이 붙은 날짜가 섞여
                   `라벤더 · 사진 6장 / · 4월 6일` 처럼 줄이 깨져 보였다. */}
-              <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-chrome-faint">
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-chrome-ink/90">
                 <span className="font-num">사진 {photos.length}장</span>
                 {album.takenOn && (
                   <span className="font-num">{kDateShort(album.takenOn)}</span>
