@@ -469,6 +469,40 @@ await step("기념일 지우기", async () => {
   if ((await text()).includes(MARK + "기념")) throw new Error("서버엔 안 지워졌다");
 });
 
+// ── 꾸미기 스티커 ────────────────────────────────────────
+console.log("꾸미기");
+await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {
+  // 자리는 xPct(가운데, %)로 저장된다. 같은 값이 화면 폭에 따라 다른 자리를 뜻한다:
+  // 데스크톱(내용 폭 ~1160px)에서 92.6% 는 999~1149px 로 안쪽이지만,
+  // 폰(358px)에서는 286~436px 이라 46px 이 밖으로 나간다.
+  // 실제로 가족이 홈에 붙여 둔 사진이 그랬고, 인사말 위에 반쯤 걸쳐 잘려 보였다.
+  await page.goto(BASE + "/", { waitUntil: "networkidle" });
+  const made = await page.evaluate(() =>
+    fetch("/api/decorations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ page: "/", url: "/icon.svg", xPct: 92.64, yPx: 99, width: 150, rotation: 0, z: 20 }),
+    }).then((r) => (r.ok ? r.json() : null))
+  );
+  if (!made) throw new Error("스티커를 못 만들었다");
+  try {
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    const box = await page.evaluate(() => {
+      const el = document.querySelector('[data-sticker="/"]');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
+    });
+    if (!box) throw new Error("스티커가 안 보인다");
+    if (box.right > box.vw + 1 || box.left < -1)
+      throw new Error(`화면 밖으로 나갔다 — ${box.left}~${box.right} (폭 ${box.vw})`);
+  } finally {
+    // 만든 것은 반드시 치운다. 배포본에 시험용 스티커를 남긴 적이 있다.
+    await page.evaluate((id) => fetch(`/api/decorations/${id}`, { method: "DELETE" }), made.id);
+  }
+});
+
 console.log(errs.length ? "\n콘솔 오류: " + JSON.stringify([...new Set(errs)]) : "\n콘솔 오류 없음");
 console.log(failed === 0 ? `✓ ${total}단계 모두 통과` : `⚠ ${failed}단계 실패`);
 if (failed) process.exitCode = 1;

@@ -233,7 +233,19 @@ export function DecorationSurface({
         data-sticker={surfaceKey}
         className="absolute"
         style={{
-          left: `${d.xPct}%`,
+          // 보기 모드에서는 스티커가 화면 밖으로 나가지 않게 가둔다.
+          //
+          // 자리는 `xPct`(가운데, %)로 저장된다. 데스크톱(내용 폭 ~1160px)에서 오른쪽
+          // 끝에 붙여 둔 92% 짜리 150px 스티커는 폰(358px)에서 286~436px 을 차지해
+          // **46px 이 화면 밖으로 나간다**. 실제로 가족이 홈에 붙여 둔 사진이 그랬고,
+          // 폰에서는 인사말 위에 반쯤 걸쳐 잘린 채로 보였다.
+          //
+          // 저장값은 건드리지 않는다 — 그리는 자리만 가둔다. 그래서 넓은 화면에서는
+          // 붙여 둔 그대로 보이고, 좁은 화면에서만 안쪽으로 들어온다.
+          // 편집 중에는 가두지 않는다: 끌고 있는 손가락과 그림이 어긋나면 안 된다.
+          left: editing
+            ? `${d.xPct}%`
+            : `clamp(${d.width / 2}px, ${d.xPct}%, calc(100% - ${d.width / 2}px))`,
           top: `${d.yPx}px`,
           width: `${d.width}px`,
           transform: `translate(-50%, -50%) rotate(${d.rotation}deg)`,
