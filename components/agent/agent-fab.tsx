@@ -7,15 +7,15 @@ import { cn } from "@/lib/utils";
 import { AgentSheet } from "./agent-sheet";
 
 /**
- * 우하단 "물어보기". 꾸미기 버튼이 있으면 그 위에, 없으면 맨 아래에 앉는다.
+ * 우하단 "물어보기" — 화면에 떠 있는 유일한 버튼이다.
+ * 꾸미기는 셸의 상단바/사이드바로 옮겼다. 떠다니는 게 둘이면 목록 한가운데를 가린다.
  *
- * 꾸미기가 뜨는 조건은 "상단 메뉴 페이지" 만이 아니라 "상단 메뉴 페이지 + 관리자" 다
- * (decoration-surface 의 `{canEdit && …}`). 그 판정은 AppShell 이 이미 쥐고 있으므로
- * 여기서 경로를 다시 따지지 않고 prop 으로 받는다.
+ * 폰에서는 하단 탭바 위에 앉는다. 높이는 globals.css 의 `--bottom-bar` 한 곳에서 오고
+ * 본문 아래 여백도 같은 값을 읽는다(lg 에서는 0 이라 자연히 맨 아래).
  *
- * z-40 인 이유: 꾸미기 FAB·모바일 드로어·대화 시트가 z-50 이라 그 위로 겹치면 안 된다.
+ * z-40 인 이유: 모바일 드로어·대화 시트가 z-50 이라 그 위로 겹치면 안 된다.
  */
-export function AgentFab({ hasDecorationFab }: { hasDecorationFab: boolean }) {
+export function AgentFab() {
   const [open, setOpen] = useState(false);
 
   return (
@@ -25,9 +25,9 @@ export function AgentFab({ hasDecorationFab }: { hasDecorationFab: boolean }) {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="포동이에게 물어보기"
+          style={{ bottom: "calc(var(--bottom-bar) + 0.75rem)" }}
           className={cn(
-            "fixed right-5 z-40 flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-3 font-semibold text-ink shadow-lg transition hover:bg-sunken active:scale-95",
-            hasDecorationFab ? "bottom-20" : "bottom-5"
+            "fixed right-4 z-40 flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-3 font-semibold text-ink shadow-lg transition hover:bg-sunken active:scale-95 lg:right-5"
           )}
         >
           <MessageCircle className="h-4 w-4 text-primary" /> 물어보기

@@ -14,7 +14,6 @@ import {
 import type { Decoration } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
-const EDIT_KEY = "podong_edit_mode";
 
 // z-index (같은 컨테이너): back<10=콘텐츠 뒤, 콘텐츠=10, front>10=콘텐츠 앞, 선택=50
 const BACK_Z = 2;
@@ -86,15 +85,8 @@ export function DecorationSurface({
   const dragRef = useRef<DragState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // page 변형만 편집 상태를 로컬에 유지 (페이지 이동해도 유지)
-  useEffect(() => {
-    if (variant === "page" && canEdit && localStorage.getItem(EDIT_KEY) === "1") {
-      setInternalEditing(true);
-    }
-  }, [variant, canEdit]);
-  useEffect(() => {
-    if (variant === "page" && canEdit) localStorage.setItem(EDIT_KEY, editing ? "1" : "0");
-  }, [editing, variant, canEdit]);
+  // page 변형의 편집 상태와 그 유지(localStorage `podong_edit_mode`)는 AppShell 이 쥔다 —
+  // 켜는 버튼이 상단바·사이드바·드로어에 흩어져 있어 여기서는 한 벌로 다룰 수 없다.
 
   useEffect(() => {
     let alive = true;
@@ -326,19 +318,13 @@ export function DecorationSurface({
           />
 
           {variant === "page" ? (
-            !editing ? (
-              <button
-                type="button"
-                data-deco-ui={surfaceKey}
-                onClick={() => setEditing(true)}
-                className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 font-semibold text-white shadow-lg transition hover:bg-primary-hover active:scale-95"
-              >
-                <Sparkles className="h-4 w-4" /> 꾸미기
-              </button>
-            ) : (
+            // 켜는 버튼은 여기 없다 — 셸의 상단바/사이드바에 있다. 떠다니는 버튼을 하나라도
+            // 줄여야 물어보기 FAB 만 남고, 그래야 목록 한가운데를 가리지 않는다.
+            editing && (
               <div
                 data-deco-ui={surfaceKey}
-                className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-surface/95 px-3 py-2 shadow-lg backdrop-blur"
+                className="fixed left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-surface/95 px-3 py-2 shadow-lg backdrop-blur"
+                style={{ bottom: "calc(var(--bottom-bar) + 0.75rem)" }}
               >
                 <span className="hidden px-2 text-xs font-medium text-ink-soft md:inline">
                   🎨 끌어서 이동 · 모서리로 크기·회전 · <b>앞/뒤</b> 버튼으로 위치

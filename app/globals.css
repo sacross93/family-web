@@ -111,6 +111,20 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* 폰 아래쪽 가장자리를 여기 한 곳에서 정한다.
+   탭바·물어보기 FAB·본문 아래 여백·꾸미기 툴바가 전부 이 값을 읽는다.
+   페이지마다 따로 맞추면 무엇 하나는 반드시 가려진다. */
+:root {
+  --bottom-bar: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  :root {
+    /* 데스크톱은 사이드바가 있어 하단 탭바가 없다 */
+    --bottom-bar: 0px;
+  }
+}
+
 body {
   /* 스티커/넓은 콘텐츠로 인한 가로 스크롤 방지 (세로 스크롤은 유지) */
   overflow-x: hidden;

@@ -1,0 +1,103 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
+
+import { palette } from "@/lib/colors";
+import { cn } from "@/lib/utils";
+import { TAB_COUNT, isNavActive, type NavItem } from "@/lib/nav";
+
+/**
+ * 폰 하단 탭바. 엄지가 닿는 자리에 네비게이션을 둔다 —
+ * 그 전에는 9개 섹션이 전부 "햄버거 → 항목" 2탭이었다.
+ *
+ * 탭 목록은 `getNav()` 가 준 배열의 앞 `TAB_COUNT` 개다. 두 번째 목록을 만들지 않는다:
+ * `NavItem` DB 오버라이드도 꾸미기 표면(surfaceKey)도 전부 NAV href 를 기준으로 돈다.
+ * 나머지는 `더보기` 가 여는 기존 드로어에 그대로 있다.
+ *
+ * 높이는 `--bottom-bar`(globals.css)와 짝이다 — 본문 아래 여백과 물어보기 FAB 이 같은 값을 읽는다.
+ */
+export function BottomTabs({
+  nav,
+  onMore,
+}: {
+  nav: NavItem[];
+  onMore: () => void;
+}) {
+  const pathname = usePathname();
+  const tabs = nav.slice(0, TAB_COUNT);
+  // 탭에 없는 페이지에 와 있으면 `더보기` 를 켜 준다 — 지금 어디인지 알 수 있게.
+  const inMore = !tabs.some((t) => isNavActive(pathname, t.href));
+
+  return (
+    <nav
+      aria-label="주요 메뉴"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur-md lg:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
+      <ul className="flex h-14 items-stretch">
+        {tabs.map((item) => {
+          const active = isNavActive(pathname, item.href);
+          const pal = palette(item.color);
+          return (
+            <li key={item.href} className="flex-1">
+              <Link
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className="flex h-full flex-col items-center justify-center gap-0.5"
+              >
+                <span
+                  className={cn(
+                    "flex h-7 w-11 items-center justify-center rounded-full text-base transition-colors",
+                    active && pal.soft,
+                  )}
+                >
+                  {item.emoji}
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] leading-none",
+                    active ? cn(pal.ink, "font-bold") : "text-ink-faint",
+                  )}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+        <li className="flex-1">
+          <button
+            type="button"
+            onClick={onMore}
+            aria-label="메뉴 더보기"
+            className="flex h-full w-full flex-col items-center justify-center gap-0.5"
+          >
+            <span
+              className={cn(
+                "flex h-7 w-11 items-center justify-center rounded-full transition-colors",
+                inMore && "bg-sunken",
+              )}
+            >
+              <MoreHorizontal
+                className={cn(
+                  "h-5 w-5",
+                  inMore ? "text-ink" : "text-ink-faint",
+                )}
+              />
+            </span>
+            <span
+              className={cn(
+                "text-[10px] leading-none",
+                inMore ? "font-bold text-ink" : "text-ink-faint",
+              )}
+            >
+              더보기
+            </span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+  );
+}
