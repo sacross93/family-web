@@ -36,6 +36,9 @@ const PASS = process.argv[4] || process.env.AUDIT_PASS;
 const PATHS = [
   "/", "/todos", "/shopping", "/albums", "/calendar",
   "/baby", "/board", "/anniversaries", "/plans",
+  // 관리자도 사람이 쓰는 화면이다. "관리자 전용" 이라고 검사에서 빼 두니
+  // 폰에서 4화면짜리로 남아 있었다.
+  "/admin",
 ];
 
 /**

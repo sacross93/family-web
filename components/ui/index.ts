@@ -17,3 +17,4 @@ export { ItemActions, type ItemAction } from "./item-actions";
 export { useConfirm } from "./confirm-dialog";
 export { useFocusTrap } from "./use-focus-trap";
 export { ToastProvider, useToast } from "./toast";
+export { CollapsibleCard } from "./collapsible-card";

@@ -11,6 +11,7 @@ import {
   Save,
   ImagePlus,
   X,
+  ChevronDown,
 } from "lucide-react";
 import type { Decoration } from "@prisma/client";
 import {
@@ -22,6 +23,7 @@ import {
   Input,
   EmptyState,
   ColorDot,
+  CollapsibleCard,
 } from "@/components/ui";
 import { NAV, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
@@ -112,11 +114,14 @@ function SiteSettingsCard({
   }
 
   return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-lavender-soft text-lg">🏡</span>
-        <h2 className="text-base font-bold text-ink">사이트 설정</h2>
-      </div>
+    <CollapsibleCard
+      emoji="🏡"
+      emojiClassName="bg-lavender-soft"
+      title="사이트 설정"
+      summary={form.siteName}
+      defaultOpen
+      className="gap-5"
+    >
 
       {/* 브랜드 */}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -161,7 +166,7 @@ function SiteSettingsCard({
         </Button>
         {msg && <span className="text-sm font-semibold text-mint-ink">{msg}</span>}
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -243,6 +248,8 @@ function IconField({
    ═══════════════════════════════════════════ */
 function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }) {
   const [items, setItems] = useState(nav);
+  // 한 번에 한 항목만 펼친다 — 아홉 개를 다 펴 두면 폰에서 두 화면이다.
+  const [editingHref, setEditingHref] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -277,42 +284,60 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
   }
 
   return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-mint-soft text-lg">🧭</span>
-        <h2 className="text-base font-bold text-ink">메뉴 편집</h2>
-      </div>
+    <CollapsibleCard
+      emoji="🧭"
+      emojiClassName="bg-mint-soft"
+      title="메뉴 편집"
+      summary={`${items.length}개`}
+      className="gap-5"
+    >
 
-      <div className="flex flex-col gap-3">
-        {items.map((it) => (
-          <div
-            key={it.href}
-            className="flex flex-col gap-2 rounded-2xl border border-line p-3 sm:flex-row sm:items-center"
-          >
-            <div className="flex items-center gap-2">
-              <ColorDot color={it.color} />
-              <Input
-                value={it.emoji}
-                onChange={(e) => edit(it.href, { emoji: e.target.value })}
-                maxLength={8}
-                className="w-16 text-center text-lg"
-                aria-label={`${it.label} 아이콘`}
-              />
+      {/* 아홉 항목 × 세 칸이 늘 펼쳐져 있으면 폰에서 두 화면이다. 대개 한 항목만 고치러 온다. */}
+      <div className="flex flex-col gap-2">
+        {items.map((it) => {
+          const open = editingHref === it.href;
+          return (
+            <div key={it.href} className="rounded-2xl border border-line">
+              <button
+                type="button"
+                onClick={() => setEditingHref(open ? null : it.href)}
+                aria-expanded={open}
+                className="flex min-h-11 w-full items-center gap-2.5 px-3 text-left"
+              >
+                <ColorDot color={it.color} />
+                <span className="text-lg">{it.emoji}</span>
+                <span className="font-semibold text-ink">{it.label}</span>
+                <span className="ml-auto truncate pl-2 text-xs text-ink-faint">{it.desc}</span>
+                <ChevronDown
+                  className={cn("h-4 w-4 shrink-0 text-ink-faint transition", open && "rotate-180")}
+                />
+              </button>
+              {open && (
+                <div className="flex flex-col gap-2 border-t border-line p-3 sm:flex-row sm:items-center">
+                  <Input
+                    value={it.emoji}
+                    onChange={(e) => edit(it.href, { emoji: e.target.value })}
+                    maxLength={8}
+                    className="w-16 text-center text-lg"
+                    aria-label={`${it.label} 아이콘`}
+                  />
+                  <Input
+                    value={it.label}
+                    onChange={(e) => edit(it.href, { label: e.target.value })}
+                    className="sm:w-40"
+                    aria-label="이름"
+                  />
+                  <Input
+                    value={it.desc}
+                    onChange={(e) => edit(it.href, { desc: e.target.value })}
+                    className="flex-1"
+                    aria-label="설명"
+                  />
+                </div>
+              )}
             </div>
-            <Input
-              value={it.label}
-              onChange={(e) => edit(it.href, { label: e.target.value })}
-              className="sm:w-40"
-              aria-label="이름"
-            />
-            <Input
-              value={it.desc}
-              onChange={(e) => edit(it.href, { desc: e.target.value })}
-              className="flex-1"
-              aria-label="설명"
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-3">
@@ -322,7 +347,7 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
         {msg && <span className="text-sm font-semibold text-mint-ink">{msg}</span>}
         <span className="text-xs text-ink-faint">경로(주소)와 색은 그대로예요</span>
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -372,16 +397,13 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
   }, {});
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-peach-soft text-lg">✨</span>
-        <h2 className="text-base font-bold text-ink">페이지 꾸미기 (스티커)</h2>
-      </div>
+    <CollapsibleCard emoji="✨" emojiClassName="bg-peach-soft" title="페이지 꾸미기 (스티커)" className="gap-5">
 
       <Card className="flex flex-col gap-3 bg-gradient-to-br from-lavender-soft to-peach-soft">
         <p className="text-sm leading-relaxed text-ink">
-          <b>꾸미기 시작</b>을 누르면 편집 모드가 켜져요. 아무 페이지나 다니면서 우하단 <b>꾸미기</b> 버튼의{" "}
-          <b>사진 추가</b>로 올리고, 끌어서 이동·크기·회전·앞뒤를 바꾸면 됩니다. ✨
+          <b>꾸미기 시작</b>을 누르면 편집 모드가 켜져요. 아무 페이지나 다니면서{" "}
+          <b>맨 위의 꾸미기</b>(데스크톱은 왼쪽 <b>이 페이지 꾸미기</b>)를 누르고,{" "}
+          <b>사진 추가</b>로 올린 뒤 끌어서 이동·크기·회전·앞뒤를 바꾸면 됩니다. ✨
         </p>
         <div>
           <Button onClick={startDecorating}>
@@ -466,6 +488,6 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleCard>
   );
 }
