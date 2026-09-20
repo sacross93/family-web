@@ -567,6 +567,46 @@ await step("기록 지우기 — 새로고침해도 안 되살아난다", async 
   if ((await text()).includes(MARK)) throw new Error("서버엔 안 지워졌다");
 });
 
+await step("아기가 홈에 없으면 한 번 눌러 켤 수 있다", async () => {
+  // `Baby.showOnHome` 의 기본값은 false 다 — 배포본이 실제로 그랬다.
+  // 태명·예정일을 다 넣어 두고도 홈에서는 아기가 안 보였고, 끄기로 정한 게 아니라
+  // 그런 스위치가 있는 줄 몰랐을 뿐이다.
+  const baby = await page.evaluate(() => fetch("/api/baby").then((r) => r.json()));
+  const before = baby.showOnHome;
+  const set = (v) =>
+    page.evaluate(
+      ([id, showOnHome]) =>
+        fetch("/api/baby", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, showOnHome }),
+        }).then((r) => r.ok),
+      [baby.id, v]
+    );
+  if ((await set(false)) !== true) throw new Error("끄기가 안 먹혔다");
+  try {
+    await page.goto(BASE + "/", { waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    const invite = page.getByRole("button", { name: "홈에서도 보기" });
+    if (!(await invite.isVisible())) throw new Error("켤 수 있는 줄이 안 보인다");
+    await invite.click();
+    // 서버 컴포넌트를 다시 받아 오는 데 걸리는 시간은 그때그때 다르다 —
+    // 고정 시간(1.5초)으로 재다가 **멀쩡한 기능을 고장으로 잡았다.** 사라질 때까지 기다린다.
+    await page
+      .getByRole("button", { name: "홈에서도 보기" })
+      .waitFor({ state: "hidden", timeout: 8000 })
+      .catch(() => {
+        throw new Error("눌렀는데 그대로다");
+      });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(600);
+    if (!(await text()).includes("일기 보기")) throw new Error("새로고침하니 아기 칸이 없다");
+  } finally {
+    // 돌려놓는다 — 검사가 가족의 설정을 바꿔 두면 안 된다.
+    await set(before);
+  }
+});
+
 // ── 꾸미기 스티커 ────────────────────────────────────────
 console.log("꾸미기");
 await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {

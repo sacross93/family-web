@@ -14,6 +14,7 @@ import {
   daysSinceBirth,
 } from "@/lib/date";
 import { kindMeta } from "@/app/baby/baby-meta";
+import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
 import { getSiteConfig } from "@/lib/site";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -89,9 +90,10 @@ async function getData() {
       orderBy: { startDate: "asc" },
       include: { _count: { select: { items: true } } },
     }),
+    // `showOnHome` 으로 거르지 않는다 — 꺼져 있는 경우에도 "홈에서도 볼까요?" 한 줄을
+    // 띄우려면 아기가 있는지부터 알아야 한다(기본값이 false 라 대개 꺼져 있다).
     prisma.baby
       .findFirst({
-        where: { showOnHome: true },
         orderBy: { createdAt: "desc" },
         include: {
           entries: {
@@ -286,10 +288,26 @@ export default async function HomePage() {
         )}
       </section>
 
+      {/* 아기가 있는데 홈에 안 보이는 경우 — 기본값이 false 라 대개 그렇다.
+          "지금 이 집에서 가장 중요한 숫자" 가 아무도 본 적 없는 스위치 때문에
+          숨어 있지 않게, 한 번 눌러 켤 수 있는 줄을 둔다. */}
+      {baby && !baby.showOnHome && (
+        <BabyHomeInvite
+          id={baby.id}
+          emoji={baby.emoji}
+          nickname={baby.nickname}
+          summary={
+            baby.birthDate
+              ? `태어난 지 ${daysSinceBirth(baby.birthDate)}일`
+              : weekLabel(pregnancyProgress(baby.dueDate))
+          }
+        />
+      )}
+
       {/* ── 대시보드 그리드 ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* 아기 (홈 표시가 켜진 경우만) */}
-        {baby &&
+        {baby?.showOnHome &&
           (() => {
             const born = !!baby.birthDate;
             const p = pregnancyProgress(baby.dueDate);
