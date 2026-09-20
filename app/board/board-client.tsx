@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Pin, PinOff, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Pin, PinOff, Sparkles, ChevronDown } from "lucide-react";
 import {
   PageHeader,
   Card,
@@ -64,8 +64,13 @@ export function BoardClient({
   const [emoji, setEmoji] = useState("💬");
   const [color, setColor] = useState<PaletteKey>("butter");
   const [authorId, setAuthorId] = useState<string>(members[0]?.id ?? "");
+  // 접힌 줄이 지금 누구로 붙는지 보여 준다.
+  const composerAuthor = members.find((m) => m.id === authorId) ?? null;
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
+  // 스티커·색·작성자는 접어 둔다 — 전부 기본값이 있고 대개 그대로 쓴다.
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const [editing, setEditing] = useState<BoardPostWithAuthor | null>(null);
   const [decoratingId, setDecoratingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
@@ -172,36 +177,71 @@ export function BoardClient({
         <MarkdownEditor
           value={content}
           onChange={setContent}
-          placeholder="가족에게 한마디 남겨보세요 💛 (제목·굵게·목록·체크박스·사진까지 마크다운으로!)"
+          placeholder="가족에게 한마디 남겨보세요 💛"
           minHeight={120}
+          autoFocus
         />
-        <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-ink-faint">스티커</span>
-            <EmojiPicker value={emoji} onChange={setEmoji} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-ink-faint">쪽지 색</span>
-            <ColorPicker value={color} onChange={setColor} />
-          </div>
-          {members.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-ink-faint">작성자</span>
-              <AuthorPicker
-                members={members}
-                value={authorId}
-                onChange={setAuthorId}
+
+        {/* 스티커·색·작성자를 접는다.
+            펼쳐 두면 한마디 남기려고 열두 개 이모지, 여섯 색, 네 사람을 지나야 글이 붙는다 —
+            아기 일기 모달에서 고친 것과 같은 문제다. 셋 다 기본값이 있고 대개 그대로 쓴다.
+            접힌 줄이 지금 값을 보여 주므로 펴지 않고도 무엇으로 붙을지 안다. */}
+        <div className="rounded-md border border-line">
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left text-sm text-ink-soft"
+          >
+            <span className="text-lg" aria-hidden>
+              {emoji}
+            </span>
+            <span className={cn("h-3.5 w-3.5 shrink-0 rounded-full", palette(color).dot)} aria-hidden />
+            {composerAuthor && (
+              <Avatar
+                emoji={composerAuthor.emoji}
+                color={composerAuthor.color}
+                name={composerAuthor.name}
+                size="xs"
               />
+            )}
+            <span className="text-ink-faint">꾸미기</span>
+            <ChevronDown
+              className={cn("ml-auto h-4 w-4 shrink-0 text-ink-faint transition", moreOpen && "rotate-180")}
+            />
+          </button>
+
+          {moreOpen && (
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-3 border-t border-line px-4 py-4">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-ink-faint">스티커</span>
+                <EmojiPicker value={emoji} onChange={setEmoji} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-ink-faint">쪽지 색</span>
+                <ColorPicker value={color} onChange={setColor} />
+              </div>
+              {members.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold text-ink-faint">작성자</span>
+                  <AuthorPicker
+                    members={members}
+                    value={authorId}
+                    onChange={setAuthorId}
+                  />
+                </div>
+              )}
             </div>
           )}
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" onClick={() => setComposing(false)}>
-              취소
-            </Button>
-            <Button onClick={addPost} disabled={!content.trim() || busy}>
-              <Plus className="h-4 w-4" /> 붙이기
-            </Button>
-          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" onClick={() => setComposing(false)}>
+            취소
+          </Button>
+          <Button onClick={addPost} disabled={!content.trim() || busy}>
+            <Plus className="h-4 w-4" /> 붙이기
+          </Button>
         </div>
       </Card>
       )}
