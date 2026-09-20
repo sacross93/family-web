@@ -61,7 +61,9 @@ export function AdminClient({
   const router = useRouter();
 
   return (
-    <div className="flex flex-col gap-8">
+    /* 설정 카드가 세로로 쌓이는 화면이라 폭을 가둔다 — 입력칸 하나가 1150px 로
+       늘어나면 이름 같은 짧은 값도 화면 끝까지 간다. */
+    <div className="mx-auto flex max-w-3xl flex-col gap-8">
       <PageHeader emoji="🎨" title="관리자" description="사이트 모양과 메뉴를 바꾸고, 사진으로 꾸며요" />
 
       <SiteSettingsCard site={site} onSaved={() => router.refresh()} />

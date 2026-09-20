@@ -194,7 +194,10 @@ export function AnniversariesClient({
   }
 
   return (
-    <div>
+    /* 히어로 하나 + 한 줄짜리 목록이라 데스크톱에서 폭을 가둔다.
+       페이지 폭에 그대로 펼치면 이름과 D-day 가 1100px 떨어지고, 히어로도 오른쪽이
+       텅 빈다(장보기·할일과 같은 이유). */
+    <div className="mx-auto max-w-3xl">
       {/* 더하는 버튼은 아래 목록 머리글에 있다 — 폰에서 제목이 상단바로 올라가면
           이 줄에 버튼 하나만 덩그러니 남는다(DESIGN §6). */}
       <PageHeader
