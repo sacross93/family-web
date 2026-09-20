@@ -237,20 +237,23 @@ export default async function HomePage() {
       {/* ── 히어로 ── */}
       <section className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-lavender-soft via-surface to-peach-soft p-6 shadow-sm sm:p-8">
         <div className="relative z-10 flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            {members.map((m) => (
-              <Avatar
-                key={m.id}
-                emoji={m.emoji}
-                color={m.color}
-                name={m.name}
-                size="sm"
-              />
-            ))}
-            <span className="ml-1 text-sm font-medium text-ink-soft">
-              가족 {members.length}명
-            </span>
-          </div>
+          {/* 구성원이 없으면 "가족 0명" 만 덩그러니 남는다. 추가할 화면도 없으니 줄째로 뺀다. */}
+          {members.length > 0 && (
+            <div className="flex items-center gap-2">
+              {members.map((m) => (
+                <Avatar
+                  key={m.id}
+                  emoji={m.emoji}
+                  color={m.color}
+                  name={m.name}
+                  size="sm"
+                />
+              ))}
+              <span className="ml-1 text-sm font-medium text-ink-soft">
+                가족 {members.length}명
+              </span>
+            </div>
+          )}
           <div>
             <p className="text-sm font-semibold text-primary-ink">
               {kDate(new Date())}
