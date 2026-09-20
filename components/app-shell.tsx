@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, LogOut, Palette, Sparkles } from "lucide-react";
+import { X, LogOut, Palette, Sparkles, MessageCircle } from "lucide-react";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { Decorations } from "@/components/decorations";
@@ -169,6 +169,8 @@ export function AppShell({
   // 전역 페이지 꾸미기의 편집 상태는 여기 있다 — 토글이 사이드바·드로어·상단바 여러 곳에 있고
   // 스티커 레이어(Decorations)는 main 안에 있어, 공통 부모인 셸이 쥐어야 한 벌로 움직인다.
   const [decorating, setDecorating] = useState(false);
+  // 포동이 시트. 탭바(여는 쪽)와 시트가 형제라 공통 부모인 셸이 쥔다.
+  const [asking, setAsking] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -213,8 +215,21 @@ export function AppShell({
     >
       <div className="min-h-dvh">
         {/* ── 데스크톱 사이드바 ── */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-6 border-r border-line bg-surface/80 px-4 py-6 backdrop-blur-sm lg:flex">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 border-r border-line bg-surface/80 px-4 py-6 backdrop-blur-sm lg:flex">
           <Brand site={site} />
+          {/* 폰에서는 하단 탭바에 있다. 데스크톱은 탭바가 없으니 여기가 포동이의 자리. */}
+          {agentEnabled && (
+            <button
+              type="button"
+              onClick={() => setAsking(true)}
+              className="flex items-center gap-2.5 rounded-2xl bg-primary px-3 py-2.5 font-semibold text-white shadow-sm transition hover:bg-primary-hover active:scale-[0.98]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <MessageCircle className="h-4.5 w-4.5" />
+              </span>
+              <span className="text-[15px]">포동이에게 물어보기</span>
+            </button>
+          )}
           <div className="scrollbar-thin flex-1 overflow-y-auto">
             <NavList nav={nav} />
           </div>
@@ -292,12 +307,11 @@ export function AppShell({
 
         {/* ── 메인 콘텐츠 (+ 꾸미기 스티커 레이어) ── */}
         <main className="lg:pl-[264px]">
-          {/* 아래 여백 = 탭바 + 물어보기 FAB + 여유. 값은 globals.css 의 --bottom-bar 한 곳에서 온다. */}
+          {/* 아래 여백 = 탭바 + 여유. 값은 globals.css 의 --bottom-bar 한 곳에서 온다.
+              떠 있는 버튼이 없어져서 그만큼(5.5rem → 2rem) 돌려받았다. */}
           <div
             className="mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10"
-            style={{
-              paddingBottom: `calc(var(--bottom-bar) + ${agentEnabled ? "5.5rem" : "1.5rem"})`,
-            }}
+            style={{ paddingBottom: "calc(var(--bottom-bar) + 2rem)" }}
           >
             {/* 전역 페이지 꾸미기는 상단 메뉴 페이지에서만. 상세(계획/앨범)는 자체 꾸미기 사용 */}
             {isTopLevel ? (
@@ -314,10 +328,14 @@ export function AppShell({
           </div>
         </main>
 
-        <BottomTabs nav={nav} onMore={() => setOpen(true)} />
+        <BottomTabs
+        nav={nav}
+        onMore={() => setOpen(true)}
+        onAsk={agentEnabled ? () => setAsking(true) : undefined}
+      />
 
         {/* 물어보기는 main 바깥에 — 안에 두면 lg:pl-[264px] 때문에 위치가 밀린다. */}
-        {agentEnabled && <AgentFab />}
+        {agentEnabled && <AgentFab open={asking} onClose={() => setAsking(false)} />}
       </div>
     </ShellProvider>
   );

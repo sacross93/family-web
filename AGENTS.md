@@ -22,7 +22,8 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - **모바일 우선**: 반드시 폰 폭(≈390px)에서 검증. hover로만 뜨는 액션 금지 — 모바일엔 항상 보이게(`opacity-100 lg:opacity-0 lg:group-hover:opacity-100`). 탭 타깃 넉넉히, 가로 스크롤 금지(body `overflow-x:hidden`).
 - **폰 네비게이션은 하단 탭바**(`components/bottom-tabs.tsx`) — `getNav()` 앞 `TAB_COUNT`개 + `더보기`(드로어). 탭 목록을 따로 만들지 말 것: `NavItem` DB 오버라이드도 꾸미기 표면도 NAV href 로 돈다.
 - **아래쪽 여백은 `--bottom-bar`**(`app/globals.css`) 하나에서 온다. 탭바·`물어보기` FAB·본문 `padding-bottom`·꾸미기 툴바가 전부 이 값을 읽는다. 페이지에서 `pb-28` 같은 값을 손으로 맞추면 무엇 하나는 반드시 가려진다.
-- **떠 있는 버튼은 `물어보기` 하나로 유지한다.** 새 기능을 FAB 으로 붙이지 말 것 — 둘이 되는 순간 목록 한가운데가 가려진다(관리자 `꾸미기`를 상단바로 옮긴 이유).
+- **떠 있는 버튼을 두지 않는다.** 하단 탭바(화면 가장자리) 말고는 아무것도 화면에 띄우지 말 것. 콘텐츠 한가운데에 떠 있는 버튼은 그 밑에 깔린 것을 **누를 수 없게** 만든다 — 우하단 `물어보기` 가 아기 기록의 `…` 를 정확히 덮어서, 일기를 고치려고 누르면 AI 채팅이 열렸다. 지금 `포동이` 는 탭바 안(폰)·사이드바(데스크톱)에 있다. 새 기능도 같은 자리를 찾을 것.
+- **메뉴·툴팁·팝오버는 `document.body` 로 내보낸다**(portal). 제자리에 그리면 조상의 `overflow-hidden` 이 잘라 아래 항목을 아예 못 누르고, 조상에 `transform` 이 있으면 `fixed` 기준이 어긋난다. `components/ui/item-actions.tsx` 가 본보기.
 
 ## DB / 실행
 - 로컬: `postgresql://ascentai@localhost:5432/podong` (Homebrew `postgresql@16`, `brew services start postgresql@16`).

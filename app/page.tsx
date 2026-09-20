@@ -497,9 +497,9 @@ export default async function HomePage() {
             emoji="📸"
             title="최근 사진"
             color="sky"
-            className="sm:col-span-2 lg:order-first"
+            className="sm:col-span-2 lg:col-span-1"
           >
-            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6 lg:grid-cols-3">
               {photos.map((p) => (
                 <div
                   key={p.id}
@@ -525,7 +525,7 @@ export default async function HomePage() {
             emoji="💬"
             title="가족 게시판"
             color="lavender"
-            className="sm:col-span-2"
+            className="sm:col-span-2 lg:col-span-1"
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {posts.map((p) => {

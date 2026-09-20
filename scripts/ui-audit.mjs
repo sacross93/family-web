@@ -9,9 +9,12 @@
 // 누를 수 없고(계획 상세에서 "수정·삭제" 가 그랬다), 조상에 transform 이 있으면
 // 바깥 탭이 먹지 않는다(게시판 쪽지). 둘 다 닫힌 버튼만 봐서는 안 보인다.
 //
-// 가려짐은 "문서 맨 아래까지 내렸을 때"만 문제로 센다. 스크롤 도중 탭바 밑으로 콘텐츠가
-// 지나가는 것은 모든 모바일 앱이 그렇고, 더 내리면 보인다. 맨 아래에서도 덮여 있으면
-// 그건 영영 못 보는 것이라 진짜 문제다.
+// 가려짐은 두 가지로 나눠 본다.
+//   - **글자**: 맨 아래까지 내렸을 때만 문제로 센다. 스크롤 도중 탭바 밑으로 글이 지나가는
+//     것은 모든 모바일 앱이 그렇고, 더 내리면 읽힌다.
+//   - **누를 수 있는 것**: 어느 자리에서든 문제다. 글은 스쳐 지나가면 그만이지만 버튼은
+//     그 자리에서 누르면 **다른 것이 눌린다**. 아기 기록의 `…` 가 물어보기 FAB 에 덮여
+//     일기를 고치려고 누르면 AI 채팅이 열렸다. "더 내리면 된다" 로는 안 되는 종류다.
 //
 // 쓰기:  npm run dev  (다른 터미널)
 //        node scripts/ui-audit.mjs [기준URL] [아이디] [비밀번호]
@@ -99,7 +102,7 @@ function findChromium() {
 }
 
 /** 페이지 안에서 도는 검사. 떠 있는 것과 잎 요소의 사각형이 실제로 겹치는지 본다. */
-const probeOcclusion = () => {
+const probeOcclusion = (interactiveOnly = false) => {
   const floats = [...document.querySelectorAll("body *")].filter((el) => {
     const s = getComputedStyle(el);
     const r = el.getBoundingClientRect();
@@ -112,9 +115,10 @@ const probeOcclusion = () => {
       !el.closest("[data-nextjs-toast], nextjs-portal")
     );
   });
-  const leaves = [
-    ...document.querySelectorAll("a, button, input, li, p, h1, h2, h3, span, td"),
-  ].filter((el) => {
+  const sel = interactiveOnly
+    ? "a[href], button, input, select, textarea, [role='button']"
+    : "a, button, input, li, p, h1, h2, h3, span, td";
+  const leaves = [...document.querySelectorAll(sel)].filter((el) => {
     if (el.querySelector("a,button,input,p,h1,h2,h3")) return false;
     if (floats.some((f) => f.contains(el) || el.contains(f))) return false;
     const r = el.getBoundingClientRect();
@@ -128,18 +132,33 @@ const probeOcclusion = () => {
   const hit = (a, b) =>
     !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
   const out = [];
+  // 화면 맨 아래에 폭 전체로 붙은 것 = 하단 탭바. 모든 모바일 앱이 그렇고 화면 가장자리라
+  // 거기를 눌러 콘텐츠를 집으려는 사람은 없다. 그 밖에 콘텐츠 한가운데 떠 있는 것은 다르다 —
+  // 그 자리를 누르면 엉뚱한 게 눌린다(우하단에 떠 있던 물어보기가 그랬다).
+  const isBottomBar = (r) =>
+    interactiveOnly && r.left <= 1 && r.right >= innerWidth - 1 && r.bottom >= innerHeight - 1;
+
   for (const f of floats) {
     const fr = f.getBoundingClientRect();
+    if (isBottomBar(fr)) continue;
     const label = (f.getAttribute("aria-label") || f.tagName).slice(0, 30);
     for (const el of leaves) {
       const r = el.getBoundingClientRect();
       if (r.bottom < 0 || r.top > innerHeight) continue;
-      if (hit(fr, r)) {
-        out.push({
-          float: label,
-          covered: (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 30),
-        });
-      }
+      if (!hit(fr, r)) continue;
+      // 진짜로 그 위에 있는지 — 가운데를 짚어 최상위 요소가 떠 있는 쪽인지 본다.
+      const cx = Math.max(r.left, fr.left) + Math.min(r.right, fr.right) - Math.max(r.left, fr.left) / 2;
+      const mx = (Math.max(r.left, fr.left) + Math.min(r.right, fr.right)) / 2;
+      const my = (Math.max(r.top, fr.top) + Math.min(r.bottom, fr.bottom)) / 2;
+      const topEl = document.elementFromPoint(mx, my);
+      if (interactiveOnly && !(topEl && (f === topEl || f.contains(topEl)))) continue;
+      void cx;
+      out.push({
+        float: label,
+        covered:
+          (el.getAttribute("aria-label") || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 30) ||
+          el.tagName,
+      });
     }
   }
   return out;
@@ -206,10 +225,23 @@ for (const { w, h, tag } of WIDTHS) {
     rows.push({ tag, path, height, screens: +(height / h).toFixed(1), overflow });
     if (overflow > 0) problems.push(`${tag} ${path}: 가로 스크롤 ${overflow}px`);
 
-    // 맨 아래까지 내린 뒤에도 덮여 있는 것만 문제로 센다.
+    // 누를 수 있는 것은 어느 자리에서든 덮이면 안 된다 — 위·가운데·아래를 다 본다.
+    const seen = new Set();
+    for (const frac of [0, 0.5, 1]) {
+      await page.evaluate((f) => window.scrollTo(0, document.body.scrollHeight * f), frac);
+      await page.waitForTimeout(220);
+      for (const o of await page.evaluate(probeOcclusion, true)) {
+        const key = `${o.float}→${o.covered}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        problems.push(`${tag} ${path}: "${o.float}" 가 누를 수 있는 "${o.covered}" 를 덮음`);
+      }
+    }
+
+    // 글자는 맨 아래까지 내린 뒤에도 덮여 있을 때만 — 그건 영영 못 읽는 것이다.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(250);
-    for (const o of await page.evaluate(probeOcclusion)) {
+    for (const o of await page.evaluate(probeOcclusion, false)) {
       problems.push(`${tag} ${path}: "${o.float}" 가 "${o.covered}" 를 덮음`);
     }
 
