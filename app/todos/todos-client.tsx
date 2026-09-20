@@ -18,6 +18,7 @@ import {
   Card,
   Button,
   IconButton,
+  ItemActions,
   Input,
   Select,
   Field,
@@ -650,26 +651,13 @@ function TodoRow({
         />
       )}
 
-      <div className="flex items-center gap-0.5">
-        <IconButton
-          variant="ghost"
-          size="sm"
-          aria-label="수정"
-          onClick={() => onEdit(todo)}
-          className="opacity-100 transition lg:opacity-60 lg:group-hover:opacity-100"
-        >
-          <Pencil className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          variant="danger"
-          size="sm"
-          aria-label="삭제"
-          onClick={() => onRemove(todo.id)}
-          className="opacity-100 transition lg:opacity-60 lg:group-hover:opacity-100"
-        >
-          <Trash2 className="h-4 w-4" />
-        </IconButton>
-      </div>
+      <ItemActions
+        inline
+        actions={[
+          { label: "수정", icon: Pencil, onClick: () => onEdit(todo) },
+          { label: "삭제", icon: Trash2, onClick: () => onRemove(todo.id), danger: true },
+        ]}
+      />
     </li>
   );
 }

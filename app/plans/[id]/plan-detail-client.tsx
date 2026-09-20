@@ -440,10 +440,8 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         onEditingChange={setDecorating}
       >
       {/* 헤더 (히어로) */}
-      {/* overflow-hidden 은 안쪽 그라데이션에 둔다 — 카드에 걸면 `…` 메뉴가 잘려
-          폰에서 "계획 수정·삭제" 를 아예 누를 수 없었다. */}
-      <Card flush className="group relative mb-6">
-        <div className={cn("rounded-3xl bg-gradient-to-br p-5 sm:p-6", pal.gradient)}>
+      <Card flush className="group relative mb-6 overflow-hidden">
+        <div className={cn("bg-gradient-to-br p-5 sm:p-6", pal.gradient)}>
           <div className="flex items-start gap-4">
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface/70 text-3xl shadow-sm">
               {plan.emoji}

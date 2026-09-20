@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import { Card, Tag, Avatar, Segmented, IconButton, EmptyState, Button } from "@/components/ui";
+import { Card, Tag, Avatar, Segmented, ItemActions, EmptyState, Button } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -91,14 +91,14 @@ export function EntryTimeline({
                         {meta.emoji} {meta.label}
                       </Tag>
                       {e.mood && <span className="text-lg leading-none">{e.mood}</span>}
-                      <div className="ml-auto flex gap-1 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
-                        <IconButton variant="ghost" size="sm" aria-label="고치기" onClick={() => onEdit(e)}>
-                          <Pencil className="h-4 w-4" />
-                        </IconButton>
-                        <IconButton variant="danger" size="sm" aria-label="삭제" onClick={() => onDelete(e)}>
-                          <Trash2 className="h-4 w-4" />
-                        </IconButton>
-                      </div>
+                      <ItemActions
+                        inline
+                        className="ml-auto"
+                        actions={[
+                          { label: "고치기", icon: Pencil, onClick: () => onEdit(e) },
+                          { label: "삭제", icon: Trash2, onClick: () => onDelete(e), danger: true },
+                        ]}
+                      />
                     </div>
                     <MarkdownView>{e.content}</MarkdownView>
                   </Card>

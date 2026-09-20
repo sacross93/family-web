@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentPropsWithRef } from "react";
 import { cn } from "@/lib/utils";
 
 type Variant = "ghost" | "soft" | "danger" | "surface";
@@ -12,7 +12,9 @@ const VARIANTS: Record<Variant, string> = {
   surface: "bg-surface text-ink-soft shadow-sm ring-1 ring-line hover:text-ink",
 };
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+// ComponentPropsWithRef: React 19 에서는 ref 도 그냥 prop 이다.
+// ItemActions 가 이 버튼의 위치를 재서 메뉴를 띄우므로 ref 를 받을 수 있어야 한다.
+interface Props extends ComponentPropsWithRef<"button"> {
   variant?: Variant;
   size?: "sm" | "md";
 }
