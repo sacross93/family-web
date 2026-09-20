@@ -28,7 +28,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     scope: "/",
     // 주소창 없이 앱처럼 열린다. 가족만 쓰는 사이트라 주소를 보여 줄 이유가 없다.
     display: "standalone",
-    background_color: "#fbeaf2", // --color-paper
+    background_color: "#ffffff", // --color-paper (바탕은 흰색이다)
     theme_color: "#f6cedd", // --color-chrome
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },

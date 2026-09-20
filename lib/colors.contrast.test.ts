@@ -50,6 +50,27 @@ function hue(hex: string): number {
   return (h * 60 + 360) % 360;
 }
 
+/** Lab 거리(ΔE). 넓은 면끼리는 대비(명도)로 못 가른다 — 라벤더 쪽지는 분홍 페이지와
+ *  대비 1.03 인데 잘 보이고, 로즈 쪽지는 1.03 인데 안 보인다. 이 판의 기준선은 **7**. */
+function deltaE(a: string, b: string): number {
+  const lab = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    const to = (v: number) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const r = to((n >> 16) & 255), g = to((n >> 8) & 255), bl = to(n & 255);
+    const X = r * 0.4124 + g * 0.3576 + bl * 0.1805;
+    const Y = r * 0.2126 + g * 0.7152 + bl * 0.0722;
+    const Z = r * 0.0193 + g * 0.1192 + bl * 0.9505;
+    const f = (v: number) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116);
+    const fx = f(X / 0.95047), fy = f(Y), fz = f(Z / 1.08883);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  };
+  const A = lab(a), B = lab(b);
+  return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+}
+
 /** HSL 채도(0~1). "대비를 맞춘다" 며 색을 회색으로 만들어 버리지 않았는지 보는 데 쓴다. */
 function saturation(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -102,17 +123,20 @@ describe("글자 대비", () => {
     expect(r, `control on surface = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
   });
 
-  it("판이 바탕에서 떠 보인다 — 흰 판과 종이가 같은 색이면 화면이 죽이 된다", () => {
-    // 핑크 파스텔로 칠하고 나서 흰 판 vs 종이가 **1.078** 이었다. 카드 테두리(1.15)도
-    // 옅은 핑크라, 목록이 배경에 녹아 어디까지가 한 판인지 눈으로 잡히지 않았다.
-    // 대비 기준(4.5/3)은 **글자** 이야기라 여기엔 안 맞는다 — 넓은 면끼리는
-    // 훨씬 작은 차이로도 구별되지만, 1.08 은 그 아래다.
-    const lift = contrast(token("surface"), token("paper"));
-    expect(lift, `surface vs paper = ${lift.toFixed(3)}`).toBeGreaterThanOrEqual(1.12);
+  it("판은 **채움 아니면 가장자리**로 바탕에서 떠 보인다", () => {
+    // 바탕이 분홍이던 때는 흰 판이 **채움**으로 떴다(그것도 겨우 1.078 이었다).
+    // 바탕이 흰색이 된 뒤로 판도 흰색이라 채움으로는 못 뜬다 — **테두리**가 뜨게 한다.
+    // 둘 중 하나만 만족하면 된다. 넓은 면끼리는 대비가 아니라 ΔE 로 잰다(§2).
+    const fill = deltaE(token("surface"), token("paper"));
+    const edge = deltaE(token("line"), token("paper"));
+    expect(
+      Math.max(fill, edge),
+      `판: 채움 ΔE ${fill.toFixed(1)} · 테두리 ΔE ${edge.toFixed(1)} — 둘 다 7 아래면 카드가 안 보인다`
+    ).toBeGreaterThanOrEqual(7);
 
-    // 틀(상단바·탭바·히어로)도 바탕과 구별돼야 한다.
-    const frame = contrast(token("chrome"), token("paper"));
-    expect(frame, `chrome vs paper = ${frame.toFixed(3)}`).toBeGreaterThanOrEqual(1.12);
+    // 틀(상단바·탭바·히어로)은 **채움으로** 떠야 한다 — 거기가 분홍이 사는 자리다.
+    const frame = deltaE(token("chrome"), token("paper"));
+    expect(frame, `틀 ΔE ${frame.toFixed(1)}`).toBeGreaterThanOrEqual(7);
   });
 
   it("가라앉은 칸(sunken) 위에서도 3:1 은 넘는다", () => {
@@ -216,14 +240,21 @@ describe("글자 대비", () => {
     // `primary-soft` 라 그 `paper` 위에서 **1.04:1** 이 됐다 — 풍선은 사라지고
     // 로즈 글자만 떠 있었다. 글자 대비만 재면 둘 다 통과한다(5.7:1). 판을 따로 봐야 한다.
     const THREAD = "paper";
-    const MIN = 1.15; // 이 판의 최소 단차(DESIGN.md §2: 판↔바탕 1.157)
-    for (const plate of ["surface", "chrome"]) {
-      const r = contrast(token(plate), token(THREAD));
-      expect(r, `말풍선 ${plate} on ${THREAD} = ${r.toFixed(3)}`).toBeGreaterThanOrEqual(MIN);
-    }
+    // 내 말풍선은 **채움**(로즈)으로, 포동이 카드는 **테두리**로 뜬다 — 바탕이 흰색이 된 뒤로
+    // 흰 카드는 채움으로 뜰 수 없다. 판 규칙과 같다: 둘 중 하나만 7을 넘으면 된다.
+    const mine = deltaE(token("chrome"), token(THREAD));
+    expect(mine, `내 말풍선 ΔE ${mine.toFixed(1)}`).toBeGreaterThanOrEqual(7);
+
+    const botFill = deltaE(token("surface"), token(THREAD));
+    const botEdge = deltaE(token("line"), token(THREAD));
+    expect(
+      Math.max(botFill, botEdge),
+      `포동이 카드: 채움 ΔE ${botFill.toFixed(1)} · 테두리 ΔE ${botEdge.toFixed(1)}`
+    ).toBeGreaterThanOrEqual(7);
+
     // 둘이 서로 달라야 누가 한 말인지 알 수 있다.
-    const between = contrast(token("surface"), token("chrome"));
-    expect(between, `내 말풍선 vs 포동이 카드 = ${between.toFixed(3)}`).toBeGreaterThanOrEqual(MIN);
+    const between = deltaE(token("surface"), token("chrome"));
+    expect(between, `내 말풍선 vs 포동이 카드 ΔE ${between.toFixed(1)}`).toBeGreaterThanOrEqual(7);
   });
 
   it("토스트가 페이지에서 떠 보인다 — 3초 뒤 사라지는 판이 바탕과 같은 색이면 못 본다", () => {
