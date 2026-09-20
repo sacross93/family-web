@@ -556,7 +556,11 @@ export default async function HomePage() {
               {posts.map((p) => {
                 const pal = palette(p.color);
                 return (
-                  <div key={p.id} className={cn("rounded-md p-3", pal.soft)}>
+                  // `min-w-0` 가 필요하다 — 격자 칸의 기본 `min-width: auto` 는 "내용의 최소 너비"라,
+                  // 띄어쓰기 없는 긴 단어 하나가 칸을 통째로 벌린다(61자짜리 영단어로 재 보니
+                  // 316px 칸 안에 397px 카드가 들어가 오른쪽이 잘렸다). `overflow-wrap: break-word`
+                  // 는 **최소 너비를 줄여 주지 않아서** 이걸 못 막는다. 한글과 주소는 멀쩡했다.
+                  <div key={p.id} className={cn("min-w-0 rounded-md p-3", pal.soft)}>
                     <div className="mb-1 flex items-center gap-1.5">
                       <span>{p.emoji}</span>
                       {p.author && (

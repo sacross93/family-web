@@ -131,7 +131,9 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
               <Link
                 key={plan.id}
                 href={`/plans/${plan.id}`}
-                className="block h-full"
+                // `min-w-0` — 격자 칸의 기본 `min-width: auto` 는 "내용의 최소 너비" 라서
+                // 띄어쓰기 없는 긴 제목 하나가 칸을 벌린다(320px 에서 288px 칸에 538px 카드).
+                className="block h-full min-w-0"
               >
                 <Card
                   interactive

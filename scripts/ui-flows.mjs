@@ -740,6 +740,108 @@ await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 �
   }
 });
 
+// ── 긴 글자 ──────────────────────────────────────────────
+// `word-break: keep-all` 을 건 뒤로 **띄어쓰기 없는 긴 글자**가 판을 밀 수 있게 됐다.
+// 실제로 넣어 보고 확인한다 — 화면을 보는 것으로는 절대 안 나오는 종류다.
+//
+// 재 보니 한글도 주소도 멀쩡했고(`overflow-wrap: break-word` 가 받아 준다),
+// **띄어쓰기 없는 긴 영단어 하나**가 홈의 쪽지 격자를 벌렸다. 격자 칸의 기본
+// `min-width: auto` 는 "내용의 최소 너비" 라서, `overflow-wrap` 으로는 못 줄인다
+// (316px 칸에 397px 카드가 들어가 오른쪽이 잘렸다 → `min-w-0` 으로 고쳤다).
+console.log("긴 글자");
+{
+  const LONG = {
+    "긴 한글(띄어쓰기 없음)": "쿠팡사이트에서파는초대용량친환경세탁세제리필용기포함",
+    "긴 주소": "https://www.coupang.com/vp/products/1234567890?itemId=9876543210&vendorItemId=1122334455",
+    "긴 영단어": "supercalifragilisticexpialidociousantidisestablishmentarianism",
+  };
+  for (const [label, body] of Object.entries(LONG)) {
+    await step(`${label} 가 판을 밀지 않는다`, async () => {
+      const id = await page.evaluate(
+        ([m, b]) =>
+          fetch("/api/board", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: m + " " + b, color: "rose" }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((r) => r?.id ?? null)
+            .catch(() => null),
+        [MARK, body]
+      );
+      if (!id) throw new Error("쪽지를 못 만들었다");
+      try {
+        for (const w of [320, 360, 390]) {
+          await page.setViewportSize({ width: w, height: 844 });
+          for (const path of ["/", "/board"]) {
+            await page.goto(BASE + path, { waitUntil: "networkidle" });
+            await page.waitForTimeout(250);
+            const r = await page.evaluate(() => {
+              const over = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+              let spill = null;
+              for (const el of document.querySelectorAll("body *")) {
+                if (el.children.length || el.closest("nextjs-portal")) continue;
+                const b = el.getBoundingClientRect();
+                if (b.width < 4) continue;
+                if (b.right > window.innerWidth + 1 || b.left < -1) {
+                  spill = `${(el.textContent || "").trim().slice(0, 14)} (${Math.round(b.left)}~${Math.round(b.right)})`;
+                  break;
+                }
+              }
+              return { over, spill };
+            });
+            if (r.over > 0) throw new Error(`${w}px ${path}: 가로 스크롤 ${r.over}px`);
+            if (r.spill) throw new Error(`${w}px ${path}: 화면 밖으로 — ${r.spill}`);
+          }
+        }
+      } finally {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.evaluate((i) => fetch(`/api/board/${i}`, { method: "DELETE" }), id);
+      }
+    });
+  }
+  // 격자는 쪽지만 있는 게 아니다 — 계획 카드도 같은 이유로 벌어졌다(288px 칸에 538px 카드).
+  await step("긴 제목이 계획 격자를 벌리지 않는다", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const id = await page.evaluate(
+      ([m, b, d]) =>
+        fetch("/api/plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: m + b, description: b, kind: "trip", startDate: d }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((r) => r?.id ?? null)
+          .catch(() => null),
+      [MARK, "supercalifragilisticexpialidociousantidisestablishmentarianism", today]
+    );
+    if (!id) throw new Error("계획을 못 만들었다");
+    try {
+      for (const w of [320, 390]) {
+        await page.setViewportSize({ width: w, height: 844 });
+        await page.goto(BASE + "/plans", { waitUntil: "networkidle" });
+        await page.waitForTimeout(250);
+        const r = await page.evaluate(() => {
+          const over = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+          let spill = null;
+          for (const el of document.querySelectorAll("body *")) {
+            if (el.children.length || el.closest("nextjs-portal")) continue;
+            const b = el.getBoundingClientRect();
+            if (b.width < 4) continue;
+            if (b.right > window.innerWidth + 1) { spill = `${(el.textContent || "").trim().slice(0, 12)} → ${Math.round(b.right)}px`; break; }
+          }
+          return { over, spill };
+        });
+        if (r.over > 0) throw new Error(`${w}px: 가로 스크롤 ${r.over}px`);
+        if (r.spill) throw new Error(`${w}px: 화면 밖으로 — ${r.spill}`);
+      }
+    } finally {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate((i) => fetch(`/api/plans/${i}`, { method: "DELETE" }), id);
+    }
+  });
+}
+
 console.log(errs.length ? "\n콘솔 오류: " + JSON.stringify([...new Set(errs)]) : "\n콘솔 오류 없음");
 console.log(failed === 0 ? `✓ ${total}단계 모두 통과` : `⚠ ${failed}단계 실패`);
 if (failed) process.exitCode = 1;
