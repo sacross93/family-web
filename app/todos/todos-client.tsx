@@ -202,7 +202,7 @@ export function TodosClient({
   async function enableNotifications() {
     const ok = await requestNotificationPermission();
     setPermission(notificationPermission());
-    if (ok) showNotice("알림을 켰어요 🔔 마감 전에 알려드릴게요.");
+    if (ok) showNotice("알림을 켰어요 🔔 이 창이 열려 있는 동안 알려드릴게요.");
   }
 
   function openAdd() {
@@ -310,13 +310,23 @@ export function TodosClient({
         description="그날그날 우리 가족이 할 일"
         summary={total > 0 ? `${doneCount}/${total} 했어요` : "오늘"}
       >
+        {/* 알림은 **이 창이 열려 있는 동안만** 온다(lib/notifications.ts — 진짜 예약 알림은
+            Service Worker + Web Push 가 필요하다). 폰에서는 창을 열어 둘 일이 거의 없어
+            "마감 전에 알려드릴게요" 가 지킬 수 없는 약속이 된다. 그래서 데스크톱에서만
+            내놓고, 말도 사실대로 한다. 기능 자체는 그대로 있다. */}
         {permission !== "unsupported" &&
           (permission === "granted" ? (
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-mint-soft px-3.5 text-sm font-semibold text-mint-ink">
+            <span className="hidden h-9 items-center gap-1.5 rounded-full bg-mint-soft px-3.5 text-sm font-semibold text-mint-ink lg:inline-flex">
               <BellRing className="h-4 w-4" /> 알림 켜짐
             </span>
           ) : (
-            <Button variant="soft" size="sm" onClick={enableNotifications}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={enableNotifications}
+              className="hidden lg:inline-flex"
+              title="이 창이 열려 있는 동안 알려드려요"
+            >
               <Bell className="h-4 w-4" /> 알림 켜기
             </Button>
           ))}

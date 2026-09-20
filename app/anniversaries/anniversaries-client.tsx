@@ -207,7 +207,7 @@ export function AnniversariesClient({
         <EmptyState
           emoji="🎂"
           title="아직 기념일이 없어요"
-          description="생일과 소중한 날을 등록하면 D-day로 알려드릴게요."
+          description="생일과 소중한 날을 등록하면 며칠 남았는지 세어 드릴게요."
           action={
             <Button onClick={openAdd}>
               <Plus className="h-4 w-4" /> 첫 기념일 추가

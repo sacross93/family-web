@@ -370,12 +370,22 @@ export function CalendarClient({
         <aside className={cn(phoneView === "list" ? "" : "hidden lg:block")}>
           <Card flush className="overflow-hidden">
             <div className="border-b border-line px-4 py-3">
-              <p className="text-sm font-bold text-ink">다가오는 일정</p>
+              <p className="font-display text-lg font-bold text-ink">다가오는 일정</p>
             </div>
             {upcoming.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-ink-soft">
-                예정된 일정이 없어요.
-              </p>
+              /* "없어요." 한 줄로 끝나 있었다. 빈 화면은 초대다(DESIGN §8) —
+                 무엇을 할 수 있는지 말하고 그 자리에서 할 수 있게 한다. */
+              <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+                <span className="text-3xl" aria-hidden>
+                  📅
+                </span>
+                <p className="text-sm text-ink-soft">
+                  아직 잡힌 일정이 없어요.
+                </p>
+                <Button size="sm" variant="soft" onClick={() => openNew(new Date())}>
+                  <Plus className="h-4 w-4" /> 일정 추가
+                </Button>
+              </div>
             ) : (
               <ul>
                 {upcoming.map((ev) => (
