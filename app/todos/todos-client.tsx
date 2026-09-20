@@ -404,7 +404,7 @@ export function TodosClient({
                 <span
                   className={cn(
                     "text-[0.6875rem] font-semibold",
-                    sel ? "text-white/80" : "text-ink-faint"
+                    sel ? "text-white" : "text-ink-faint"
                   )}
                 >
                   {kWeekday(day)}
@@ -418,7 +418,7 @@ export function TodosClient({
                     !c
                       ? "bg-transparent"
                       : sel
-                        ? "bg-white/80"
+                        ? "bg-white"
                         : hasOpen
                           ? "bg-primary"
                           : "bg-mint"

@@ -244,7 +244,7 @@ export default async function HomePage() {
           나란히 놓으면 사진이 커지든 글자가 길어지든 겹칠 자리가 없다. */}
       <section className="on-chrome flex items-start gap-4 rounded-xl bg-chrome p-6 sm:gap-8 sm:p-8">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <p className="font-num text-sm font-semibold text-accent">
+          <p className="font-num text-sm font-semibold text-accent-ink">
             {kDate(new Date())}
           </p>
           {/* 제목의 한 단어만 색칠하지 않는다 — 강조가 흩어지면 아무것도 강조되지 않는다. */}

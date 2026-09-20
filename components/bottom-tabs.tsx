@@ -42,7 +42,7 @@ export function BottomTabs({
   return (
     <nav
       aria-label="주요 메뉴"
-      className="on-chrome fixed inset-x-0 bottom-0 z-40 bg-chrome lg:hidden"
+      className="on-chrome fixed inset-x-0 bottom-0 z-40 border-t border-ink/10 bg-chrome lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <ul className="flex h-14 items-stretch">
@@ -84,7 +84,7 @@ export function BottomTabs({
               aria-label="포동이에게 물어보기"
               className="flex h-full w-full flex-col items-center justify-center gap-0.5"
             >
-              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-chrome-ink text-chrome">
+              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-white">
                 <MessageCircle className="h-4 w-4" />
               </span>
               <span className="text-[0.625rem] font-bold leading-none text-chrome-ink">
@@ -103,7 +103,7 @@ export function BottomTabs({
             <span
               className={cn(
                 "flex h-7 w-11 items-center justify-center rounded-full transition-colors",
-                inMore && "bg-white/15",
+                inMore && "bg-white",
               )}
             >
               <MoreHorizontal

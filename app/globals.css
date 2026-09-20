@@ -1,56 +1,63 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
-   포동(Podong) 디자인 시스템 · 「편지」
+   포동(Podong) 디자인 시스템 · 「아기자기한 핑크 파스텔」
    토큰의 단일 출처(Single Source of Truth). 규칙은 DESIGN.md 참고.
 
-   바꾼 이유: 예전 판은 13개 화면이 전부 같은 것이었다 —
-   흰 카드 + 같은 모서리 + 같은 그림자. 위계가 없으니 무엇이 중요한지 화면이 말해
-   주지 못했다. 이번 판은 **틀은 진하게, 내용은 밝게** 두고, 위계를 글자와 여백으로
-   만든다. 카드 테두리로 만들지 않는다.
+   컨셉: **아기자기한 핑크 파스텔 + 흰 판.** 바탕은 아주 옅은 핑크 종이,
+   내용은 흰 판, 틀(사이드바·상단바·탭바·히어로)은 연한 로즈.
+
+   화면 전체가 밝으니 **명도 차로는 위계를 만들 수 없다.** 진한 틀 / 밝은 내용으로
+   화면을 둘로 가르던 방법이 사라진 자리를 글자 크기와 여백이 대신한다.
+   카드 테두리로 만들지 않는다 — 예전 판은 13개 화면이 전부 흰 카드 + 같은 모서리 +
+   같은 그림자여서, 무엇이 중요한지 화면이 말해 주지 못했다.
    ═══════════════════════════════════════════════════════════════ */
 
 @theme {
   /* ── 글꼴 ── */
   /* 본문·UI: Pretendard (app/pretendard.css 의 구간별 @font-face) */
   --font-sans: Pretendard, ui-sans-serif, system-ui, sans-serif;
-  /* 제목: 고운바탕 — 한글 명조. 이 사이트엔 아기에게 쓰는 편지가 있다.
-     18px 미만에는 쓰지 않는다(명조는 작을수록 읽기 어렵다). */
-  --font-display: var(--font-gowun), Pretendard, serif;
+  /* 제목: 주아 — 둥글고 도톰한 한글. 가족이 바란 결이 "아기자기한 핑크 파스텔" 이다.
+     굵기가 하나뿐이라 18px 미만에는 쓰지 않는다(작으면 획이 뭉친다). */
+  --font-display: var(--font-display-face), Pretendard, sans-serif;
 
   /* ── 바탕 · 판 · 틀 ── */
-  --color-paper: #eceaf2; /* 페이지 바탕. 옅은 라일락 회색 */
+  --color-paper: #fdf4f8; /* 페이지 바탕 — 아주 옅은 핑크 종이 */
   --color-surface: #ffffff; /* 내용 판 */
-  --color-sunken: #e7e4ee; /* 판 안에서 한 단 들어간 자리 */
-  /* 틀(사이드바·상단바·탭바·히어로). 진한 자두 먹 — 검정 대용이 아니라 색이다. */
-  --color-chrome: #362c4e;
-  --color-chrome-soft: #473a63; /* 틀 위에서 한 단 뜬 자리(눌린 탭·호버) */
-  --color-chrome-ink: #ede8f7; /* 틀 위 글자 — 10.8 : 1 */
-  --color-chrome-faint: #b9aed0; /* 틀 위 흐린 글자 — 6.2 : 1 */
+  --color-sunken: #fbe9f0; /* 판 안에서 한 단 들어간 자리 */
+  /* 틀(사이드바·상단바·탭바·히어로). 연한 로즈 — 흰 판 옆에 나란히 서는 파스텔이다.
+     **밝은 배경**이라 틀 위에서도 글자는 어두운 쪽을 쓴다(예전 진한 자두의 반대).
+     그래도 ink 세 벌을 그대로 옮겨 쓰지는 않는다: `ink-faint` 는 이 로즈 위에서
+     4.3 : 1 로 AA 에 못 미친다 — 그래서 `chrome-faint` 가 따로 있다. */
+  --color-chrome: #fad9e6; /* 연한 로즈 — 틀·히어로 */
+  --color-chrome-soft: #f6c9da; /* 틀 위에서 한 단 뜬 자리(눌린 탭·호버) */
+  --color-chrome-ink: #3e2f36; /* 틀 위 글자 — 9.7 : 1 */
+  --color-chrome-faint: #6e5560; /* 틀 위 흐린 글자 — 5.2 : 1 */
 
   /* ── 글자 세 단계 ──
-     흰 판(#fff) / 바탕(#eceaf2) / 들어간 자리(#e7e4ee) 어디에 놓여도 AA(4.5:1)를 넘는다.
+     흰 판(#fff) / 종이 바탕(#fdf4f8) / 들어간 자리(#fbe9f0) 어디에 놓여도 AA(4.5:1)를 넘는다.
      예전 --color-ink-faint(#a6a6b2)는 흰 배경에서 2.41:1 이라 날짜·개수가 안 읽혔다.
      더 옅게 만들고 싶으면 lib/colors.contrast.test.ts 부터 볼 것. */
-  --color-ink: #241f30; /* 흰 판 16.0 : 1 */
-  --color-ink-soft: #524b63; /* 8.3 : 1 */
-  --color-ink-faint: #6a6279; /* 5.8 : 1 (들어간 자리 4.6) */
-  --color-line: #ddd8e8;
-  --color-line-strong: #cfc8de;
+  --color-ink: #3e2f36; /* 흰 판 12.6 : 1 */
+  --color-ink-soft: #5e4650; /* 8.5 : 1 */
+  --color-ink-faint: #7a606c; /* 5.7 : 1 (들어간 자리 4.9) */
+  --color-line: #f4e2ea;
+  --color-line-strong: #ebd0dd;
 
-  /* ── 브랜드 / 주요 액션 (그레이프) ──
-     예전 #7a6cf0 은 흰 글자가 4.01:1 이라 버튼 글씨가 AA 를 못 넘었다. 한 단 낮췄다. */
-  --color-primary: #6c5ce8; /* 흰 글자 4.85 : 1 */
-  --color-primary-hover: #5f4fdc;
-  --color-primary-soft: #e9e5fd;
-  --color-primary-ink: #5647c9;
+  /* ── 브랜드 / 주요 액션 (로즈) ──
+     흰 글자가 AA(4.5:1)를 넘는 선에서 가장 밝은 로즈를 골랐다 — 버튼 글씨가 기준에
+     못 미치면 브랜드고 뭐고 안 읽힌다(예전 보라 #7a6cf0 이 4.01:1 로 그랬다). */
+  --color-primary: #be4571; /* 로즈. 흰 글자 4.9 : 1 */
+  --color-primary-hover: #a93a63;
+  --color-primary-soft: #fce4ee;
+  --color-primary-ink: #a93a63; /* soft 위 5.0 : 1 */
 
   /* ── 강조 한 색 ──
      '지금 벌어지고 있는 일' 에만 쓴다 — 주차 숫자, 오늘, 진행 막대.
-     글자로 쓰지 않는다: 흰 판에서 2.54:1 이다. 글자가 필요하면 accent-ink. */
-  --color-accent: #e0913a; /* 틀 위 5.1 : 1 — 그래픽·큰 숫자용 */
-  --color-accent-ink: #8a5312; /* 흰 판 6.3 : 1 — 글자용 */
-  --color-accent-soft: #fbead4;
+     글자로 쓰지 않는다: 흰 판에서 3.9:1 로 AA(4.5)에 못 미친다. 글자엔 accent-ink. */
+  --color-accent: #c2691f; /* 따뜻한 살구 — 막대·점. 틀 위 3.0:1 로 여유가 없다 */
+  --color-accent-ink: #8a4410; /* 글자용 — 흰 판 7.2 : 1 */
+  --color-accent-soft: #fdeadb;
 
   /* ── 파스텔 분류색 (각 색: base 점 · soft 배경 · ink 글자) ──
      가족이 고른 색이고 스티커·사진이 이 위에 산다. 값은 그대로 둔다. */
@@ -78,12 +85,15 @@
   --color-rose-soft: #fde5ec;
   --color-rose-ink: #c1567c;
 
-  /* ── 상태색 ── */
+  /* ── 상태색 ──
+     브랜드가 로즈가 된 뒤로 **위험색이 분홍이면 안 된다** — 예전 danger-ink(#a6475d)는
+     primary-ink(#a93a63)와 거의 같은 색이라 "지우기" 와 "저장" 이 한 색으로 보였다.
+     붉은 주황 쪽으로 떼어 놓는다. */
   --color-success: #348a63;
-  --color-danger: #e0607e; /* 아이콘·테두리용 (흰 배경 3.0:1) */
-  --color-danger-soft: #fce4ea;
-  /* danger-soft 위에 얹는 글자. --color-danger 를 글자로 쓰면 2.84:1 로 안 읽힌다. */
-  --color-danger-ink: #a6475d; /* danger-soft 위 4.7:1 */
+  --color-danger: #d64545; /* 붉은 주황. 흰 판 4.4:1 — 아이콘·테두리용 */
+  --color-danger-soft: #fde8e4;
+  /* danger-soft 위에 얹는 글자. --color-danger 를 글자로 쓰면 3.7:1 로 AA 에 못 미친다. */
+  --color-danger-ink: #a12e21; /* danger-soft 위 6.1:1 */
 
   /* ── 모서리 ──
      전부 같은 값을 쓰면 위계가 사라진다. 크기가 아니라 **무엇인가**로 고른다:
@@ -98,9 +108,9 @@
      예전엔 34곳이 shadow-sm 을 달고 있어서 모든 것이 똑같이 떠 보였다. */
   /* 남아 있는 shadow-sm 자리는 Tailwind 기본(회색)으로 떨어지지 않게 우리 색으로 못박는다.
      새로 쓰지 말 것 — 판에는 그림자를 쓰지 않는다. */
-  --shadow-sm: 0 1px 2px rgba(54, 44, 78, 0.05);
-  --shadow-md: 0 4px 16px -4px rgba(54, 44, 78, 0.14), 0 2px 6px -3px rgba(54, 44, 78, 0.08);
-  --shadow-lg: 0 14px 34px -10px rgba(54, 44, 78, 0.22), 0 4px 10px -4px rgba(54, 44, 78, 0.1);
+  --shadow-sm: 0 1px 2px rgba(120, 70, 95, 0.05);
+  --shadow-md: 0 4px 16px -4px rgba(120, 70, 95, 0.14), 0 2px 6px -3px rgba(120, 70, 95, 0.08);
+  --shadow-lg: 0 14px 34px -10px rgba(120, 70, 95, 0.22), 0 4px 10px -4px rgba(120, 70, 95, 0.1);
 
   /* ── 모션 ── */
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -217,7 +227,8 @@ body {
   border-radius: 4px;
 }
 
-/* 진한 틀(사이드바·상단바·탭바) 안에서는 보라 링이 안 보인다 — 밝은 링으로 바꾼다. */
+/* 틀(사이드바·상단바·탭바) 안에서는 로즈 링이 연한 로즈 바탕에 3.8:1 로 흐릿하다 —
+   같은 계열 위에 같은 계열을 그리는 꼴이다. 틀 위 글자색(9.7:1)으로 바꿔 또렷하게 만든다. */
 .on-chrome :focus-visible {
   outline-color: var(--color-chrome-ink);
 }
@@ -237,8 +248,8 @@ body {
 }
 
 /* 숫자는 본문 글꼴 + 고정폭 자릿수.
-   **--font-display 를 쓰지 않는다**: 제목 글꼴이 명조로 바뀌면서 이걸 상속시키면
-   목록의 날짜·개수 45곳이 전부 명조가 된다. 작은 글씨의 명조는 읽기 어렵다.
+   **--font-display 를 쓰지 않는다**: 제목 글꼴(주아)은 굵기가 하나뿐이고 도톰해서,
+   이걸 상속시키면 목록의 날짜·개수 45곳이 전부 그 글꼴이 된다 — 작은 글씨에서 읽기가 나빠진다.
    큰 숫자(주차·D-day)만 따로 `.font-display` 를 직접 붙인다. */
 .font-num {
   font-family: var(--font-sans);
@@ -246,9 +257,9 @@ body {
   letter-spacing: 0;
 }
 
-/* 명조로 크게 쓰는 자리. 한글 명조는 자간이 벌어 보여 살짝 좁힌다. */
+/* 제목 글꼴로 크게 쓰는 자리. 주아는 획이 도톰해 자간을 좁히면 글자가 붙어 보인다. */
 .font-display {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.005em;
   word-break: keep-all;
 }
 
@@ -335,9 +346,15 @@ body {
 }
 .md-content th { background: var(--color-sunken); font-weight: 700; }
 
-/* 진한 틀(.on-chrome) 안에서 마크다운을 그릴 때.
-   `.md-content` 는 밝은 판 기준 색이라 그대로 두면 **검은 글씨가 검은 판에** 놓인다.
-   계획 상세의 설명이 진한 히어로 안에 있다. */
+/* 틀(.on-chrome) 안에서 마크다운을 그릴 때 — 계획 상세의 설명이 히어로 안에 있다.
+
+   틀이 연한 로즈라 **글자색**은 밝은 판 기준 그대로도 읽힌다. 다시 골라야 하는 것은
+   **채움과 테두리**다: 아래 값들은 진한 틀 시절의 반투명 흰색(white/0.08~0.2)이었고,
+   밝은 로즈 위에서 재 보면 1.0 : 1 — 인용문도 표 선도 있으나 마나였다.
+   그래서 채움은 흰 판(1.3 : 1), 테두리는 틀 위 글자색 20%(1.4 : 1)로 바꿨다.
+   1.4 는 밝은 판의 실선(`line-strong` on 흰 판 = 1.4)과 같은 무게다.
+   ⚠️ `--color-line`·`--color-line-strong` 을 여기 그대로 쓰면 안 된다 —
+   둘 다 옅은 핑크라 이 로즈 위에서는 1.05 / 1.11 로 도로 사라진다. */
 .on-chrome .md-content {
   color: var(--color-chrome-faint);
 }
@@ -355,19 +372,19 @@ body {
   color: var(--color-chrome-faint);
 }
 .on-chrome .md-content blockquote {
-  background: rgba(255, 255, 255, 0.08);
-  border-left-color: var(--color-chrome-ink);
+  background: var(--color-surface);
+  border-left-color: var(--color-primary);
   color: var(--color-chrome-faint);
 }
 .on-chrome .md-content code,
 .on-chrome .md-content pre,
 .on-chrome .md-content th {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-surface);
 }
 .on-chrome .md-content hr,
 .on-chrome .md-content th,
 .on-chrome .md-content td {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: color-mix(in srgb, var(--color-chrome-ink) 20%, transparent);
 }
 
 /* 접근성: 모션 최소화 선호 시 애니메이션 억제 */

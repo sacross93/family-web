@@ -45,12 +45,7 @@ function NavList({
                 : "text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink",
             )}
           >
-            <span
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg",
-                active ? "bg-white/70" : "bg-white/10",
-              )}
-            >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-lg">
               {item.emoji}
             </span>
             <span className="flex flex-col leading-tight">
@@ -58,7 +53,7 @@ function NavList({
               <span
                 className={cn(
                   "text-[0.6875rem] font-normal",
-                  active ? "opacity-70" : "text-chrome-faint/70",
+                  active ? "opacity-70" : "text-chrome-faint",
                 )}
               >
                 {item.desc}
@@ -115,7 +110,7 @@ function Footer({
   }
 
   return (
-    <div className="mt-auto flex flex-col gap-2 border-t border-white/10 pt-3">
+    <div className="mt-auto flex flex-col gap-2 border-t border-ink/15 pt-3">
       {onDecorate && (
         <button
           type="button"
@@ -218,17 +213,17 @@ export function AppShell({
       <ToastProvider>
       <div className="min-h-dvh">
         {/* ── 데스크톱 사이드바 ── */}
-        <aside className="on-chrome fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 bg-chrome px-4 py-6 lg:flex">
+        <aside className="on-chrome fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 border-r border-ink/10 bg-chrome px-4 py-6 lg:flex">
           <Brand site={site} />
           {/* 폰에서는 하단 탭바에 있다. 데스크톱은 탭바가 없으니 여기가 포동이의 자리.
-              진한 틀 위에서는 보라(primary)가 2.7:1 로 묻힌다 — 밝은 쪽을 채워 뒤집는다. */}
+              틀이 연한 로즈가 된 뒤로는 뒤집을 이유가 없다 — primary 를 그대로 채운다(흰 글자 4.9:1). */}
           {agentEnabled && (
             <button
               type="button"
               onClick={() => setAsking(true)}
-              className="flex items-center gap-2.5 rounded-lg bg-chrome-ink px-3 py-2.5 font-semibold text-chrome transition hover:brightness-95 active:scale-[0.98]"
+              className="flex items-center gap-2.5 rounded-lg bg-primary px-3 py-2.5 font-semibold text-white transition hover:bg-primary-hover active:scale-[0.98]"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-chrome/10">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
                 <MessageCircle className="h-4.5 w-4.5" />
               </span>
               <span className="text-[0.9375rem]">포동이에게 물어보기</span>
@@ -242,7 +237,7 @@ export function AppShell({
 
         {/* ── 모바일 상단바 ── 페이지마다 브랜드를 되풀이하지 않고 지금 어디인지 말한다.
            메뉴는 아래 탭바로 내려갔다(엄지가 닿는 자리). */}
-        <header className="on-chrome sticky top-0 z-30 flex h-14 items-center justify-between gap-2 bg-chrome px-4 lg:hidden">
+        <header className="on-chrome sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-ink/10 bg-chrome px-4 lg:hidden">
           {current && current.href !== "/" ? (
             <span className="flex min-w-0 items-center gap-2">
               <span className="text-xl">{current.emoji}</span>
@@ -261,8 +256,8 @@ export function AppShell({
               className={cn(
                 "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition",
                 decorating
-                  ? "bg-accent text-chrome"
-                  : "bg-white/10 text-chrome-faint",
+                  ? "bg-primary text-white"
+                  : "bg-white text-chrome-faint",
               )}
             >
               <Sparkles className="h-4 w-4" />
@@ -278,7 +273,7 @@ export function AppShell({
               type="button"
               aria-label="메뉴 닫기"
               onClick={() => setOpen(false)}
-              className="absolute inset-0 bg-chrome/50 backdrop-blur-sm"
+              className="absolute inset-0 bg-ink/25 backdrop-blur-sm"
             />
             <aside
             ref={drawer}
@@ -294,7 +289,7 @@ export function AppShell({
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="메뉴 닫기"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/10 text-chrome-ink"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-chrome-ink"
                 >
                   <X className="h-5 w-5" />
                 </button>

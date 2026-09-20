@@ -45,7 +45,7 @@ export function BabyChecklist({
         className="flex min-h-11 w-full items-center gap-2.5 text-left lg:min-h-0 lg:pointer-events-none"
       >
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-md text-lg", pal.soft)}>✅</span>
-        <h3 className="text-base font-bold text-ink">준비 체크리스트</h3>
+        <h3 className="font-display text-lg font-bold text-ink">준비 체크리스트</h3>
         {items.length > 0 && (
           <Tag color={color} className="font-num ml-auto">
             {doneCount}/{items.length}

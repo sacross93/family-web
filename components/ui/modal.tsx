@@ -70,7 +70,7 @@ export function Modal({
                 </span>
               )}
               {title && (
-                <h2 className="text-lg font-bold text-ink">{title}</h2>
+                <h2 className="font-display text-xl font-bold text-ink">{title}</h2>
               )}
             </div>
             <button

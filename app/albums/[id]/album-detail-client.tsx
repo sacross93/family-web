@@ -143,12 +143,12 @@ export function AlbumDetailClient({
             />
             {/* 표지 위에 글씨가 놓인다. 사진이 무엇일지 모르므로 한 겹 덮어
                 어떤 사진이 와도 글씨가 읽히게 한다(밝은 사진에서 대비가 무너진다). */}
-            <span aria-hidden className="absolute inset-0 bg-chrome/60" />
+            <span aria-hidden className="absolute inset-0 bg-white/70" />
           </>
         )}
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white/90 text-2xl">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-2xl">
               {album.emoji}
             </span>
             <div className="min-w-0">

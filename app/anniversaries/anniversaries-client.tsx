@@ -422,7 +422,7 @@ function FeaturedCard({
       <CardActions onEdit={onEdit} onRemove={onRemove} />
 
       <div className="flex items-center gap-2.5 pr-10">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/90 text-xl">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-xl">
           {item.emoji}
         </span>
         <p className="min-w-0 truncate font-display text-lg font-bold text-chrome-ink">
@@ -435,13 +435,13 @@ function FeaturedCard({
       </p>
 
       {/* 강조색은 '지금 벌어지는 일' 에만(DESIGN §2). 여기가 그 자리다. */}
-      <p className="font-num mt-3 text-base text-accent">
+      <p className="font-num mt-3 text-base text-accent-ink">
         {isToday
           ? `${meta.label}을 축하해요 ${item.emoji}`
           : `${kDate(d.nextDate)}까지 ${d.days}일`}
       </p>
 
-      <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-4 text-sm text-chrome-faint">
+      <div className="mt-6 flex items-center justify-between gap-3 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
         {/* 가운뎃점으로 잇지 않는다(DESIGN §3) — 여백이 이미 구분을 한다. */}
         <span className="flex flex-wrap items-baseline gap-x-3">
           <span>

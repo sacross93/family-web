@@ -37,6 +37,25 @@ export function contrast(fg: string, bg: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+/** 색상각(0~360). 두 색이 '다른 색' 인지는 밝기가 아니라 이것으로 잰다. */
+function hue(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const mx = Math.max(r, g, b);
+  const d = mx - Math.min(r, g, b);
+  if (d === 0) return 0;
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+/** 두 색이 색상환에서 벌어진 각도(0~180). */
+function hueApart(a: string, b: string): number {
+  const d = Math.abs(hue(a) - hue(b));
+  return Math.min(d, 360 - d);
+}
+
 /** 글자가 실제로 놓이는 단색 배경들. */
 const BACKGROUNDS = ["surface", "paper"] as const;
 
@@ -69,18 +88,21 @@ describe("글자 대비", () => {
   });
 
   it("주요 색은 UI 요소 기준(3:1)을 넘는다 — 아이콘·테두리·큰 글씨에 쓴다", () => {
-    // 본문 색으로는 쓰지 않는다(4.5 미만). 브랜드 색이라 값 자체는 건드리지 않는다.
+    // primary 는 흰 판에서 4.9:1 로 AA 를 넘기지만, 들어간 자리(4.2)·틀(3.8) 위에서는
+    // 못 넘는다. 어느 배경에 놓일지 모르는 채로는 쓸 수 없다는 뜻이라, **글자에는
+    // 언제나 primary-ink** 를 쓴다. 브랜드 색이라 값 자체는 건드리지 않는다.
     for (const bg of BACKGROUNDS) {
       expect(contrast(token("primary"), token(bg))).toBeGreaterThanOrEqual(3);
     }
-    // 글자로 쓰는 자리에는 진한 쪽을.
-    for (const bg of BACKGROUNDS) {
-      expect(contrast(token("primary-ink"), token(bg))).toBeGreaterThanOrEqual(4.5);
+    // 그 primary-ink 는 네 배경 어디에 놓여도 AA 를 넘어야 한다 — 위 문장의 근거다.
+    for (const bg of [...BACKGROUNDS, "sunken", "chrome"]) {
+      const r = contrast(token("primary-ink"), token(bg));
+      expect(r, `primary-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
   it("오류 글자는 어느 배경에서도 AA 를 넘는다", () => {
-    // `danger` 를 글자로 쓰면 danger-soft 위 2.84:1, 흰 배경 3.42:1 이라 안 읽힌다.
+    // `danger` 를 글자로 쓰면 danger-soft 위 3.7:1, 흰 배경 4.4:1 이라 본문 기준에 못 미친다.
     // 글자에는 언제나 `danger-ink`.
     for (const bg of ["danger-soft", "surface", "paper"]) {
       const r = contrast(token("danger-ink"), token(bg));
@@ -90,9 +112,10 @@ describe("글자 대비", () => {
     expect(contrast(token("danger"), token("surface"))).toBeGreaterThanOrEqual(3);
   });
 
-  it("진한 틀(chrome) 위의 글자도 AA 를 넘는다", () => {
-    // 사이드바·상단바·탭바·히어로가 전부 이 색 위에 있다. 옅은 파스텔 ink 를
-    // 그대로 옮기면 안 읽힌다 — primary-ink(#5647c9)는 chrome 위에서 1.3:1 이다.
+  it("틀(chrome) 위의 글자도 AA 를 넘는다", () => {
+    // 사이드바·상단바·탭바·히어로가 전부 이 색 위에 있다. 틀이 연한 로즈로 밝아졌어도
+    // ink 세 벌을 그대로 옮겨 쓸 수는 없다 — `ink-faint` 는 이 로즈 위에서 4.34:1 로
+    // AA 에 못 미친다. `chrome-faint`(5.2)가 따로 있는 이유가 그것이다.
     for (const fg of ["chrome-ink", "chrome-faint"]) {
       const r = contrast(token(fg), token("chrome"));
       expect(r, `${fg} on chrome = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
@@ -103,9 +126,15 @@ describe("글자 대비", () => {
     );
   });
 
-  it("틀 위에서 뒤집힌 알약(포동이 버튼)도 읽힌다", () => {
-    // 진한 틀 위에서는 primary 가 2.7:1 로 묻힌다. 밝은 쪽을 채우고 글자를 어둡게 한다.
-    expect(contrast(token("chrome"), token("chrome-ink"))).toBeGreaterThanOrEqual(4.5);
+  it("위험색이 브랜드색과 **색상**으로 구별된다 — 지우기와 저장이 같은 색이면 안 된다", () => {
+    // 브랜드가 로즈가 된 뒤, 예전 danger-ink(#a6475d)는 primary-ink(#a93a63)와
+    // 색상각이 8도밖에 안 떨어져 있었다. 글자 색만으로 "지우기" 와 "저장" 을 가릴 수 없다.
+    //
+    // **여기서 대비(contrast)를 쓰면 안 된다.** WCAG 대비는 밝기만 재므로,
+    // 색상이 전혀 달라도 밝기가 비슷하면 1.0 이 나온다 — 처음에 그렇게 썼다가
+    // 멀쩡히 떼어 놓은 색이 "같다" 고 나왔다. 색이 다른지는 **색상각**으로 잰다.
+    const apart = hueApart(token("danger-ink"), token("primary-ink"));
+    expect(apart, `danger-ink vs primary-ink = ${apart.toFixed(0)}도`).toBeGreaterThanOrEqual(20);
   });
 
   it("주요 버튼의 흰 글자가 AA 를 넘는다", () => {
@@ -114,13 +143,17 @@ describe("글자 대비", () => {
     expect(contrast("#ffffff", token("primary-hover"))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("강조색은 글자로 쓰지 않는다 — 대신 accent-ink 가 있다", () => {
-    // accent(#e0913a)는 흰 판에서 2.54:1 이다. 그래픽·진한 틀 위 큰 숫자 전용.
-    expect(contrast(token("accent"), token("surface"))).toBeLessThan(4.5);
-    // 진한 틀 위에서는 UI 기준(3:1)을 넘는다 — 거기서만 눈에 띄는 색으로 쓴다.
-    expect(contrast(token("accent"), token("chrome"))).toBeGreaterThanOrEqual(3);
-    // 밝은 판에 글자로 써야 하면 이쪽.
-    for (const bg of BACKGROUNDS) {
+  it("강조색: 그래픽은 accent, 글자는 accent-ink", () => {
+    // accent(#c2691f)는 막대·점·아이콘처럼 **그려지는 것** 전용이라 UI 기준(3:1)만 본다.
+    // ⚠️ 틀 위에서 3.02 — 여유가 0.02 다. accent 나 chrome 을 건드리면 여기가 먼저 깨진다.
+    for (const bg of [...BACKGROUNDS, "chrome"]) {
+      const r = contrast(token("accent"), token(bg));
+      expect(r, `accent on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
+    }
+    // 글자가 필요하면 언제나 이쪽. 틀까지 밝아져 강조색이 놓일 배경이 셋으로 늘었으니,
+    // 흰 판·종이·**연한 로즈 틀** 어디에서도 AA 를 넘어야 한다.
+    // (예전엔 진한 틀 위 큰 숫자를 밝은 accent 로 쓸 수 있었다. 이제 그 자리가 없다.)
+    for (const bg of [...BACKGROUNDS, "chrome"]) {
       const r = contrast(token("accent-ink"), token(bg));
       expect(r, `accent-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
     }

@@ -52,7 +52,7 @@ export function CollapsibleCard({
         >
           {emoji}
         </span>
-        <h2 className="text-base font-bold text-ink">{title}</h2>
+        <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
         {summary && (
           <span className="ml-auto truncate text-xs text-ink-faint">{summary}</span>
         )}

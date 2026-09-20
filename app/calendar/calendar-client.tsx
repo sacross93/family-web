@@ -226,7 +226,7 @@ export function CalendarClient({
         emoji="📅"
         title="캘린더"
         description="온 가족의 이번 달 일정을 한눈에"
-        summary={monthLabel}
+        summary={`앞으로 ${upcoming.length}개`}
       >
         {/* 구글 캘린더 연동은 아직 안 된다. 눌리지 않는 버튼이 폰에서 제일 좋은 자리를
             차지하고 "일정 추가" 와 폭을 나눠 가지고 있었다 — 되면 그때 올린다. */}

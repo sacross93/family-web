@@ -463,14 +463,14 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           진한 판으로 바꾸고 **준비 진행**을 여기로 올린다 — 열자마자 알고 싶은 것이 그거다. */}
       <section className="on-chrome relative mb-6 rounded-xl bg-chrome p-5 sm:p-6">
         <div className="flex items-start gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white/90 text-2xl">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-2xl">
             {plan.emoji}
           </span>
           <div className="min-w-0 flex-1 pr-10">
             <div className="flex flex-wrap items-center gap-2">
               <Tag color={plan.color}>{plan.type}</Tag>
               {countdown && countdown.days >= 0 && (
-                <span className="font-num inline-flex items-center rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-chrome-ink">
+                <span className="font-num inline-flex items-center rounded-full bg-white px-2.5 py-1 text-xs font-bold text-chrome-ink">
                   {countdown.label}
                 </span>
               )}
@@ -522,7 +522,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         {prepTotal > 0 && (
           <div className="mt-5">
             <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-white/15"
+              className="h-1.5 w-full overflow-hidden rounded-full bg-white"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={prepTotal}

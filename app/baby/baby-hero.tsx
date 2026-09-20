@@ -58,14 +58,14 @@ export function BabyHero({
         size="sm"
         aria-label="아기 설정"
         onClick={onOpenSettings}
-        className="absolute right-4 top-4 z-20 text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+        className="absolute right-4 top-4 z-20 text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink"
       >
         <Settings className="h-4 w-4" />
       </IconButton>
 
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/90 text-xl">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-xl">
             {baby.emoji}
           </span>
           <p className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</p>
@@ -87,14 +87,14 @@ export function BabyHero({
               {weekLabel(p)}
             </p>
             {/* 강조색은 '지금 벌어지는 일' 에만 쓴다 — 여기가 그 자리다. */}
-            <p className="font-num mt-3 text-base text-accent">
+            <p className="font-num mt-3 text-base text-accent-ink">
               {p.overdue
                 ? `예정일에서 ${Math.abs(p.dueDays)}일 지났어요. 곧 만나요 🤍`
                 : `${p.dueDays}일 남았어요`}
             </p>
 
             <div
-              className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white/15"
+              className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
@@ -116,10 +116,10 @@ export function BabyHero({
         )}
 
         {nextCheckup && (
-          <p className="flex items-baseline gap-2 border-t border-white/10 pt-4 text-sm text-chrome-faint">
+          <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
             <span className="text-chrome-ink">다음 검진</span>
             <span className="font-num">{kDateShort(nextCheckup.date)}</span>
-            <span className="font-num text-accent">{dday(nextCheckup.date).label}</span>
+            <span className="font-num text-accent-ink">{dday(nextCheckup.date).label}</span>
           </p>
         )}
       </div>

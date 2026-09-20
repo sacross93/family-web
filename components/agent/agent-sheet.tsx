@@ -246,11 +246,11 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
           "sm:inset-auto sm:bottom-5 sm:right-5 sm:max-h-[70vh] sm:w-[380px] sm:rounded-xl",
         )}
       >
-        {/* 머리글은 사이트의 다른 '틀'(상단바·탭바·사이드바)과 같은 진한 판이다.
+        {/* 머리글은 사이트의 다른 '틀'(상단바·탭바·사이드바)과 같은 연한 로즈 판이다.
             이 시트는 화면 위에 얹히는 것이라, 아래 내용과 같은 흰색이면 어디까지가
             시트인지 눈에 안 들어온다. */}
         <div className="on-chrome flex items-center gap-1 bg-chrome px-3 py-2.5">
-          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-md bg-white/90 text-lg" aria-hidden="true">
+          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-md bg-white text-lg" aria-hidden="true">
             🌱
           </span>
           <h2 className="ml-1 flex-1 truncate font-display text-lg font-bold text-chrome-ink">
@@ -260,7 +260,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             type="button"
             aria-label="새 대화"
             onClick={newChat}
-            className="text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+            className="text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink"
           >
             <Plus className="h-5 w-5" />
           </IconButton>
@@ -270,8 +270,8 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             onClick={() => setView(history ? "chat" : "history")}
             className={
               history
-                ? "bg-white/15 text-chrome-ink"
-                : "text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+                ? "bg-white text-chrome-ink"
+                : "text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink"
             }
           >
             <Menu className="h-5 w-5" />
@@ -280,7 +280,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             type="button"
             aria-label="닫기"
             onClick={onClose}
-            className="text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+            className="text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink"
           >
             <X className="h-5 w-5" />
           </IconButton>
