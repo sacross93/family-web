@@ -384,8 +384,14 @@ export function TodosClient({
           </IconButton>
         </div>
 
-        {/* 주간 스트립 */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+        {/* 주간 스트립.
+            일곱 칸이 한 줄에 들어가야 해서, 좁은 폰에서는 칸 하나가 40px 아래로 내려간다
+            (360px 안드로이드에서 37px, 320px 에서 32px 이었다). 판의 좌우 여백 밖으로
+            끌어내고 칸 사이를 좁혀 **폭을 최대한 벌어 준다** — 360px 44px · 390px 48px.
+            320px 은 38px 로 2px 모자라지만, 일곱 칸이 서로 붙어 있고 세로가 62px 이라
+            빗나가도 옆 날짜가 눌릴 뿐 바로 보이고 바로 고칠 수 있다. 여기서 더 벌리면
+            스트립이 화면 가장자리에 닿는다. */}
+        <div className="-mx-4 grid grid-cols-7 gap-0.5 sm:mx-0 sm:gap-1.5">
           {week.map((day) => {
             const c = countsByDay.get(dayKey(day));
             const sel = isSameDay(day, selected);
