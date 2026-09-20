@@ -110,7 +110,7 @@ export function ItemActions({
           }}
           className={cn(
             "flex items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition",
-            a.danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-sunken"
+            a.danger ? "text-danger-ink hover:bg-danger-soft" : "text-ink hover:bg-sunken"
           )}
         >
           <a.icon className="h-4 w-4 shrink-0" />

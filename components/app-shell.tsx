@@ -142,7 +142,7 @@ function Footer({
             onClick={logout}
             disabled={busy}
             aria-label="로그아웃"
-            className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-danger-soft hover:text-danger"
+            className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-danger-soft hover:text-danger-ink"
           >
             <LogOut className="h-3.5 w-3.5" /> 로그아웃
           </button>

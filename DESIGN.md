@@ -42,6 +42,9 @@
 
 `bg-primary` `#7A6CF0` · hover `bg-primary-hover` `#6A5CE8` · 소프트 `bg-primary-soft` · 글자 `text-primary-ink`
 
+상태색: `text-success`, `bg-danger-soft`. **오류 글자는 `text-danger-ink`** — `text-danger`
+(`#E0607E`)는 흰 배경 3.4:1, 연분홍 배경 2.8:1 이라 읽히지 않는다. `danger` 는 아이콘·테두리·배경용.
+
 ### 파스텔 카테고리 (6색)
 
 앨범·일정·태그·구성원을 **색으로 구분**할 때 사용. 각 색은 3단으로 제공됩니다.

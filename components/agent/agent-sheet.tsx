@@ -310,7 +310,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
                 )}
               </div>
             )}
-            {attachError && <p className="mb-2 text-sm text-danger">{attachError}</p>}
+            {attachError && <p className="mb-2 text-sm text-danger-ink">{attachError}</p>}
 
             <div ref={boxRef} className="flex items-end gap-2">
               <input

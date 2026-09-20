@@ -79,10 +79,14 @@ describe("글자 대비", () => {
     }
   });
 
-  it("오류 글자는 오류 배경 위에서 AA 를 넘는다", () => {
-    // `danger` 를 글자로 쓰면 2.84:1 이라 안 읽힌다 — 글자에는 `danger-ink`.
-    expect(contrast(token("danger-ink"), token("danger-soft"))).toBeGreaterThanOrEqual(4.5);
-    // `danger` 자체는 아이콘·테두리용(3:1).
+  it("오류 글자는 어느 배경에서도 AA 를 넘는다", () => {
+    // `danger` 를 글자로 쓰면 danger-soft 위 2.84:1, 흰 배경 3.42:1 이라 안 읽힌다.
+    // 글자에는 언제나 `danger-ink`.
+    for (const bg of ["danger-soft", "surface", "paper"]) {
+      const r = contrast(token("danger-ink"), token(bg));
+      expect(r, `danger-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // `danger` 자체는 아이콘·테두리·배경용(3:1).
     expect(contrast(token("danger"), token("surface"))).toBeGreaterThanOrEqual(3);
   });
 

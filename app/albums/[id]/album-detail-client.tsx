@@ -459,7 +459,7 @@ function AddPhotoModal({
           </Button>
         </div>
 
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm text-danger-ink">{error}</p>}
       </div>
     </Modal>
   );

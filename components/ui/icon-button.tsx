@@ -8,7 +8,7 @@ type Variant = "ghost" | "soft" | "danger" | "surface";
 const VARIANTS: Record<Variant, string> = {
   ghost: "text-ink-soft hover:bg-sunken hover:text-ink",
   soft: "bg-primary-soft text-primary-ink hover:brightness-95",
-  danger: "text-ink-faint hover:bg-danger-soft hover:text-danger",
+  danger: "text-ink-faint hover:bg-danger-soft hover:text-danger-ink",
   surface: "bg-surface text-ink-soft shadow-sm ring-1 ring-line hover:text-ink",
 };
 

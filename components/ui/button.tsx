@@ -12,7 +12,7 @@ const VARIANTS: Record<Variant, string> = {
   soft: "bg-primary-soft text-primary-ink hover:brightness-[.97]",
   ghost: "text-ink-soft hover:bg-sunken hover:text-ink",
   outline: "border border-line-strong bg-surface text-ink hover:bg-sunken",
-  danger: "bg-danger-soft text-danger hover:brightness-[.97]",
+  danger: "bg-danger-soft text-danger-ink hover:brightness-[.97]",
 };
 
 const SIZES: Record<Size, string> = {

@@ -292,8 +292,26 @@ for (const { w, h, tag } of WIDTHS) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
 
+  // 로그인 화면부터 본다 — 가족이 제일 먼저 보는 곳인데, 로그인한 뒤에 도는 검사만
+  // 있으면 영영 안 재진다.
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+  {
+    const { height, overflow } = await page.evaluate(() => ({
+      height: document.documentElement.scrollHeight,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }));
+    rows.push({ tag, path: "/login", height, screens: +(height / h).toFixed(1), overflow });
+    if (overflow > 0) problems.push(`${tag} /login: 가로 스크롤 ${overflow}px`);
+    if (w < 1024) {
+      const { small } = await page.evaluate(probeTapTargets);
+      for (const s2 of small) {
+        problems.push(`${tag} /login: "${s2.label}" 이 작다 — 보임 ${s2.보임}, 눌림 ${s2.눌림} (40px 이상이어야)`);
+      }
+    }
+  }
+
   if (USER && PASS) {
-    await page.goto(BASE + "/login");
     await page.getByRole("textbox", { name: "아이디" }).fill(USER);
     await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
     await page.getByRole("button", { name: "로그인" }).click();

@@ -455,7 +455,7 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
                       type="button"
                       onClick={() => remove(d.id)}
                       aria-label="삭제"
-                      className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-surface/90 text-ink-faint shadow-sm transition hover:bg-danger-soft hover:text-danger"
+                      className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-surface/90 text-ink-faint shadow-sm transition hover:bg-danger-soft hover:text-danger-ink"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

@@ -63,7 +63,7 @@ export function LoginForm() {
         />
       </Field>
       {error && (
-        <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>
+        <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger-ink">{error}</p>
       )}
       <Button type="submit" size="lg" disabled={busy} className="w-full">
         <LogIn className="h-4 w-4" />

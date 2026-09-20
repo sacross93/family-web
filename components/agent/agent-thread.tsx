@@ -104,7 +104,7 @@ function ResultCard({
           )}
         </>
       )}
-      {error && <p className="mt-2 break-words text-xs text-danger">{error}</p>}
+      {error && <p className="mt-2 break-words text-xs text-danger-ink">{error}</p>}
     </div>
   );
 }
@@ -251,14 +251,14 @@ export function AgentThread({
 
           {/* 이미 흘러온 글자는 남겨 두고 한 줄만 덧붙인다. */}
           {error && (
-            <div className="rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</div>
+            <div className="rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
           )}
         </div>
       )}
 
       {/* 빈 화면에서도 오류는 보여야 한다(로그인 만료·사용량 초과). */}
       {bubbles.length === 0 && error && (
-        <div className="mt-4 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</div>
+        <div className="mt-4 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
       )}
     </div>
   );
