@@ -7,7 +7,6 @@ import {
   PageHeader,
   Card,
   Button,
-  Tag,
   EmptyState,
   Modal,
   Field,
@@ -112,7 +111,9 @@ export function AlbumsClient({
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        /* 폰에서도 두 칸. 한 칸이면 앨범 하나가 420px 이라 세 개만 있어도 세 화면이다 —
+           사진첩은 훑는 화면이지 읽는 화면이 아니다. */
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
           {albums.map((album) => {
             const pal = palette(album.color);
             return (
@@ -147,29 +148,13 @@ export function AlbumsClient({
                     </span>
                   </div>
 
-                  {/* 정보 */}
-                  <div className="flex flex-col gap-2 p-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{album.emoji}</span>
-                      <h3 className="flex-1 truncate text-base font-bold text-ink">
-                        {album.title}
-                      </h3>
-                    </div>
-                    {album.description && (
-                      <p className="line-clamp-1 text-sm text-ink-soft">
-                        {album.description}
-                      </p>
-                    )}
-                    <div className="mt-1 flex items-center justify-between">
-                      <Tag color={album.color} dot>
-                        {pal.label}
-                      </Tag>
-                      {album.takenOn && (
-                        <span className="font-num text-xs text-ink-faint">
-                          {kDateShort(album.takenOn)}
-                        </span>
-                      )}
-                    </div>
+                  {/* 정보 — 색 이름표("라벤더")를 뗐다. 색은 분류를 뜻해야 하는데
+                      여기서는 **색 이름 그 자체**가 적혀 있어 아무것도 알려주지 않았다. */}
+                  <div className="flex flex-col gap-0.5 p-3">
+                    <h3 className="truncate font-semibold text-ink">{album.title}</h3>
+                    <p className="truncate text-xs text-ink-faint">
+                      {album.takenOn ? kDateShort(album.takenOn) : album.description}
+                    </p>
                   </div>
                 </Card>
               </Link>

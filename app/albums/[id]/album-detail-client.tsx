@@ -15,7 +15,6 @@ import {
 import {
   Button,
   ItemActions,
-  Tag,
   EmptyState,
   Modal,
   Field,
@@ -25,7 +24,7 @@ import {
   Spinner,
   useToast,
 } from "@/components/ui";
-import { palette, type PaletteKey } from "@/lib/colors";
+import { type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDateShort } from "@/lib/date";
 import type { Album, Photo, AlbumWithPhotos } from "@/lib/types";
@@ -55,7 +54,6 @@ export function AlbumDetailClient({
   const [lightbox, setLightbox] = useState<number | null>(null);
 
   const [busy, setBusy] = useState(false);
-  const pal = palette(album.color);
 
   // ── 라이트박스 좌우 이동 (키보드) ──
   useEffect(() => {
@@ -131,43 +129,42 @@ export function AlbumDetailClient({
         <ChevronLeft className="h-4 w-4" /> 앨범 목록
       </Link>
 
-      {/* 앨범 헤더 */}
-      <div
-        className={cn(
-          "relative mb-7 overflow-hidden rounded-3xl border border-line bg-gradient-to-br p-6 shadow-sm sm:p-8 group",
-          pal.gradient
-        )}
-      >
+      {/* 앨범 헤더 — 다른 상세 화면(아기·계획)과 같은 진한 판. */}
+      <section className="on-chrome relative mb-7 overflow-hidden rounded-xl bg-chrome p-6 sm:p-8">
         {album.coverUrl && (
-          <img
-            src={album.coverUrl}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover opacity-25"
-            loading="lazy"
-          />
+          <>
+            <img
+              src={album.coverUrl}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover opacity-25"
+              loading="lazy"
+            />
+            {/* 표지 위에 글씨가 놓인다. 사진이 무엇일지 모르므로 한 겹 덮어
+                어떤 사진이 와도 글씨가 읽히게 한다(밝은 사진에서 대비가 무너진다). */}
+            <span aria-hidden className="absolute inset-0 bg-chrome/60" />
+          </>
         )}
         <div className="relative z-10 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-surface/80 text-4xl shadow-sm backdrop-blur-sm">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white/90 text-2xl">
               {album.emoji}
             </span>
             <div className="min-w-0">
-              <h1 className="font-display text-2xl font-bold leading-tight text-ink sm:text-3xl">
+              <h1 className="break-keep font-display text-2xl font-bold leading-tight text-chrome-ink sm:text-3xl">
                 {album.title}
               </h1>
               {album.description && (
-                <p className="mt-1 max-w-lg text-sm text-ink-soft">
+                <p className="mt-1.5 max-w-lg text-sm text-chrome-faint">
                   {album.description}
                 </p>
               )}
-              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
-                <Tag color={album.color} dot>
-                  {pal.label}
-                </Tag>
+              {/* 예전에는 색 이름표("라벤더")와 가운뎃점이 붙은 날짜가 섞여
+                  `라벤더 · 사진 6장 / · 4월 6일` 처럼 줄이 깨져 보였다. */}
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-chrome-faint">
                 <span className="font-num">사진 {photos.length}장</span>
                 {album.takenOn && (
-                  <span className="font-num">· {kDateShort(album.takenOn)}</span>
+                  <span className="font-num">{kDateShort(album.takenOn)}</span>
                 )}
               </div>
             </div>
@@ -183,11 +180,11 @@ export function AlbumDetailClient({
             ]}
           />
         </div>
-      </div>
+      </section>
 
       {/* 사진 툴바 */}
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-ink">사진</h2>
+        <h2 className="font-display text-xl font-bold text-ink">사진</h2>
         <Button size="sm" onClick={() => setShowAdd(true)}>
           <Plus className="h-4 w-4" /> 사진 추가
         </Button>
@@ -220,11 +217,8 @@ export function AlbumDetailClient({
                 className="w-full transition-transform duration-500 group-hover:scale-[1.04]"
                 loading="lazy"
               />
-              {photo.caption && (
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/70 to-transparent p-3 text-left text-xs font-medium text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                  {photo.caption}
-                </span>
-              )}
+              {/* 설명은 사진을 열었을 때 보인다. 여기서 손 얹어야만 뜨게 두면
+                  폰에서는 있는 줄도 모른다(AGENTS.md). 격자는 훑는 자리다. */}
             </button>
           ))}
         </div>
