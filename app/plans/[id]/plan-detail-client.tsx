@@ -23,6 +23,7 @@ import {
   IconButton,
   ItemActions,
   Checkbox,
+  CheckCircle,
   EmptyState,
   Tag,
   Modal,
@@ -127,7 +128,6 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
   const [plan, setPlan] = useState(initialPlan);
   const [busy, setBusy] = useState(false);
   const [decorating, setDecorating] = useState(false);
-  const pal = palette(plan.color);
 
   // ── 날짜별 그룹 ──────────────────────────────
   const groups = useMemo(() => {
@@ -1190,7 +1190,10 @@ function ChecklistSection({
   );
 }
 
-/** 체크리스트 한 줄. 할 것과 챙긴 것이 같은 모양이어야 접었다 펴도 흔들리지 않는다. */
+/** 체크리스트 한 줄. 할 것과 챙긴 것이 같은 모양이어야 접었다 펴도 흔들리지 않는다.
+ *
+ *  줄 전체가 체크 버튼이다 — 짐 싸면서 한 손으로 쓰는 목록이라, 24px 동그라미를
+ *  겨누는 것보다 "여권" 이라는 글자를 누르는 편이 쉽다(장보기와 같은 규칙). */
 function ChecklistRow({
   item,
   color,
@@ -1203,31 +1206,34 @@ function ChecklistRow({
   onRemove: (id: string) => void;
 }) {
   return (
-    <li className="group flex items-center gap-2.5 border-b border-line py-2 last:border-0">
-      <Checkbox
-        checked={item.done}
-        onChange={() => onToggle(item)}
-        color={color}
-        size="sm"
-        label={item.text}
-      />
-      <span
-        className={cn(
-          "flex-1 text-[0.9375rem]",
-          item.done ? "text-ink-faint line-through" : "text-ink"
-        )}
+    <li className="group flex items-center border-b border-line last:border-0">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={item.done}
+        aria-label={item.text}
+        onClick={() => onToggle(item)}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5 pr-2 text-left active:opacity-70"
       >
-        {item.text}
-      </span>
+        <CheckCircle checked={item.done} color={color} size="sm" />
+        <span
+          className={cn(
+            "min-w-0 flex-1 text-[0.9375rem]",
+            item.done ? "text-ink-faint line-through" : "text-ink"
+          )}
+        >
+          {item.text}
+        </span>
+      </button>
       {/* 휴지통은 조용하게. `danger`(분홍 알약)로 두면 14줄짜리 준비물에서
           분홍 알약 열넷이 세로로 서서, 체크하러 온 화면이 지우기 화면처럼 보였다.
           폰에서는 늘 보이게 둔다(손 얹어야 나타나는 것을 만들지 않는다). */}
       <IconButton
         variant="ghost"
         size="sm"
-        aria-label="삭제"
+        aria-label={`${item.text} 지우기`}
         onClick={() => onRemove(item.id)}
-        className="text-ink-faint opacity-100 transition hover:text-danger-ink lg:opacity-0 lg:group-hover:opacity-100"
+        className="text-ink-faint transition hover:text-danger-ink lg:opacity-0 lg:group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4" />
       </IconButton>

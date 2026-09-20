@@ -174,10 +174,15 @@ await step("이름만 적고 엔터로 담기", async () => {
   if ((await i.inputValue()) !== "") throw new Error("담은 뒤 입력칸이 안 비워졌다");
 });
 
-await step("체크하면 담은 것으로", async () => {
-  await page.getByRole("checkbox", { name: NAME }).first().click();
+await step("이름을 눌러도 체크된다 — 마트에서 동그라미를 겨누지 않게", async () => {
+  // 줄 전체가 체크 버튼이다. 동그라미(24px)가 아니라 **글자**를 눌러 본다 —
+  // 한 손으로 쓰는 화면에서 실제로 손가락이 닿는 자리가 거기다.
+  const label = page.getByText(NAME, { exact: true }).first();
+  const box = await label.boundingBox();
+  if (!box) throw new Error("이름이 안 보인다");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(900);
-  if ((await whereIs(NAME)) !== "담은 것") throw new Error("안 옮겨졌다");
+  if ((await whereIs(NAME)) !== "담은 것") throw new Error("이름을 눌렀는데 체크가 안 됐다");
 });
 
 await step("완료 비우기 — 새로고침해도 안 되살아난다", async () => {
@@ -259,7 +264,7 @@ await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 �
   await openMenu(NOTES, MARK + "사진A");
   await menuItem("삭제").click();
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("button", { name: "지우기", exact: true }).click();
   await page.waitForTimeout(1800);
   if (fileCount() !== base + 1) throw new Error("다른 글이 쓰는 사진을 지워 버렸다");
 
@@ -268,7 +273,7 @@ await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 �
   await openMenu(NOTES, MARK + "사진B");
   await menuItem("삭제").click();
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("button", { name: "지우기", exact: true }).click();
   await page.waitForTimeout(1800);
   if (fileCount() !== base) throw new Error("아무도 안 쓰는데 사진이 남았다");
 });
@@ -288,7 +293,7 @@ await step("지우기 — 새로고침해도 안 되살아난다", async () => {
   await openMenu(NOTES, MARK);
   await menuItem("삭제").click();
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("button", { name: "지우기", exact: true }).click();
   await page.waitForTimeout(1100);
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(500);
@@ -354,7 +359,7 @@ await step("아래로 내려간 채로 히어로의 … 열기", async () => {
 await step("계획 지우기 — 확인을 거친다", async () => {
   await menuItem("계획 삭제").click();
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("button", { name: "지우기", exact: true }).click();
   await page.waitForTimeout(1500);
   if ((await text()).includes(MARK)) throw new Error("지웠는데 남아 있다");
 });

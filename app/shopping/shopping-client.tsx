@@ -7,7 +7,7 @@ import {
   Card,
   Button,
   Input,
-  Checkbox,
+  CheckCircle,
   ColorPicker,
   Avatar,
   IconButton,
@@ -144,7 +144,7 @@ export function ShoppingClient({
           {addedBy && (
             <Avatar emoji={addedBy.emoji} color={addedBy.color} name={addedBy.name} size="xs" />
           )}
-          <span>수량 · 분류 · 사람</span>
+          <span>수량, 분류, 담은 사람</span>
           <ChevronDown className={cn("h-3.5 w-3.5 transition", more && "rotate-180")} />
         </button>
 
@@ -203,7 +203,7 @@ export function ShoppingClient({
             <Card flush className="overflow-hidden">
               <div className="flex items-center gap-2 border-b border-line px-5 py-3">
                 <ShoppingBasket className="h-4 w-4 text-mint-ink" />
-                <span className="text-sm font-bold text-ink">살 것</span>
+                <span className="font-display text-lg font-bold text-ink">살 것</span>
                 <Tag color="mint" className="font-num">
                   {open.length}
                 </Tag>
@@ -246,38 +246,47 @@ function ShoppingRow({
   onRemove: (id: string) => void;
 }) {
   return (
-    <li className="group flex items-center gap-3 border-b border-line px-5 py-3 last:border-0">
-      <Checkbox
-        checked={item.done}
-        onChange={() => onToggle(item)}
-        color={item.category}
-        label={item.name}
-      />
-      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", palette(item.category).dot)} />
-      {/* 이름과 수량을 한 덩어리로 묶고 좁아지면 수량이 아래로 내려간다.
-          한 줄로 밀어 넣으면 글자를 키운 사람에게 "우유" 가 "두" 로 잘린다. */}
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
-        <span
-          className={cn(
-            "min-w-0 flex-1 basis-24 truncate text-[0.9375rem]",
-            item.done ? "text-ink-faint line-through" : "text-ink"
+    <li className="group flex items-center border-b border-line last:border-0">
+      {/* 줄 전체가 체크 버튼이다.
+          마트에서 한 손으로 쓰는 화면이라, 24px 짜리 동그라미를 겨누는 것보다
+          "우유" 라는 글자를 누르는 편이 훨씬 쉽다. 동그라미는 이제 모양만 맡는다.
+          지우기는 버튼 안에 버튼을 넣을 수 없으므로 바깥에 형제로 둔다. */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={item.done}
+        aria-label={item.quantity ? `${item.name} ${item.quantity}` : item.name}
+        onClick={() => onToggle(item)}
+        className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-5 pr-2 text-left active:opacity-70"
+      >
+        <CheckCircle checked={item.done} color={item.category} />
+        {/* 이름과 수량을 한 덩어리로 묶고 좁아지면 수량이 아래로 내려간다.
+            한 줄로 밀어 넣으면 글자를 키운 사람에게 "우유" 가 "두" 로 잘린다. */}
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span
+            className={cn(
+              "min-w-0 flex-1 basis-24 text-[0.9375rem]",
+              item.done ? "text-ink-faint line-through" : "text-ink"
+            )}
+          >
+            {item.name}
+          </span>
+          {item.quantity && (
+            <span className="shrink-0 text-sm text-ink-faint">{item.quantity}</span>
           )}
-        >
-          {item.name}
         </span>
-        {item.quantity && (
-          <span className="shrink-0 text-sm text-ink-faint">{item.quantity}</span>
-        )}
-      </div>
+      </button>
+      {/* 분류 색은 동그라미가 이미 지니고 있다 — 옆의 작은 점은 같은 말을 두 번 하는 것이었고,
+          이름 말고는 아무 데도 적혀 있지 않아 색만으로는 무슨 분류인지 알 수도 없었다. */}
       {item.addedBy && (
         <Avatar emoji={item.addedBy.emoji} color={item.addedBy.color} name={item.addedBy.name} size="xs" />
       )}
       <IconButton
-        variant="danger"
+        variant="ghost"
         size="sm"
-        aria-label="삭제"
+        aria-label={`${item.name} 지우기`}
         onClick={() => onRemove(item.id)}
-        className="opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100"
+        className="mr-3 ml-1 text-ink-faint transition hover:text-danger-ink lg:opacity-0 lg:group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4" />
       </IconButton>

@@ -6,7 +6,7 @@ export { Tag, ColorDot } from "./tag";
 export { PageHeader } from "./page-header";
 export { EmptyState } from "./empty-state";
 export { Field, Label, Input, Textarea, Select } from "./field";
-export { Checkbox } from "./checkbox";
+export { Checkbox, CheckCircle } from "./checkbox";
 export { ColorPicker } from "./color-picker";
 export { Avatar } from "./avatar";
 export { IconButton } from "./icon-button";
