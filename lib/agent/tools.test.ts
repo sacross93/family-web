@@ -774,3 +774,11 @@ describe("read_url — 페이지가 내놓은 그림", () => {
     expect(f).toHaveBeenCalledTimes(1); // 페이지 한 번. 메타데이터로는 나가지 않았다
   });
 });
+
+describe("read_url — 읽은 주소를 결과에 남긴다", () => {
+  it("일반 페이지는 읽은 주소가 path 로 온다 — 화면이 '원문 보기' 를 걸 수 있게", async () => {
+    const html = `<title>글</title><body><main>${"본문이 한 문단 있습니다. ".repeat(20)}</main></body>`;
+    const r = await executeTool("read_url", { url: "https://example.com/글" }, ctx(serve(html) as unknown as typeof fetch));
+    expect((r as { path?: string }).path).toBe("https://example.com/%EA%B8%80");
+  });
+});

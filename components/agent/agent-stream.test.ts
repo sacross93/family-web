@@ -265,3 +265,10 @@ describe("사진 첨부", () => {
     );
   });
 });
+
+describe("visibleResults — 바깥 주소", () => {
+  it("read_url 이 읽은 바깥 주소도 카드로 남는다", () => {
+    const found = { ok: true as const, data: null, label: "namu.wiki", path: "https://namu.wiki/w/임신" };
+    expect(visibleResults([found])).toEqual([found]);
+  });
+});

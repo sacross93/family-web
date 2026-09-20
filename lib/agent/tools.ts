@@ -704,6 +704,7 @@ async function readYoutubeByOembed(
       ok: true,
       data: { url: watch, wrapped: frame(watch, oembedOnlyText(info)) },
       label: clip(info.title, 30),
+      path: watch,
       ...(thumb ? { imageData: thumb } : {}),
     };
   } catch {
@@ -745,6 +746,7 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
     ok: true,
     data: { url: watch, wrapped: frame(watch, composed.text) },
     label: clip(info.title, 30),
+    path: watch,
     ...(thumb ? { imageData: thumb } : {}),
   };
 }
@@ -850,6 +852,7 @@ async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise
     ok: true,
     data: { url, wrapped: frame(url, composed.text) },
     label: displayDomain(url),
+    path: url, // 읽은 페이지로 바로 갈 수 있게. 바깥 주소는 화면이 새 탭으로 연다.
     ...(imageData ? { imageData } : {}),
   };
 }

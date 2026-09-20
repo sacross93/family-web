@@ -40,6 +40,9 @@ type LinkProps = CommonProps & {
   href: string;
   /** 링크를 따라가기 직전에 할 일(예: 떠나면서 열려 있던 창 닫기). */
   onClick?: () => void;
+  /** 바깥 주소를 새 탭으로 열 때. rel 은 target="_blank" 면 반드시 함께 준다. */
+  target?: "_blank";
+  rel?: string;
 };
 
 export function Button(props: ButtonProps | LinkProps) {
@@ -48,7 +51,7 @@ export function Button(props: ButtonProps | LinkProps) {
 
   if ("href" in props && props.href) {
     return (
-      <Link href={props.href} className={classes} onClick={props.onClick}>
+      <Link href={props.href} className={classes} onClick={props.onClick} target={props.target} rel={props.rel}>
         {children}
       </Link>
     );

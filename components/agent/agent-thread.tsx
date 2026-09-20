@@ -28,10 +28,18 @@ const UNDO_FAILED = "되돌리지 못했어요.";
 /**
  * 도구가 돌려준 path 가 실제로 열리는 주소인가.
  * `/family`·`/decorations` 는 목차에만 있는 가상 경로라 링크를 걸면 404 가 난다(AGENTS.md).
+ * `read_url` 이 읽은 바깥 주소(http/https)도 갈 수 있다 — 그건 새 탭으로 연다.
  */
 function canVisit(path: string | undefined): path is string {
-  if (!path || !path.startsWith("/")) return false;
+  if (!path) return false;
+  if (/^https?:\/\//.test(path)) return true;
+  if (!path.startsWith("/")) return false;
   return !/^\/(family|decorations)(\/|$)/.test(path);
+}
+
+/** 우리 사이트 밖인가. 밖이면 새 탭으로 열고, 시트를 닫지 않는다. */
+function isExternal(path: string): boolean {
+  return /^https?:\/\//.test(path);
 }
 
 /** 결과 하나를 가리키는 열쇠. 같은 항목을 두 번 되돌리려 하지 않도록 resource+id 로 잡는다. */
@@ -70,11 +78,16 @@ function ResultCard({
           <p className="break-words text-sm font-semibold text-ink">{result.label}</p>
           {(visitable || undo) && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {visitable && (
-                <Button href={visitable} size="sm" variant="outline" onClick={onNavigate}>
-                  보러가기
-                </Button>
-              )}
+              {visitable &&
+                (isExternal(visitable) ? (
+                  <Button href={visitable} size="sm" variant="outline" target="_blank" rel="noopener noreferrer">
+                    원문 보기
+                  </Button>
+                ) : (
+                  <Button href={visitable} size="sm" variant="outline" onClick={onNavigate}>
+                    보러가기
+                  </Button>
+                ))}
               {undo && (
                 <Button
                   type="button"
