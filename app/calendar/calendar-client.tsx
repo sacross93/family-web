@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   addMonths,
   subMonths,
@@ -45,6 +45,8 @@ import type { CalendarEvent } from "@/lib/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_KEY = "yyyy-MM-dd";
+/** 폰에서 마지막으로 고른 보기(목록/달력) 기억. */
+const CALENDAR_VIEW_KEY = "podong_calendar_view";
 
 type FormState = {
   title: string;
@@ -123,7 +125,28 @@ export function CalendarClient({
   // 폰에서 무엇을 보여줄지. 55px 짜리 칸에는 일정 이름이 안 들어가서
   // 격자만으로는 "이번 주에 뭐 있지?" 를 답하지 못한다. 그래서 폰은 목록이 기본.
   // 데스크톱은 칸이 넓어 격자가 제 몫을 하므로 늘 격자 + 옆 목록 그대로다.
+  //
+  // 고른 것은 기억한다 — 달력을 보려고 눌러 놓아도 다음에 들어오면 목록으로 돌아가
+  // 매번 다시 눌러야 했다. 서버는 늘 "목록" 으로 그리고(하이드레이션 어긋남 방지)
+  // 붙은 뒤에 바꾼다. 아기 기록의 작성자 기억(`podong_baby_author`)과 같은 방식.
   const [phoneView, setPhoneView] = useState<"list" | "grid">("list");
+  useEffect(() => {
+    try {
+      // 붙은 뒤에 한 번만 읽어 맞춘다. 초기값으로 읽으면 서버가 그린 "목록" 과 어긋난다.
+      // `components/app-shell.tsx` 의 꾸미기 편집 상태도 같은 방식이다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (window.localStorage.getItem(CALENDAR_VIEW_KEY) === "grid") setPhoneView("grid");
+    } catch {
+      /* localStorage 접근 불가 환경 */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CALENDAR_VIEW_KEY, phoneView);
+    } catch {
+      /* localStorage 접근 불가 환경 */
+    }
+  }, [phoneView]);
 
   // 다가오는 일정 (오늘 이후)
   const upcoming = [...events]

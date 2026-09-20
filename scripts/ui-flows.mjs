@@ -543,6 +543,23 @@ await step("목록/달력 전환", async () => {
   await page.waitForTimeout(500);
   if (!(await text()).includes(MARK + "검진")) throw new Error("목록으로 안 돌아온다");
 });
+await step("고른 보기를 기억한다 — 새로고침해도 달력 그대로", async () => {
+  // 매번 목록으로 돌아가서, 달력을 보려면 들어올 때마다 다시 눌러야 했다.
+  await page.getByRole("button", { name: "달력" }).click();
+  await page.waitForTimeout(500);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  // 눌린 쪽이 어디인지로 본다 — 글자만 보면 목록에도 "일" 이 있어 공허하게 통과한다.
+  const on = await page.evaluate(() =>
+    [...document.querySelectorAll("button")]
+      .filter((b) => ["목록", "달력"].includes((b.textContent || "").trim()))
+      .map((b) => `${b.textContent.trim()}:${b.getAttribute("aria-pressed") ?? b.dataset.state ?? ""}`)
+      .join(" ")
+  );
+  if (!/달력:(true|on|active)/.test(on)) throw new Error(`새로고침하니 달력이 안 눌려 있다 — ${on}`);
+  await page.getByRole("button", { name: "목록" }).click();
+  await page.waitForTimeout(500);
+});
 await step("일정 지우기 — 목록에서 바로", async () => {
   const idx = await page.evaluate((m) => [...document.querySelectorAll("li")].findIndex(n => (n.textContent||"").includes(m)), MARK + "검진");
   await page.locator("li").nth(idx).getByRole("button", { name: "더보기" }).click();
