@@ -588,11 +588,64 @@ for (const { w, h, tag } of WIDTHS) {
   await ctx.close();
 }
 
+// ── 줄바꿈 ──────────────────────────────────────────────
+// 한글은 **어절 단위로** 끊어야 읽힌다. 브라우저 기본값은 CJK 를 글자 아무 데서나
+// 잘라서 "무엇이든 좋 / 아요." 가 된다 — 폰 1곳·데스크톱 6곳에서 그러고 있었고,
+// 스크린샷으로는 눈에 잘 안 띄는 종류의 흉함이다.
+// 재는 법: 글자 한 자씩 Range 를 잡아 top 이 바뀌는 지점을 찾고, 그 경계의 앞뒤가
+// 둘 다 한글이면(= 띄어쓰기가 아니면) 낱말 한가운데서 끊긴 것이다.
+{
+  const scan = () => {
+    const HANGUL = /[\uac00-\ud7a3]/;
+    const out = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const t = node.nodeValue;
+      if (!t || t.trim().length < 4 || !HANGUL.test(t)) continue;
+      if (!node.parentElement || !node.parentElement.offsetParent) continue;
+      if (node.parentElement.closest("nextjs-portal")) continue;
+      const r = new Range();
+      let prevTop = null;
+      for (let i = 0; i < t.length; i++) {
+        r.setStart(node, i);
+        r.setEnd(node, i + 1);
+        const rect = r.getBoundingClientRect();
+        if (!rect.height) continue;
+        const top = Math.round(rect.top);
+        if (prevTop !== null && top > prevTop + 2 && HANGUL.test(t[i - 1]) && HANGUL.test(t[i])) {
+          out.push(t.slice(Math.max(0, i - 5), i) + "/" + t.slice(i, i + 5));
+        }
+        prevTop = top;
+      }
+    }
+    return [...new Set(out)].slice(0, 3);
+  };
+  for (const { w, h, tag } of WIDTHS) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    if (USER && PASS) {
+      await page.goto(BASE + "/login");
+      await page.locator('input[autocomplete="username"]').fill(USER);
+      await page.locator('input[autocomplete="current-password"]').fill(PASS);
+      await page.getByRole("button", { name: "로그인" }).click();
+      await page.waitForURL(BASE + "/", { timeout: 15000 });
+    }
+    for (const path of PATHS) {
+      await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
+      for (const bad of await page.evaluate(scan)) {
+        problems.push(`${tag} ${path}: 낱말 한가운데서 줄바꿈 — …${bad}…`);
+      }
+    }
+    await ctx.close();
+  }
+}
+
 await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

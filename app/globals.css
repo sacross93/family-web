@@ -228,6 +228,12 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   letter-spacing: -0.01em;
+  /* 한글은 **어절 단위로** 끊는다. 기본값(normal)은 CJK 를 글자 아무 데서나 잘라서
+     "무엇이든 좋 / 아요." 가 된다 — 폰에서 1곳, 데스크톱에서 6곳 그러고 있었다.
+     대신 keep-all 만 두면 띄어쓰기 없는 긴 주소가 판을 밀어 가로 스크롤이 나므로,
+     정 안 되면 잘라 주는 overflow-wrap 을 짝으로 붙인다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 ::selection {
@@ -275,7 +281,6 @@ body {
 /* 제목 글꼴로 크게 쓰는 자리. 주아는 획이 도톰해 자간을 좁히면 글자가 붙어 보인다. */
 .font-display {
   letter-spacing: -0.005em;
-  word-break: keep-all;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -284,7 +289,9 @@ body {
 .md-content {
   color: var(--color-ink);
   line-height: 1.7;
-  word-break: break-word;
+  /* `word-break: break-word` 를 쓰면 안 된다 — 레거시 값이라 word-break 가 normal 로
+     되돌아가 body 의 keep-all 이 풀린다(글 안의 한글만 다시 낱말 한가운데서 끊겼다). */
+  overflow-wrap: break-word;
 }
 .md-content > :first-child { margin-top: 0; }
 .md-content > :last-child { margin-bottom: 0; }
