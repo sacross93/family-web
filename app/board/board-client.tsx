@@ -63,6 +63,7 @@ export function BoardClient({
   const [color, setColor] = useState<PaletteKey>("butter");
   const [authorId, setAuthorId] = useState<string>(members[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [editing, setEditing] = useState<BoardPostWithAuthor | null>(null);
   const [decoratingId, setDecoratingId] = useState<string | null>(null);
 
@@ -86,6 +87,7 @@ export function BoardClient({
         const created: BoardPostWithAuthor = await res.json();
         setPosts((prev) => sortPosts([created, ...prev]));
         setContent("");
+        setComposing(false);
         setEmoji("💬");
       }
     } finally {
@@ -135,7 +137,22 @@ export function BoardClient({
         description="냉장고 문에 붙이는 우리 가족 한마디"
       />
 
-      {/* 새 쪽지 붙이기 */}
+      {/* 새 쪽지 붙이기 — 접혀 있다.
+          툴바 10개 + 입력칸 + 스티커 12개 + 색 6개 + 작성자 4명이 늘 펼쳐져 있어
+          가족이 남긴 말을 읽으려면 480px 를 지나야 했다. 읽는 일이 쓰는 일보다 훨씬 잦다. */}
+      {!composing ? (
+        <button
+          type="button"
+          onClick={() => setComposing(true)}
+          className="mb-5 flex w-full items-center gap-3 rounded-3xl border border-dashed border-line-strong bg-surface px-5 py-4 text-left transition hover:border-primary hover:bg-primary-soft/30"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-butter-soft text-lg">
+            💛
+          </span>
+          <span className="text-[15px] text-ink-faint">가족에게 한마디 남기기…</span>
+          <Plus className="ml-auto h-4 w-4 shrink-0 text-ink-faint" />
+        </button>
+      ) : (
       <Card className="mb-6 flex flex-col gap-3">
         <MarkdownEditor
           value={content}
@@ -162,13 +179,17 @@ export function BoardClient({
               />
             </div>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" onClick={() => setComposing(false)}>
+              취소
+            </Button>
             <Button onClick={addPost} disabled={!content.trim() || busy}>
               <Plus className="h-4 w-4" /> 붙이기
             </Button>
           </div>
         </div>
       </Card>
+      )}
 
       {/* 메모 벽 */}
       {posts.length === 0 ? (

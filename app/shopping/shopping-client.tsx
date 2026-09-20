@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, ShoppingBasket } from "lucide-react";
+import { Plus, Trash2, ShoppingBasket, ChevronDown } from "lucide-react";
 import {
   PageHeader,
   Card,
@@ -31,7 +31,9 @@ export function ShoppingClient({
   const [category, setCategory] = useState<PaletteKey>("mint");
   const [addedById, setAddedById] = useState<string>(members[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
+  const [more, setMore] = useState(false);
 
+  const addedBy = members.find((m) => m.id === addedById);
   const open = items.filter((i) => !i.done);
   const done = items.filter((i) => i.done);
 
@@ -94,55 +96,85 @@ export function ShoppingClient({
         )}
       </PageHeader>
 
-      {/* 빠른 추가 */}
-      <Card className="mb-5 flex flex-col gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row">
+      {/* 빠른 추가 — 폼이 목록을 밀어내지 않게 한 줄로.
+          예전에는 수량·분류 6색·사람 4명이 늘 펼쳐져 있어 첫 항목까지 290px 였다.
+          마트에서 필요한 건 목록이다. 분류·사람은 대개 지난번 그대로라 접어 두고,
+          접힌 줄이 지금 값을 보여 준다 — 무엇이 골라져 있는지 펼치지 않고도 알게. */}
+      <Card className="mb-4 flex flex-col gap-2.5">
+        <div className="flex gap-2">
           <Input
             placeholder="무엇을 살까요? (예: 우유)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addItem()}
-            className="flex-1"
-            autoFocus
+            className="min-w-0 flex-1"
           />
           <Input
-            placeholder="수량 (예: 2팩)"
+            placeholder="수량"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addItem()}
-            className="sm:w-32"
+            className="hidden w-28 sm:block"
           />
-          <Button onClick={addItem} disabled={!name.trim() || busy}>
+          <Button onClick={addItem} disabled={!name.trim() || busy} className="shrink-0">
             <Plus className="h-4 w-4" /> 담기
           </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink-faint">분류</span>
-            <ColorPicker value={category} onChange={setCategory} />
-          </div>
-          {members.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-ink-faint">추가한 사람</span>
-              <div className="flex gap-1">
-                {members.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setAddedById(m.id)}
-                    aria-pressed={addedById === m.id}
-                    className={cn(
-                      "rounded-full transition",
-                      addedById === m.id ? "ring-2 ring-primary ring-offset-1" : "opacity-50 hover:opacity-100"
-                    )}
-                  >
-                    <Avatar emoji={m.emoji} color={m.color} name={m.name} size="sm" />
-                  </button>
-                ))}
-              </div>
-            </div>
+
+        <button
+          type="button"
+          onClick={() => setMore((v) => !v)}
+          aria-expanded={more}
+          className="flex items-center gap-2 self-start rounded-full px-1 py-1 text-xs font-medium text-ink-faint transition hover:text-ink"
+        >
+          <span className={cn("h-2.5 w-2.5 rounded-full", palette(category).dot)} />
+          {addedBy && (
+            <Avatar emoji={addedBy.emoji} color={addedBy.color} name={addedBy.name} size="xs" />
           )}
-        </div>
+          <span>수량 · 분류 · 사람</span>
+          <ChevronDown className={cn("h-3.5 w-3.5 transition", more && "rotate-180")} />
+        </button>
+
+        {more && (
+          <div className="flex flex-col gap-3 border-t border-line pt-3">
+            <Input
+              placeholder="수량 (예: 2팩)"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addItem()}
+              className="sm:hidden"
+            />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-ink-faint">분류</span>
+                <ColorPicker value={category} onChange={setCategory} />
+              </div>
+              {members.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-ink-faint">추가한 사람</span>
+                  <div className="flex gap-1">
+                    {members.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setAddedById(m.id)}
+                        aria-pressed={addedById === m.id}
+                        className={cn(
+                          "rounded-full transition",
+                          addedById === m.id
+                            ? "ring-2 ring-primary ring-offset-1"
+                            : "opacity-50 hover:opacity-100"
+                        )}
+                      >
+                        <Avatar emoji={m.emoji} color={m.color} name={m.name} size="sm" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* 목록 */}
