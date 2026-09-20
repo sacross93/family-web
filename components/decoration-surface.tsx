@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Decoration } from "@prisma/client";
 import { cn } from "@/lib/utils";
+import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 
 
 // z-index (같은 컨테이너): back<10=콘텐츠 뒤, 콘텐츠=10, front>10=콘텐츠 앞, 선택=50
@@ -192,8 +193,10 @@ export function DecorationSurface({
   async function addSticker(file: File) {
     setUploading(true);
     try {
+      // 스티커는 화면에서 300px 이하로 그려진다. 폰 원본(4000px·3MB)을 그대로 올리면
+      // 홈을 열 때마다 그만큼을 받는다 — 실제로 2.2MB 짜리가 올라가 있었다.
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await shrinkForUpload(file, MAX_EDGE.sticker));
       const up = await fetch("/api/upload", { method: "POST", body: fd });
       const { urls } = await up.json();
       const url = urls?.[0];

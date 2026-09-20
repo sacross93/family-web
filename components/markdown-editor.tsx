@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownView } from "@/components/markdown-view";
+import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 
 /** 옵시디언식 마크다운 에디터 — 툴바·단축키·미리보기·이미지 업로드 */
 export function MarkdownEditor({
@@ -110,7 +111,7 @@ export function MarkdownEditor({
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await shrinkForUpload(file, MAX_EDGE.photo));
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const { urls } = await res.json();
       if (urls?.[0]) insert(`\n![](${urls[0]})\n`);

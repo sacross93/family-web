@@ -28,6 +28,7 @@ import { type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDateShort } from "@/lib/date";
 import type { Album, Photo, AlbumWithPhotos } from "@/lib/types";
+import { MAX_EDGE, shrinkAllForUpload } from "@/lib/image-upload";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -330,8 +331,9 @@ function AddPhotoModal({
     setBusy(true);
     setError(null);
     try {
+      // 앨범 사진은 추억이라 넉넉히 남긴다(긴 변 2000px) — 그래도 폰 원본의 1/5 쯤이다.
       const fd = new FormData();
-      images.forEach((f) => fd.append("files", f));
+      (await shrinkAllForUpload(images, MAX_EDGE.photo)).forEach((f) => fd.append("files", f));
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       const data: { urls?: string[] } = await res.json();

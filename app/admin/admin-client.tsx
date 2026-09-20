@@ -28,6 +28,7 @@ import {
 import { NAV, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 
 const PAGE_OPTIONS = [
   { value: "global", label: "🌈 모든 페이지" },
@@ -41,7 +42,7 @@ function pageLabel(value: string) {
 /** 업로드 후 URL 반환 */
 async function uploadImage(file: File): Promise<string | null> {
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", await shrinkForUpload(file, MAX_EDGE.brand));
   const res = await fetch("/api/upload", { method: "POST", body: fd });
   if (!res.ok) return null;
   const { urls } = await res.json();

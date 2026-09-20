@@ -20,6 +20,11 @@ const gowun = Gowun_Batang({
   variable: "--font-gowun",
   weight: ["400", "700"],
   display: "swap",
+  // **미리 받지 않는다.** next/font 는 요청한 subset 의 파일을 전부 `<link rel=preload>`
+  // 로 걸어 두는데, 한글 글꼴은 구간이 100개쯤이라 **94개 1,441KB 를 첫 화면에서
+  // 통째로 받고 있었다**(배포본 실측). 구간(unicode-range)은 그대로 남으므로,
+  // 미리 받기만 끄면 브라우저가 **그 화면에 실제로 쓰인 글자가 든 구간만** 받는다.
+  preload: false,
 });
 
 export async function generateMetadata(): Promise<Metadata> {

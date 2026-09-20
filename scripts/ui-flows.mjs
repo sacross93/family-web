@@ -12,10 +12,17 @@
 // 쓰기:  npm run dev  (다른 터미널)
 //        node scripts/ui-flows.mjs [기준URL] [아이디] [비밀번호]
 //
+// **`npm run dev` 여야 한다. `npm start`(운영 빌드)로 돌리면 사진 검사가 거짓이 된다.**
+// 로컬에서 올린 사진은 `public/uploads/` 에 쓰이는데, 운영 빌드는 빌드 시점의 목록만
+// 내주므로 **방금 올린 파일이 404 가 난다.** 그래도 `<img>` 태그는 DOM 에 있어서
+// "올린 사진이 보인다" 류의 검사는 통과해 버린다 — 실제로 오래 그랬고,
+// 매번 찍히던 "콘솔 오류: 404" 가 그 흔적이었다(운영은 Blob 절대주소라 무관하다).
+//
 // **로컬에서만 돌릴 것.** 실제로 만들고 지운다. 만든 것은 각 흐름 끝에서 되돌린다.
 // playwright 찾는 방법은 ui-audit.mjs 와 같다.
 
-import { existsSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync, unlinkSync, statSync } from "node:fs";
+import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
@@ -25,6 +32,10 @@ const PASS = process.argv[4] || process.env.AUDIT_PASS;
 const MARK = "포동UI점검";
 // 사진 올리기 시험용 8×8 PNG. 파일을 안 남기려고 그때그때 만든다.
 const IMG = join(tmpdir(), "podong-ui-flows.png");
+/** 폰 카메라 원본만 한 사진. 올리기 전에 줄어드는지 보려면 큰 게 있어야 한다. */
+const BIG_IMG = join(tmpdir(), "podong-ui-flows-big.png");
+const BIG_W = 2400;
+const BIG_H = 1800;
 
 if (!USER || !PASS) {
   console.error("사용법: node scripts/ui-flows.mjs [기준URL] <아이디> <비밀번호>");
@@ -72,6 +83,53 @@ if (!pw) {
   process.exit(1);
 }
 const { chromium } = await import(pw);
+
+/**
+ * 잡음으로 채운 PNG 한 장을 만든다(의존성 없이).
+ *
+ * 잡음이라야 압축이 안 먹혀 **진짜 큰 파일**이 된다 — 단색 2400×1800 은 몇 KB 라
+ * "줄었다" 를 증명하지 못한다. PNG 는 IHDR·IDAT(zlib)·IEND 세 덩어리면 된다.
+ */
+function makeNoisePng(path, width, height) {
+  const crc32 = (buf) => {
+    let c = ~0;
+    for (const b of buf) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: truecolor
+  const raw = Buffer.alloc(height * (1 + width * 3));
+  for (let y = 0; y < height; y++) {
+    const row = y * (1 + width * 3);
+    raw[row] = 0; // filter: none
+    for (let x = 0; x < width * 3; x++) raw[row + 1 + x] = (Math.random() * 256) | 0;
+  }
+  writeFileSync(
+    path,
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", deflateSync(raw)),
+      chunk("IEND", Buffer.alloc(0)),
+    ])
+  );
+}
+makeNoisePng(BIG_IMG, BIG_W, BIG_H);
+const window_bigSize = statSync(BIG_IMG).size;
 
 // 사진 올리기 시험용 8×8 PNG 를 임시로 만든다.
 writeFileSync(
@@ -382,13 +440,37 @@ await step("앨범 열기", async () => {
   await page.waitForTimeout(1300);
   if (!page.url().includes("/albums/")) throw new Error("상세로 안 간다: " + page.url());
 });
-await step("사진 올리기", async () => {
+await step("큰 사진은 올리기 전에 줄어든다", async () => {
+  // 폰 카메라 원본만 한 사진(2400×1800)을 올려 본다.
+  // 배포본 홈에 **2.2MB 짜리 스티커**가 올라가 있었고, 화면에서는 150px 로 그려졌다.
+  // 그대로 올리면 열 때마다 그만큼을 받는다.
   await page.getByRole("button", { name: /사진 추가/ }).first().click();
   await page.waitForTimeout(700);
-  await page.locator('input[type="file"]').first().setInputFiles(IMG);
-  await page.waitForTimeout(2500);
-  const imgs = await page.evaluate(() => [...document.querySelectorAll("img")].filter(i => /uploads|blob/.test(i.src)).length);
-  if (!imgs) throw new Error("올린 사진이 안 보인다");
+  await page.locator('input[type="file"]').first().setInputFiles(BIG_IMG);
+  await page.waitForTimeout(5000);
+  // 올린 직후의 <img> 는 파일이 다 쓰이기 전에 한 번 실패해 있을 수 있다 —
+  // 그러면 naturalWidth 가 0 이라 "2000 이하" 검사가 공허하게 통과한다. 새로 받아서 잰다.
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1200);
+  const shot = await page.evaluate(async () => {
+    const img = [...document.querySelectorAll("img")].find((i) => /uploads|blob/.test(i.src));
+    if (!img) return null;
+    // `complete` 는 실패한 사진에도 true 다. 크기를 재려면 **디코드까지** 기다려야 한다 —
+    // 안 그러면 0×0 이 나오고 "2000 이하" 검사가 공허하게 통과한다(한 번 그랬다).
+    await img.decode().catch(() => {});
+    const bytes = await fetch(img.src).then((r) => r.blob()).then((b) => b.size).catch(() => -1);
+    return { w: img.naturalWidth, h: img.naturalHeight, bytes };
+  });
+  if (!shot) throw new Error("올린 사진이 안 보인다");
+  if (!shot.w || !shot.h) throw new Error("사진 크기를 못 쟀다 — 0×0 이면 아무것도 확인 못 한다");
+  const originalBytes = window_bigSize;
+  if (shot.w > 2000 || shot.h > 2000)
+    throw new Error(`안 줄었다 — ${shot.w}×${shot.h} (긴 변 2000px 이하여야)`);
+  if (shot.bytes >= originalBytes)
+    throw new Error(`용량이 안 줄었다 — ${(shot.bytes / 1024) | 0}KB (원본 ${(originalBytes / 1024) | 0}KB)`);
+  console.log(
+    `      ${BIG_W}×${BIG_H} ${(originalBytes / 1024 / 1024).toFixed(1)}MB → ${shot.w}×${shot.h} ${(shot.bytes / 1024) | 0}KB`
+  );
 });
 await step("새로고침해도 사진이 남아 있다", async () => {
   await page.reload({ waitUntil: "networkidle" });
@@ -645,8 +727,10 @@ console.log(errs.length ? "\n콘솔 오류: " + JSON.stringify([...new Set(errs)
 console.log(failed === 0 ? `✓ ${total}단계 모두 통과` : `⚠ ${failed}단계 실패`);
 if (failed) process.exitCode = 1;
 await browser.close();
-try {
-  unlinkSync(IMG);
-} catch {
-  /* 지워져 있어도 상관없다 */
+for (const f of [IMG, BIG_IMG]) {
+  try {
+    unlinkSync(f);
+  } catch {
+    /* 지워져 있어도 상관없다 */
+  }
 }
