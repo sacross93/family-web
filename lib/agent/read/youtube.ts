@@ -276,8 +276,10 @@ export function youtubeSummaryText(info: YoutubeInfo, caption?: FetchedCaption):
     // 어느 언어를 골랐는지, 그게 번역일 수 있는지까지 적는다.
     // 실측: 한국어 자막(영어 영상의 번역)을 주었더니 모델이 **영어 원문 인용처럼** 지어냈다.
     const others = info.captionLanguages.length > 1 ? ` (자막 ${info.captionLanguages.length}개 언어 중 고름)` : "";
+    const where = caption.viaRelay ? " · 유튜브가 이 서버를 제한해서 바깥 전사 서비스를 통해 받았습니다(영상의 원래 언어)" : others;
     lines.push(
-      `자막: ${caption.languageCode}${caption.isGenerated ? " · 자동 생성이라 받아쓰기 오류가 있을 수 있습니다" : ""}${others} 를 읽었습니다.`,
+      `자막: ${caption.languageCode}${caption.isGenerated ? " · 자동 생성이라 받아쓰기 오류가 있을 수 있습니다" : ""}${where} 를 읽었습니다.`,
+      caption.truncated ? "**자막이 길어 뒷부분이 잘렸습니다.**" : "",
       "아래 자막은 **번역본일 수 있습니다.** 영상에서 실제로 한 말을 그대로 인용해 달라는 요청에는, 원문이 아니라 이 자막의 글임을 밝히세요."
     );
   } else {
@@ -289,6 +291,10 @@ export function youtubeSummaryText(info: YoutubeInfo, caption?: FetchedCaption):
         : `자막: **확인하지 못했습니다.** 이 영상에 자막이 없을 수도, 있는데 받아오지 못한 것일 수도 있습니다. 아래는 자막이 아니라 설명과 챕터입니다.`
     );
   }
+
+  const kept = lines.filter(Boolean);
+  lines.length = 0;
+  lines.push(...kept);
 
   if (info.chapters.length) {
     // 자막이 없을 때는 챕터 시각이 "언제 무슨 말을 했나"에 대한 유일한 근거다.
@@ -344,9 +350,33 @@ export function oembedOnlyText(info: OembedInfo): string {
     .join("\n");
 }
 
+/**
+ * 바깥 전사 서비스(kome.ai)가 돌려준 것에서 자막만 꺼낸다.
+ *
+ * **왜 남의 서비스를 쓰나**: 배포 환경(Vercel)에서는 유튜브가 우리 IP 에 로그인을 요구해
+ * 자막 트랙이 0개로 온다(실측, 클라이언트 6종 전부). 저쪽 서버가 유튜브를 대신 때려 주므로
+ * 우리 IP 가 판단 대상이 아니게 된다. 무료이고 가입도 없다.
+ *
+ * **함정**: 자막이 없는 영상에도 HTTP 200 에 안내 문구를 담아 준다. 그걸 자막으로 넘기면
+ * 모델이 "자막에 이렇게 적혀 있다" 며 안내 문구를 요약한다. 그래서 문구를 걸러낸다.
+ */
+export function parseRelayTranscript(value: unknown): { text: string; truncated: boolean } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const o = value as Record<string, unknown>;
+  const text = str(o.transcript).replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  // 저쪽의 "자막 없음" 안내. 영어 고정 문구다.
+  if (/transcripts?\s+(aren'?t|are not|is not|isn'?t)\s+available/i.test(text)) return null;
+  return { text, truncated: o.hasMore === true };
+}
+
 /** 실제로 읽어 온 자막. */
 export interface FetchedCaption {
   languageCode: string;
   isGenerated: boolean;
   text: string;
+  /** 바깥 전사 서비스에서 받아 왔는가. 받아온 곳을 숨기지 않는다. */
+  viaRelay?: boolean;
+  /** 저쪽이 길어서 잘라 준 경우. */
+  truncated?: boolean;
 }

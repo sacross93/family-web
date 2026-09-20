@@ -13,6 +13,7 @@ import {
   captionUrl,
   innertubeApiKey,
   parseCaptionXml,
+  parseRelayTranscript,
   parseWatchPage,
   pickCaptionTrack,
   playerCaptionTracks,
@@ -677,6 +678,34 @@ async function fetchCaption(
   }
 }
 
+/** 바깥 전사 서비스. 저쪽 서버가 유튜브를 대신 때리므로 우리 IP 가 막혀도 통한다. */
+const TRANSCRIPT_RELAY = "https://kome.ai/api/transcript";
+
+/**
+ * 우리가 직접 못 받았을 때 바깥 전사 서비스에 물어본다.
+ *
+ * 보내는 것은 **공개 영상의 id 하나**다. 가족 데이터는 나가지 않는다.
+ * 실패하면 undefined — 그때는 설명·챕터로 답한다.
+ */
+async function fetchCaptionViaRelay(videoId: string, doFetch: typeof fetch): Promise<FetchedCaption | undefined> {
+  try {
+    const res = await doFetch(TRANSCRIPT_RELAY, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json", "user-agent": BROWSER_UA },
+      body: JSON.stringify({ video_id: videoId, format: true }),
+      signal: timeoutSignal(),
+    });
+    if (!res.ok) return undefined;
+
+    const parsed = parseRelayTranscript(await res.json());
+    if (!parsed) return undefined;
+    // 저쪽은 영상의 원래 언어로 준다. 무슨 언어인지는 알려주지 않으므로 단정하지 않는다.
+    return { languageCode: "원어", isGenerated: false, text: parsed.text, viaRelay: true, truncated: parsed.truncated };
+  } catch {
+    return undefined;
+  }
+}
+
 /** 유튜브. 자막을 받아 오고, 못 받으면 설명과 챕터로 답하며 그 사실을 글 안에 담는다. */
 /**
  * watch 페이지를 못 읽었을 때의 마지막 수단.
@@ -700,9 +729,30 @@ async function readYoutubeByOembed(
     const info = parseOembed(await res.json());
     if (!info) return fail("그 영상의 정보를 읽지 못했어요.");
 
+    // watch 를 못 읽었어도 자막은 바깥 서비스로 받을 수 있다 — 여기가 배포 환경의 주 경로다.
+    const caption = await fetchCaptionViaRelay(videoId, doFetch);
+    const text = caption
+      ? [
+          `제목: ${info.title}`,
+          info.author ? `채널: ${info.author}` : "",
+          "자막: 유튜브가 이 서버를 제한해서 **바깥 전사 서비스를 통해** 받았습니다(영상의 원래 언어).",
+          caption.truncated ? "**자막이 길어 뒷부분이 잘렸습니다.**" : "",
+          "영상 페이지의 설명·챕터는 읽지 못했습니다.",
+          "",
+          "자막 전문:",
+          caption.text,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : oembedOnlyText(info);
+
+    const composed = composeRead({
+      title: "", siteName: "", description: "",
+      body: text, bodySource: "요약정보", maxChars: agentConfig().fetchMaxChars,
+    });
     return {
       ok: true,
-      data: { url: watch, wrapped: frame(watch, oembedOnlyText(info)) },
+      data: { url: watch, wrapped: frame(watch, composed.text) },
       label: clip(info.title, 30),
       path: watch,
       ...(thumb ? { imageData: thumb } : {}),
@@ -732,7 +782,10 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
     return await readYoutubeByOembed(videoId, watch, thumb, doFetch);
   }
 
-  const caption = await fetchCaption(videoId, body.text, doFetch);
+  // ① 우리가 직접(집 IP 에서 되고, 한국어 트랙을 고를 수 있다)
+  // ② 막히면 바깥 전사 서비스(배포 환경에서 되는 유일한 무료 길)
+  const caption =
+    (await fetchCaption(videoId, body.text, doFetch)) ?? (await fetchCaptionViaRelay(videoId, doFetch));
   const summary = youtubeSummaryText(info, caption);
   const composed = composeRead({
     title: "",

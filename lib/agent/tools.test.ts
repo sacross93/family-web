@@ -782,3 +782,55 @@ describe("read_url — 읽은 주소를 결과에 남긴다", () => {
     expect((r as { path?: string }).path).toBe("https://example.com/%EA%B8%80");
   });
 });
+
+describe("read_url — 유튜브 자막 릴레이", () => {
+  const WATCH2 = `<script>var ytInitialPlayerResponse = {"videoDetails":{"title":"영상","author":"채널","lengthSeconds":"60","viewCount":"1","shortDescription":"설명"}};</script>`;
+
+  /** 배포 환경을 흉내낸다 — player 는 트랙 0개(LOGIN_REQUIRED), 릴레이는 살아 있다. */
+  const blockedYoutube = (relay: unknown, opts: { watchOk?: boolean } = {}) =>
+    vi.fn(async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("kome.ai")) return Response.json(relay);
+      if (u.includes("/youtubei/")) return Response.json({ captions: {} });
+      if (u.includes("/oembed")) return Response.json({ title: "영상", author_name: "채널" });
+      if (u.includes("i.ytimg.com")) return new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      return new Response(opts.watchOk === false ? "<html>로그인</html>" : WATCH2, { status: 200, headers: { "content-type": "text/html" } });
+    });
+
+  it("우리가 못 받으면 바깥 서비스로 받아 오고, 어디서 받았는지 밝힌다", async () => {
+    const f = blockedYoutube({ transcript: "이 영상은 신경망을 설명합니다", hasMore: false });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    const w = wrappedOf(r);
+    expect(w).toContain("이 영상은 신경망을 설명합니다");
+    expect(w).toContain("바깥 전사 서비스");
+  });
+
+  it("watch 페이지도 못 읽는 배포 환경에서도 자막은 받는다 — 여기가 주 경로다", async () => {
+    const f = blockedYoutube({ transcript: "자막 본문입니다", hasMore: false }, { watchOk: false });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    const w = wrappedOf(r);
+    expect(w).toContain("자막 본문입니다");
+    expect(w).toContain("제목: 영상");
+  });
+
+  it("자막 없음 안내를 자막으로 넘기지 않는다", async () => {
+    const f = blockedYoutube({ transcript: "Transcripts aren't available for this video." }, { watchOk: false });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    const w = wrappedOf(r);
+    expect(w).not.toContain("Transcripts aren't available");
+    expect(w).toContain("읽지 못했습니다");
+  });
+
+  it("릴레이가 죽어도 영상 정보는 준다", async () => {
+    const f = vi.fn(async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("kome.ai")) throw new Error("연결 끊김");
+      if (u.includes("/youtubei/")) return Response.json({ captions: {} });
+      if (u.includes("i.ytimg.com")) return new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      return new Response(WATCH2, { status: 200, headers: { "content-type": "text/html" } });
+    });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    expect(wrappedOf(r)).toContain("제목: 영상");
+  });
+});

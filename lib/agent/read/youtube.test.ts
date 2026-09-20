@@ -6,6 +6,7 @@ import {
   humanDuration,
   innertubeApiKey,
   parseCaptionXml,
+  parseRelayTranscript,
   parseWatchPage,
   pickCaptionTrack,
   playerCaptionTracks,
@@ -287,5 +288,43 @@ describe("youtubeSummaryText — 자막이 있을 때", () => {
     const text = youtubeSummaryText(base, undefined);
     expect(text).toContain("내려받지 못했습니다");
     expect(text).toContain("설명:");
+  });
+});
+
+describe("parseRelayTranscript — 바깥 전사 서비스", () => {
+  it("자막을 꺼낸다", () => {
+    const r = parseRelayTranscript({ transcript: "This is a 3.\nIt's sloppily written.", length: 2, hasMore: false });
+    expect(r).toEqual({ text: "This is a 3. It's sloppily written.", truncated: false });
+  });
+
+  it("**자막 없음 안내를 자막으로 넘기지 않는다** — 넘기면 모델이 안내문을 요약한다", () => {
+    // 실측: 자막 없는 영상에도 HTTP 200 에 이 문구를 담아 준다.
+    const msg = "Transcripts aren't available for this video. The publisher may have restricted access for privacy or copyright reasons.";
+    expect(parseRelayTranscript({ transcript: msg, hasMore: false })).toBeNull();
+    expect(parseRelayTranscript({ transcript: "Transcripts are not available for this video." })).toBeNull();
+  });
+
+  it("저쪽이 잘랐으면 그 사실을 들고 온다", () => {
+    expect(parseRelayTranscript({ transcript: "긴 자막입니다", hasMore: true })?.truncated).toBe(true);
+  });
+
+  it("모양이 아니면 null", () => {
+    expect(parseRelayTranscript(null)).toBeNull();
+    expect(parseRelayTranscript({ transcript: "" })).toBeNull();
+    expect(parseRelayTranscript("문자열")).toBeNull();
+  });
+});
+
+describe("youtubeSummaryText — 바깥에서 받아 온 자막", () => {
+  const base = parseWatchPage(WATCH_HTML, "aircAruvnKk")!;
+
+  it("어디서 받았는지 숨기지 않는다", () => {
+    const text = youtubeSummaryText(base, { languageCode: "원어", isGenerated: false, text: "자막", viaRelay: true });
+    expect(text).toContain("바깥 전사 서비스");
+  });
+
+  it("저쪽이 잘랐으면 그것도 말한다", () => {
+    const text = youtubeSummaryText(base, { languageCode: "원어", isGenerated: false, text: "자막", viaRelay: true, truncated: true });
+    expect(text).toContain("뒷부분이 잘렸습니다");
   });
 });
