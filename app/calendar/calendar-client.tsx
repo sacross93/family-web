@@ -419,6 +419,7 @@ export function CalendarClient({
                     </button>
                     <ItemActions
                       inline
+                      quiet
                       actions={[
                         { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
                         { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },

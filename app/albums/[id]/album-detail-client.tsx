@@ -443,6 +443,7 @@ function AddPhotoModal({
         <div className="flex gap-2">
           <Input
             placeholder="사진 주소 붙여넣기 (https://…)"
+            aria-label="사진 주소"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addFromUrl()}

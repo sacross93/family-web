@@ -24,12 +24,18 @@ export function MarkdownEditor({
   placeholder = "여기에 자유롭게 적어보세요… (마크다운 지원)",
   minHeight = 160,
   autoFocus,
+  label = "내용",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   minHeight?: number;
   autoFocus?: boolean;
+  /**
+   * 글 칸의 이름. 스크린리더가 읽는다.
+   * 자리표시로는 안 된다 — 글자를 넣는 순간 사라진다. `ui:audit` 이 확인한다.
+   */
+  label?: string;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const pendingSel = useRef<[number, number] | null>(null);
@@ -174,7 +180,7 @@ export function MarkdownEditor({
             type="button"
             onClick={() => setPreview((p) => !p)}
             className={cn(
-              "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition",
+              "flex h-10 items-center gap-1 rounded-full px-3 text-xs font-semibold transition lg:h-7",
               preview ? "bg-primary-soft text-primary-ink" : "text-ink-faint hover:bg-sunken hover:text-ink"
             )}
           >
@@ -237,6 +243,7 @@ export function MarkdownEditor({
             }
           }}
           placeholder={placeholder}
+          aria-label={label}
           autoFocus={autoFocus}
           className="block w-full resize-none border-0 bg-transparent px-4 py-3 text-[0.9375rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint"
           style={{ minHeight }}
@@ -264,7 +271,10 @@ function ToolBtn({
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40"
+      // 폰·태블릿에서는 40px(DESIGN §9). 32px 툴바를 손가락으로 겨누면 옆 버튼이 눌린다.
+      // 이 툴바는 접힌 작성칸 안에 있어서 **검사에 한 번도 안 잡혔다** — 모달·작성칸을
+      // 열어 보게 하고서야 드러났다.
+      className="flex h-10 w-10 items-center justify-center rounded-md text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40 lg:h-8 lg:w-8"
     >
       {children}
     </button>

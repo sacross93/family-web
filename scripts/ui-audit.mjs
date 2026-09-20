@@ -68,6 +68,39 @@ const WIDTHS = [
 ];
 
 /** 이미 깔린 playwright 를 찾는다. 없으면 null. */
+
+/**
+ * 이름 없는 입력칸 훑기.
+ *
+ * 스크린리더는 칸의 이름을 라벨(`<label for>`)·aria-label 순으로 찾는다.
+ * 우리 `Field` 는 라벨을 그리기만 하고 칸에 **붙이지는 않고** 있었다 — 그래서
+ * 이름을 자리표시(placeholder)가 혼자 떠받치고 있었고, 로그인에서 중복이라 지웠더니
+ * 칸 이름이 통째로 사라졌다. 자리표시는 글자를 넣으면 사라지므로 이름이 아니다.
+ *
+ * **폼은 대개 모달 안에 있다.** 목록 화면만 훑으면 이 검사는 거의 아무것도 못 본다 —
+ * 처음 만들었을 때 실제로 그랬다(라벨 연결을 도로 끊어 봐도 0건이었다).
+ * 그래서 로그인 화면과 **열어 본 모달**까지 함께 훑는다.
+ */
+async function unnamedInputs(page) {
+  return page.evaluate(() => {
+    const named = (el) => {
+      if (el.getAttribute("aria-label")?.trim()) return true;
+      if (el.getAttribute("aria-labelledby")) return true;
+      if (el.getAttribute("title")?.trim()) return true;
+      if (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) return true;
+      if (el.closest("label")) return true;
+      return false;
+    };
+    return [...document.querySelectorAll("input, textarea, select")]
+      .filter((el) => el.type !== "hidden" && el.offsetParent !== null && !named(el))
+      .map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        type: el.type ?? "",
+        hint: (el.placeholder || el.name || "").slice(0, 40),
+      }));
+  });
+}
+
 function findPlaywright() {
   const roots = [
     join(process.cwd(), "node_modules"),
@@ -312,11 +345,17 @@ for (const { w, h, tag } of WIDTHS) {
         problems.push(`${tag} /login: "${s2.label}" 이 작다 — 보임 ${s2.보임}, 눌림 ${s2.눌림} (40px 이상이어야)`);
       }
     }
+    for (const f of await unnamedInputs(page)) {
+      problems.push(`${tag} /login: 이름 없는 입력칸 <${f.tag} ${f.type}> (${f.hint})`);
+    }
   }
 
   if (USER && PASS) {
-    await page.getByRole("textbox", { name: "아이디" }).fill(USER);
-    await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
+    // 로그인은 **이름이 아니라 구조로** 짚는다. 칸 이름이 깨지는 것이 바로 이 검사가
+    // 잡으려는 것인데, 로그인 자체가 이름에 기대고 있으면 깨진 순간 스크립트가
+    // 통째로 죽어 나머지 검사가 전부 안 돌았다 — 한 가지 고장이 눈 전체를 가렸다.
+    await page.locator('input[autocomplete="username"]').fill(USER);
+    await page.locator('input[autocomplete="current-password"]').fill(PASS);
     await page.getByRole("button", { name: "로그인" }).click();
     await page.waitForURL(BASE + "/", { timeout: 15000 });
   }
@@ -333,6 +372,27 @@ for (const { w, h, tag } of WIDTHS) {
     }));
     rows.push({ tag, path, height, screens: +(height / h).toFixed(1), overflow });
     if (overflow > 0) problems.push(`${tag} ${path}: 가로 스크롤 ${overflow}px`);
+
+    for (const f of await unnamedInputs(page)) {
+      problems.push(`${tag} ${path}: 이름 없는 입력칸 <${f.tag} ${f.type}> (${f.hint})`);
+    }
+
+    // **폼이 있는 모달을 열어서도 본다.** 화면에 그냥 놓인 칸은 몇 개 안 되고
+    // 대부분은 모달 안에 있다 — 안 열어 보면 이 검사는 거의 빈손으로 지나간다.
+    const opener = page
+      .getByRole("button", { name: /추가|만들기|남기기|새 / })
+      .first();
+    if (await opener.isVisible().catch(() => false)) {
+      await opener.click().catch(() => {});
+      await page.waitForTimeout(600);
+      if (await page.locator('[role="dialog"]').first().isVisible().catch(() => false)) {
+        for (const f of await unnamedInputs(page)) {
+          problems.push(`${tag} ${path}(모달): 이름 없는 입력칸 <${f.tag} ${f.type}> (${f.hint})`);
+        }
+      }
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(350);
+    }
 
     // 누를 수 있는 것은 어느 자리에서든 덮이면 안 된다 — 위·가운데·아래를 다 본다.
     const seen = new Set();
@@ -410,8 +470,11 @@ for (const { w, h, tag } of WIDTHS) {
   const page = await ctx.newPage();
   if (USER && PASS) {
     await page.goto(BASE + "/login");
-    await page.getByRole("textbox", { name: "아이디" }).fill(USER);
-    await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
+    // 로그인은 **이름이 아니라 구조로** 짚는다. 칸 이름이 깨지는 것이 바로 이 검사가
+    // 잡으려는 것인데, 로그인 자체가 이름에 기대고 있으면 깨진 순간 스크립트가
+    // 통째로 죽어 나머지 검사가 전부 안 돌았다 — 한 가지 고장이 눈 전체를 가렸다.
+    await page.locator('input[autocomplete="username"]').fill(USER);
+    await page.locator('input[autocomplete="current-password"]').fill(PASS);
     await page.getByRole("button", { name: "로그인" }).click();
     await page.waitForURL(BASE + "/", { timeout: 15000 });
   }
@@ -455,8 +518,11 @@ for (const { w, h, tag } of WIDTHS) {
   const page = await ctx.newPage();
   if (USER && PASS) {
     await page.goto(BASE + "/login");
-    await page.getByRole("textbox", { name: "아이디" }).fill(USER);
-    await page.getByRole("textbox", { name: "비밀번호" }).fill(PASS);
+    // 로그인은 **이름이 아니라 구조로** 짚는다. 칸 이름이 깨지는 것이 바로 이 검사가
+    // 잡으려는 것인데, 로그인 자체가 이름에 기대고 있으면 깨진 순간 스크립트가
+    // 통째로 죽어 나머지 검사가 전부 안 돌았다 — 한 가지 고장이 눈 전체를 가렸다.
+    await page.locator('input[autocomplete="username"]').fill(USER);
+    await page.locator('input[autocomplete="current-password"]').fill(PASS);
     await page.getByRole("button", { name: "로그인" }).click();
     await page.waitForURL(BASE + "/", { timeout: 15000 });
   }
@@ -522,7 +588,7 @@ await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

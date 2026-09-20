@@ -46,7 +46,6 @@ export function LoginForm() {
         <Input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="아이디"
           autoComplete="username"
           autoFocus
           required
@@ -57,7 +56,6 @@ export function LoginForm() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="비밀번호"
           autoComplete="current-password"
           required
         />

@@ -305,6 +305,7 @@ function NoteCard({
       {/* 쪽지 하나에 아이콘 넷이면 네 장짜리 게시판에 열여섯 개가 뜬다.
           폰에서는 `…` 하나로 모으고, 데스크톱에서는 손을 얹었을 때만(ItemActions). */}
       <ItemActions
+        quiet
         className="right-2.5 top-2.5 z-[6]"
         actions={[
           {
@@ -471,7 +472,8 @@ function EmojiPicker({
             aria-label={`이모지 ${e}`}
             aria-pressed={active}
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full text-lg transition active:scale-90",
+              // 폰에서 40px. 이모지 열여섯이 촘촘히 붙어 있어 36px 로는 옆 것이 눌린다.
+              "flex h-10 w-10 items-center justify-center rounded-full text-lg transition active:scale-90 lg:h-9 lg:w-9",
               active
                 ? "bg-sunken ring-2 ring-primary"
                 : "hover:bg-sunken"
@@ -503,6 +505,10 @@ function AuthorPicker({
           onClick={() => onChange(m.id)}
           aria-pressed={value === m.id}
           aria-label={m.name}
+          // 고르는 아바타는 **보이는 크기 자체를** 40px 로 둔다.
+          // `.tap-target`(보이지 않게 넓히기)은 여기서 안 통한다 — 아바타 넷이
+          // 6px 간격으로 붙어 있어 넓힌 영역끼리 겹치고, 나중에 그려진 형제가
+          // 앞엣것을 덮어 실제로 눌리는 폭이 32px 로 남았다. 검사가 그렇게 잡아냈다.
           className={cn(
             "rounded-full transition",
             value === m.id
@@ -510,7 +516,7 @@ function AuthorPicker({
               : "opacity-50 hover:opacity-100"
           )}
         >
-          <Avatar emoji={m.emoji} color={m.color} name={m.name} size="sm" />
+          <Avatar emoji={m.emoji} color={m.color} name={m.name} size="md" />
         </button>
       ))}
     </div>

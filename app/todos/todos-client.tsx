@@ -680,6 +680,7 @@ function TodoRow({
 
       <ItemActions
         inline
+        quiet
         actions={[
           { label: "수정", icon: Pencil, onClick: () => onEdit(todo) },
           { label: "삭제", icon: Trash2, onClick: () => onRemove(todo.id), danger: true },

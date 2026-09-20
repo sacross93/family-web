@@ -1148,6 +1148,7 @@ function ChecklistSection({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add(text)}
           placeholder="직접 추가…"
+          aria-label={`${title} 직접 추가`}
           className="flex-1"
         />
         <Button variant="soft" onClick={() => add(text)} disabled={!text.trim()}>

@@ -117,6 +117,7 @@ export function ShoppingClient({
         <div className="flex gap-2">
           <Input
             placeholder="무엇을 살까요? (예: 우유)"
+            aria-label="살 것"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addItem()}
@@ -124,6 +125,7 @@ export function ShoppingClient({
           />
           <Input
             placeholder="수량"
+            aria-label="수량"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addItem()}

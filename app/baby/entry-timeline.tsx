@@ -107,6 +107,7 @@ export function EntryTimeline({
                       {e.mood && <span className="text-lg leading-none">{e.mood}</span>}
                       <ItemActions
                         inline
+                        quiet
                         className="ml-auto"
                         actions={[
                           { label: "고치기", icon: Pencil, onClick: () => onEdit(e) },

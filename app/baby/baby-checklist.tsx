@@ -90,6 +90,7 @@ export function BabyChecklist({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="직접 추가…"
+            aria-label="준비물 직접 추가"
             className="flex-1"
           />
           <Button variant="soft" onClick={add} disabled={!text.trim()} aria-label="추가">

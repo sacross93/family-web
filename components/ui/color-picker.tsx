@@ -27,7 +27,7 @@ export function ColorPicker({
             aria-pressed={active}
             title={PALETTE[key].label}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-90",
+              "flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 active:scale-90 lg:h-8 lg:w-8",
               PALETTE[key].dot,
               active ? "ring-2 ring-ink/40 ring-offset-2" : "hover:scale-110"
             )}
