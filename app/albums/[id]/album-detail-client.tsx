@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import {
   Button,
-  IconButton,
+  ItemActions,
   Tag,
   EmptyState,
   Modal,
@@ -129,7 +129,7 @@ export function AlbumDetailClient({
       {/* 앨범 헤더 */}
       <div
         className={cn(
-          "relative mb-7 overflow-hidden rounded-3xl border border-line bg-gradient-to-br p-6 shadow-sm sm:p-8",
+          "relative mb-7 overflow-hidden rounded-3xl border border-line bg-gradient-to-br p-6 shadow-sm sm:p-8 group",
           pal.gradient
         )}
       >
@@ -167,24 +167,16 @@ export function AlbumDetailClient({
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 gap-1">
-            <IconButton
-              variant="surface"
-              size="sm"
-              aria-label="앨범 수정"
-              onClick={() => setShowEdit(true)}
-            >
-              <Pencil className="h-4 w-4" />
-            </IconButton>
-            <IconButton
-              variant="surface"
-              size="sm"
-              aria-label="앨범 삭제"
-              onClick={() => setShowDelete(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </IconButton>
-          </div>
+          {/* 아이콘 둘이 제목과 같은 줄을 먹어 폰에서 앨범 이름이 낱말 가운데서 끊겼다.
+              다른 상세 화면(계획·게시판)과 같은 `…` 로 모은다. */}
+          <ItemActions
+            inline
+            className="shrink-0"
+            actions={[
+              { label: "앨범 수정", icon: Pencil, onClick: () => setShowEdit(true) },
+              { label: "앨범 삭제", icon: Trash2, onClick: () => setShowDelete(true), danger: true },
+            ]}
+          />
         </div>
       </div>
 

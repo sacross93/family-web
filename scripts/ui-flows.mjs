@@ -17,12 +17,15 @@
 
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+import { writeFileSync, unlinkSync } from "node:fs";
 
 const BASE = process.argv[2] || "http://localhost:3000";
 const USER = process.argv[3] || process.env.AUDIT_USER;
 const PASS = process.argv[4] || process.env.AUDIT_PASS;
 const MARK = "포동UI점검";
+// 사진 올리기 시험용 8×8 PNG. 파일을 안 남기려고 그때그때 만든다.
+const IMG = join(tmpdir(), "podong-ui-flows.png");
 
 if (!USER || !PASS) {
   console.error("사용법: node scripts/ui-flows.mjs [기준URL] <아이디> <비밀번호>");
@@ -71,6 +74,15 @@ if (!pw) {
 }
 const { chromium } = await import(pw);
 
+// 사진 올리기 시험용 8×8 PNG 를 임시로 만든다.
+writeFileSync(
+  IMG,
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAJUlEQVR42mNkYPhfz0AEYBxVSF+FjAxkKmRkGFVIX4WMDGQqBAA3+wH7ZxbqrQAAAABJRU5ErkJggg==",
+    "base64"
+  )
+);
+
 const browser = await chromium.launch({ executablePath: findChromium() });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page = await ctx.newPage();
@@ -80,7 +92,9 @@ page.on("console", (m) => m.type() === "error" && errs.push(m.text().slice(0, 11
 page.on("dialog", (d) => d.accept());
 
 let failed = 0;
+let total = 0;
 const step = async (name, fn) => {
+  total++;
   try {
     await fn();
     console.log("  ✓", name);
@@ -262,7 +276,140 @@ await step("계획 지우기", async () => {
   if ((await text()).includes(MARK)) throw new Error("지웠는데 남아 있다");
 });
 
+
+console.log("앨범");
+await page.goto(BASE + "/albums", { waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+await step("앨범 만들기", async () => {
+  await page.getByRole("button", { name: /새 앨범|첫 앨범/ }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByPlaceholder(/앨범 이름|예:/).first().fill(MARK + "앨범");
+  await page.getByRole("button", { name: /^만들기$|^추가$|^저장$/ }).last().click();
+  await page.waitForTimeout(1300);
+  if (!(await text()).includes(MARK + "앨범")) throw new Error("만든 앨범이 안 보인다");
+});
+await step("앨범 열기", async () => {
+  await page.getByText(MARK + "앨범").first().click();
+  await page.waitForTimeout(1300);
+  if (!page.url().includes("/albums/")) throw new Error("상세로 안 간다: " + page.url());
+});
+await step("사진 올리기", async () => {
+  await page.getByRole("button", { name: /사진 추가/ }).first().click();
+  await page.waitForTimeout(700);
+  await page.locator('input[type="file"]').first().setInputFiles(IMG);
+  await page.waitForTimeout(2500);
+  const imgs = await page.evaluate(() => [...document.querySelectorAll("img")].filter(i => /uploads|blob/.test(i.src)).length);
+  if (!imgs) throw new Error("올린 사진이 안 보인다");
+});
+await step("새로고침해도 사진이 남아 있다", async () => {
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1200);
+  const imgs = await page.evaluate(() => [...document.querySelectorAll("img")].filter(i => /uploads|blob/.test(i.src)).length);
+  if (!imgs) throw new Error("새로고침하니 사라졌다");
+});
+await step("앨범 지우기", async () => {
+  await page.getByRole("button", { name: "더보기" }).first().click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-item-menu] button:has-text("앨범 삭제")').click();
+  await page.waitForTimeout(600);
+  const confirm = page.getByRole("button", { name: /^삭제$|지우기|확인/ }).last();
+  if (await confirm.count()) await confirm.click();
+  await page.waitForTimeout(1500);
+  await page.goto(BASE + "/albums", { waitUntil: "networkidle" });
+  if ((await text()).includes(MARK + "앨범")) throw new Error("지웠는데 남아 있다");
+});
+
+console.log("할일");
+await page.goto(BASE + "/todos", { waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+await step("할일 추가", async () => {
+  await page.getByRole("button", { name: /할일 추가/ }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByPlaceholder(/할일|예:/).first().fill(MARK + "우체국");
+  await page.getByRole("button", { name: /^추가$|^저장$/ }).last().click();
+  await page.waitForTimeout(1200);
+  if (!(await text()).includes(MARK + "우체국")) throw new Error("안 보인다");
+});
+await step("체크하면 줄이 그어진다", async () => {
+  await page.getByRole("checkbox", { name: MARK + "우체국" }).click();
+  await page.waitForTimeout(900);
+  const struck = await page.evaluate((m) => {
+    const el = [...document.querySelectorAll("*")].find(e => e.children.length === 0 && (e.textContent||"").trim() === m);
+    return el ? getComputedStyle(el).textDecorationLine.includes("line-through") : false;
+  }, MARK + "우체국");
+  if (!struck) throw new Error("체크해도 줄이 안 그어진다");
+});
+await step("할일 지우기", async () => {
+  await page.getByRole("button", { name: "더보기" }).first().click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-item-menu] button:has-text("삭제")').click();
+  await page.waitForTimeout(1200);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  if ((await text()).includes(MARK + "우체국")) throw new Error("서버엔 안 지워졌다");
+});
+
+console.log("캘린더");
+await page.goto(BASE + "/calendar", { waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+await step("일정 추가", async () => {
+  await page.getByRole("button", { name: /일정 추가/ }).first().click();
+  await page.waitForTimeout(700);
+  await page.getByPlaceholder(/제목|예:/).first().fill(MARK + "검진");
+  await page.getByRole("button", { name: /^추가$|^저장$/ }).last().click();
+  await page.waitForTimeout(1300);
+  if (!(await text()).includes(MARK + "검진")) throw new Error("목록에 안 보인다");
+});
+await step("목록/달력 전환", async () => {
+  await page.getByRole("button", { name: "달력" }).click();
+  await page.waitForTimeout(600);
+  if (!(await text()).includes("일")) throw new Error("달력이 안 나온다");
+  await page.getByRole("button", { name: "목록" }).click();
+  await page.waitForTimeout(500);
+  if (!(await text()).includes(MARK + "검진")) throw new Error("목록으로 안 돌아온다");
+});
+await step("일정 지우기 — 목록에서 바로", async () => {
+  const idx = await page.evaluate((m) => [...document.querySelectorAll("li")].findIndex(n => (n.textContent||"").includes(m)), MARK + "검진");
+  await page.locator("li").nth(idx).getByRole("button", { name: "더보기" }).click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-item-menu] button:has-text("삭제")').click();
+  await page.waitForTimeout(1300);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  if ((await text()).includes(MARK + "검진")) throw new Error("서버엔 안 지워졌다");
+});
+
+console.log("기념일");
+await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+await step("기념일 추가 — D-day 가 계산된다", async () => {
+  await page.getByRole("button", { name: /기념일 추가|첫 기념일/ }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByPlaceholder(/아빠 생일|제목/).first().fill(MARK + "기념");
+  await page.locator('input[type="date"]').first().fill("2027-01-01");
+  await page.getByRole("button", { name: /^추가$|^저장$/ }).last().click();
+  await page.waitForTimeout(1300);
+  const t = await text();
+  if (!t.includes(MARK + "기념")) throw new Error("안 보인다");
+  if (!/D-\d+/.test(t)) throw new Error("D-day 가 안 나온다");
+});
+await step("기념일 지우기", async () => {
+  const idx = await page.evaluate((m) => [...document.querySelectorAll("[class*='grid'] > *")].findIndex(n => (n.textContent||"").includes(m)), MARK + "기념");
+  await page.locator("[class*='grid'] > *").nth(idx).getByRole("button", { name: "더보기" }).click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-item-menu] button:has-text("삭제")').click();
+  await page.waitForTimeout(1300);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  if ((await text()).includes(MARK + "기념")) throw new Error("서버엔 안 지워졌다");
+});
+
 console.log(errs.length ? "\n콘솔 오류: " + JSON.stringify([...new Set(errs)]) : "\n콘솔 오류 없음");
-console.log(failed === 0 ? "✓ 열여섯 단계 모두 통과" : `⚠ ${failed}단계 실패`);
+console.log(failed === 0 ? `✓ ${total}단계 모두 통과` : `⚠ ${failed}단계 실패`);
 if (failed) process.exitCode = 1;
 await browser.close();
+try {
+  unlinkSync(IMG);
+} catch {
+  /* 지워져 있어도 상관없다 */
+}

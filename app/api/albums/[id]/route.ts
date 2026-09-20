@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { removeUploads } from "@/lib/uploads";
 
 export async function PATCH(
   req: NextRequest,
@@ -25,7 +26,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  // 지울 주소를 먼저 챙긴다 — 행이 사라지면 어느 파일인지 알 수 없다.
+  const album = await prisma.album.findUnique({
+    where: { id },
+    select: { coverUrl: true, photos: { select: { url: true } } },
+  });
   // photos 는 스키마 onDelete:Cascade 로 함께 삭제됨
   await prisma.album.delete({ where: { id } });
+  await removeUploads([album?.coverUrl, ...(album?.photos.map((p) => p.url) ?? [])]);
   return NextResponse.json({ ok: true });
 }

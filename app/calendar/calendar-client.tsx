@@ -35,6 +35,7 @@ import {
   ColorPicker,
   EmptyState,
   Segmented,
+  ItemActions,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { kDate, kDateRelative, kTime } from "@/lib/date";
@@ -375,11 +376,16 @@ export function CalendarClient({
             ) : (
               <ul>
                 {upcoming.map((ev) => (
-                  <li key={ev.id}>
+                  // 수정·삭제가 달력 격자의 날짜 모달 안에만 있었다. 폰 기본이 목록이 된 뒤로는
+                  // 이 줄에서 지울 방법이 없어, 지우려면 달력으로 바꿔 날짜를 찾아 들어가야 했다.
+                  <li
+                    key={ev.id}
+                    className="group flex items-center gap-1 border-b border-line pr-2 last:border-0"
+                  >
                     <button
                       type="button"
                       onClick={() => openEdit(ev)}
-                      className="flex w-full items-start gap-2.5 border-b border-line px-4 py-3 text-left transition last:border-0 hover:bg-sunken/60"
+                      className="flex min-w-0 flex-1 items-start gap-2.5 px-4 py-3 text-left transition hover:bg-sunken/60"
                     >
                       <span
                         className={cn(
@@ -398,6 +404,13 @@ export function CalendarClient({
                         </span>
                       </span>
                     </button>
+                    <ItemActions
+                      inline
+                      actions={[
+                        { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
+                        { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },
+                      ]}
+                    />
                   </li>
                 ))}
               </ul>
