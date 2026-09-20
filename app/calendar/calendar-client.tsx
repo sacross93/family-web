@@ -36,6 +36,7 @@ import {
   EmptyState,
   Segmented,
   ItemActions,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { kDate, kDateRelative, kTime } from "@/lib/date";
@@ -85,6 +86,7 @@ export function CalendarClient({
 }: {
   initialEvents: CalendarEvent[];
 }) {
+  const { say } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(new Date()));
 
@@ -207,7 +209,10 @@ export function CalendarClient({
     setEvents((p) => p.filter((e) => e.id !== id));
     setDayOpen(false);
     const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
-    if (!res.ok) setEvents(prev);
+    if (!res.ok) {
+      setEvents(prev);
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   const monthLabel = format(cursor, "yyyy년 M월", { locale: ko });

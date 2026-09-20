@@ -79,6 +79,13 @@ describe("글자 대비", () => {
     }
   });
 
+  it("오류 글자는 오류 배경 위에서 AA 를 넘는다", () => {
+    // `danger` 를 글자로 쓰면 2.84:1 이라 안 읽힌다 — 글자에는 `danger-ink`.
+    expect(contrast(token("danger-ink"), token("danger-soft"))).toBeGreaterThanOrEqual(4.5);
+    // `danger` 자체는 아이콘·테두리용(3:1).
+    expect(contrast(token("danger"), token("surface"))).toBeGreaterThanOrEqual(3);
+  });
+
   it("파스텔 태그는 제 짝 배경 위에서 3:1 을 넘는다", () => {
     // Tag 는 `bg-<색>-soft` 위에 `text-<색>-ink` 로 그려진다.
     for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {

@@ -23,6 +23,7 @@ import {
   Textarea,
   ColorPicker,
   Spinner,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ export function AlbumDetailClient({
 }: {
   initialAlbum: AlbumWithPhotos;
 }) {
+  const { say } = useToast();
   const router = useRouter();
 
   const [album, setAlbum] = useState<Album>(initialAlbum);
@@ -87,7 +89,10 @@ export function AlbumDetailClient({
     const prev = photos;
     setPhotos((p) => p.filter((x) => x.id !== id));
     const res = await fetch(`/api/photos/${id}`, { method: "DELETE" });
-    if (!res.ok) setPhotos(prev);
+    if (!res.ok) {
+      setPhotos(prev);
+      say("사진을 못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   // ── 앨범 삭제 ──

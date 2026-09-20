@@ -10,7 +10,7 @@ import { Decorations } from "@/components/decorations";
 import { AgentFab } from "@/components/agent/agent-fab";
 import { BottomTabs } from "@/components/bottom-tabs";
 import { ShellProvider } from "@/components/shell-context";
-import { useFocusTrap } from "@/components/ui";
+import { ToastProvider, useFocusTrap } from "@/components/ui";
 import { isNavActive, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
 import type { SessionUser } from "@/lib/session";
@@ -213,9 +213,8 @@ export function AppShell({
   const current = nav.find((n) => isNavActive(pathname, n.href));
 
   return (
-    <ShellProvider
-      value={{ titleInTopBar: !!current && current.href !== "/" }}
-    >
+    <ShellProvider value={{ titleInTopBar: !!current && current.href !== "/" }}>
+      <ToastProvider>
       <div className="min-h-dvh">
         {/* ── 데스크톱 사이드바 ── */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 border-r border-line bg-surface/80 px-4 py-6 backdrop-blur-sm lg:flex">
@@ -347,6 +346,7 @@ export function AppShell({
         {/* 물어보기는 main 바깥에 — 안에 두면 lg:pl-[264px] 때문에 위치가 밀린다. */}
         {agentEnabled && <AgentFab open={asking} onClose={() => setAsking(false)} />}
       </div>
+      </ToastProvider>
     </ShellProvider>
   );
 }

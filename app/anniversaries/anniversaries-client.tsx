@@ -18,6 +18,7 @@ import {
   Checkbox,
   ColorPicker,
   ItemActions,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ export function AnniversariesClient({
   initialItems: AnniversaryWithMember[];
   members: FamilyMember[];
 }) {
+  const { say } = useToast();
   const [items, setItems] = useState(initialItems);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AnniversaryWithMember | null>(null);
@@ -171,6 +173,9 @@ export function AnniversariesClient({
           setModalOpen(false);
         }
       }
+    } catch {
+      // 네트워크가 끊기면 fetch 는 거부된다 — catch 가 없으면 조용히 사라진다.
+      say("기념일을 못 저장했어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }
@@ -180,8 +185,11 @@ export function AnniversariesClient({
     const prev = items;
     setItems((p) => p.filter((i) => i.id !== id));
     if (editing?.id === id) setModalOpen(false);
-    const res = await fetch(`/api/anniversaries/${id}`, { method: "DELETE" });
-    if (!res.ok) setItems(prev);
+    const res = await fetch(`/api/anniversaries/${id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      setItems(prev);
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   return (

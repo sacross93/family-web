@@ -27,6 +27,7 @@ import {
   Tag,
   Modal,
   EmptyState,
+  useToast,
 } from "@/components/ui";
 import { type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ export function TodosClient({
   initialTodos: TodoWithMember[];
   members: FamilyMember[];
 }) {
+  const { say } = useToast();
   const [todos, setTodos] = useState<TodoWithMember[]>(initialTodos);
   const [selected, setSelected] = useState<Date>(() => startOfDay(new Date()));
   const [permission, setPermission] = useState<Perm>("default");
@@ -268,6 +270,9 @@ export function TodosClient({
           }
         }
       }
+    } catch {
+      // 네트워크가 끊기면 fetch 는 거부된다 — catch 가 없으면 조용히 사라진다.
+      say("할일을 못 저장했어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }
@@ -290,7 +295,10 @@ export function TodosClient({
     const prev = todos;
     setTodos((p) => p.filter((t) => t.id !== id));
     const res = await fetch(`/api/todos/${id}`, { method: "DELETE" });
-    if (!res.ok) setTodos(prev);
+    if (!res.ok) {
+      setTodos(prev);
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   // ── 렌더 ────────────────────────────────────

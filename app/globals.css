@@ -57,8 +57,10 @@
 
   /* ── 상태색 ── */
   --color-success: #348a63;
-  --color-danger: #e0607e;
+  --color-danger: #e0607e; /* 아이콘·테두리용 (흰 배경 3.0:1) */
   --color-danger-soft: #fce4ea;
+  /* danger-soft 위에 얹는 글자. --color-danger 를 글자로 쓰면 2.84:1 로 안 읽힌다. */
+  --color-danger-ink: #a6475d; /* danger-soft 위 4.7:1 */
 
   /* ── 모서리 ── */
   --radius-sm: 0.625rem; /* 10px */

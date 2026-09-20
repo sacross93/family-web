@@ -13,6 +13,7 @@ import {
   IconButton,
   EmptyState,
   Tag,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ export function ShoppingClient({
   const [addedById, setAddedById] = useState<string>(members[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
+  const { say } = useToast();
 
   const addedBy = members.find((m) => m.id === addedById);
   const open = items.filter((i) => !i.done);
@@ -41,6 +43,8 @@ export function ShoppingClient({
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
+      // 네트워크가 끊기면 fetch 는 **거부된다** — 응답이 안 오는 게 아니라 예외다.
+      // catch 가 없으면 조용히 사라져서 "눌렀는데 아무 일도 없다" 가 된다.
       const res = await fetch("/api/shopping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,7 +55,12 @@ export function ShoppingClient({
         setItems((prev) => [...prev, created]);
         setName("");
         setQuantity("");
+      } else {
+        // 조용히 아무 일도 안 일어나면 자기가 잘못 눌렀다고 생각한다.
+        say("못 담았어요. 잠시 후 다시 해 주세요.", "error");
       }
+    } catch {
+      say("못 담았어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }
@@ -66,14 +75,18 @@ export function ShoppingClient({
       body: JSON.stringify({ done: next }),
     }).catch(() => {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: item.done } : i)));
+      say("표시를 못 바꿨어요. 잠시 후 다시 해 주세요.", "error");
     });
   }
 
   async function remove(id: string) {
     const prev = items;
     setItems((p) => p.filter((i) => i.id !== id));
-    const res = await fetch(`/api/shopping/${id}`, { method: "DELETE" });
-    if (!res.ok) setItems(prev);
+    const res = await fetch(`/api/shopping/${id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      setItems(prev);
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   async function clearDone() {

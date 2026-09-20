@@ -12,6 +12,7 @@ import {
   useConfirm,
   EmptyState,
   Modal,
+  useToast,
 } from "@/components/ui";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
@@ -68,6 +69,7 @@ export function BoardClient({
   const [editing, setEditing] = useState<BoardPostWithAuthor | null>(null);
   const [decoratingId, setDecoratingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const { say } = useToast();
 
   const pinnedCount = posts.filter((p) => p.pinned).length;
 
@@ -91,7 +93,11 @@ export function BoardClient({
         setContent("");
         setComposing(false);
         setEmoji("💬");
+      } else {
+        say("쪽지를 못 붙였어요. 잠시 후 다시 해 주세요.", "error");
       }
+    } catch {
+      say("쪽지를 못 붙였어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }
@@ -113,6 +119,7 @@ export function BoardClient({
           prev.map((p) => (p.id === post.id ? { ...p, pinned: post.pinned } : p))
         )
       );
+      say("고정을 못 바꿨어요. 잠시 후 다시 해 주세요.", "error");
     }
   }
 
@@ -125,7 +132,10 @@ export function BoardClient({
     const res = await fetch(`/api/board/${id}`, { method: "DELETE" }).catch(
       () => null
     );
-    if (!res || !res.ok) setPosts(prev);
+    if (!res || !res.ok) {
+      setPosts(prev);
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   function applyEdit(updated: BoardPostWithAuthor) {

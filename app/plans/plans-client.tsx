@@ -15,6 +15,7 @@ import {
   Textarea,
   Select,
   ColorPicker,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { kDateShort } from "@/lib/date";
@@ -35,6 +36,7 @@ function periodLabel(plan: PlanWithCount): string | null {
 }
 
 export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] }) {
+  const { say } = useToast();
   const [plans, setPlans] = useState(initialPlans);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -84,6 +86,9 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
         resetForm();
         setOpen(false);
       }
+    } catch {
+      // 네트워크가 끊기면 fetch 는 거부된다 — catch 가 없으면 조용히 사라진다.
+      say("계획을 못 만들었어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }

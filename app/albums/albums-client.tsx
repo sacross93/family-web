@@ -14,6 +14,7 @@ import {
   Input,
   Textarea,
   ColorPicker,
+  useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export function AlbumsClient({
 }: {
   initialAlbums: AlbumWithCount[];
 }) {
+  const { say } = useToast();
   const [albums, setAlbums] = useState<AlbumWithCount[]>(initialAlbums);
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -73,6 +75,9 @@ export function AlbumsClient({
         setShowCreate(false);
         resetForm();
       }
+    } catch {
+      // 네트워크가 끊기면 fetch 는 거부된다 — catch 가 없으면 조용히 사라진다.
+      say("앨범을 못 만들었어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }

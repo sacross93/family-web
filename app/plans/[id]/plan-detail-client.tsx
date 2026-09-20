@@ -32,6 +32,7 @@ import {
   ColorPicker,
   Segmented,
   useConfirm,
+  useToast,
 } from "@/components/ui";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
@@ -120,6 +121,7 @@ function periodLabel(plan: Plan): string | null {
 }
 
 export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
+  const { say } = useToast();
   const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const [plan, setPlan] = useState(initialPlan);
@@ -263,7 +265,10 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     const prev = plan.items;
     setPlan((p) => ({ ...p, items: p.items.filter((x) => x.id !== id) }));
     const res = await fetch(`/api/plan-items/${id}`, { method: "DELETE" });
-    if (!res.ok) setPlan((p) => ({ ...p, items: prev }));
+    if (!res.ok) {
+      setPlan((p) => ({ ...p, items: prev }));
+      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+    }
   }
 
   // ── 준비 체크리스트 (여행 전 준비 / 준비물) ───
