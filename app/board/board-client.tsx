@@ -8,7 +8,7 @@ import {
   Button,
   ColorPicker,
   Avatar,
-  IconButton,
+  ItemActions,
   EmptyState,
   Modal,
 } from "@/components/ui";
@@ -262,44 +262,26 @@ function NoteCard({
         </span>
       )}
 
-      {/* 호버 액션 */}
-      <div
-        className={cn(
-          "absolute right-2.5 top-2.5 z-[6] flex gap-1 transition lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
-          decorating ? "opacity-100" : "opacity-100 lg:opacity-0"
-        )}
-      >
-        <IconButton
-          variant="surface"
-          size="sm"
-          aria-label="사진 꾸미기"
-          onClick={onToggleDecorate}
-          className={decorating ? "text-primary" : undefined}
-        >
-          <Sparkles className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          variant="surface"
-          size="sm"
-          aria-label={post.pinned ? "고정 해제" : "맨 위에 고정"}
-          onClick={onPin}
-          className={post.pinned ? "text-primary" : undefined}
-        >
-          {post.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-        </IconButton>
-        <IconButton variant="surface" size="sm" aria-label="수정" onClick={onEdit}>
-          <Pencil className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          variant="surface"
-          size="sm"
-          aria-label="삭제"
-          onClick={onRemove}
-          className="hover:text-danger"
-        >
-          <Trash2 className="h-4 w-4" />
-        </IconButton>
-      </div>
+      {/* 쪽지 하나에 아이콘 넷이면 네 장짜리 게시판에 열여섯 개가 뜬다.
+          폰에서는 `…` 하나로 모으고, 데스크톱에서는 손을 얹었을 때만(ItemActions). */}
+      <ItemActions
+        className="right-2.5 top-2.5 z-[6]"
+        actions={[
+          {
+            // 아이콘만으로는 지금 켜져 있는지 알 수 없다 — 이름이 상태를 말한다.
+            label: decorating ? "꾸미기 마치기" : "사진 꾸미기",
+            icon: Sparkles,
+            onClick: onToggleDecorate,
+          },
+          {
+            label: post.pinned ? "고정 해제" : "맨 위에 고정",
+            icon: post.pinned ? PinOff : Pin,
+            onClick: onPin,
+          },
+          { label: "수정", icon: Pencil, onClick: onEdit },
+          { label: "삭제", icon: Trash2, onClick: onRemove, danger: true },
+        ]}
+      />
 
       {/* 내용 + 사진 꾸미기 표면 */}
       <DecorationSurface

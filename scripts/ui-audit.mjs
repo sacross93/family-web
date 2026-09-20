@@ -14,7 +14,6 @@
 // playwright 는 이 저장소의 의존성이 아니다(브라우저 내려받기가 무겁다).
 // 이미 깔린 것을 찾아 쓰고, 없으면 `npx playwright install chromium` 을 알려 준다.
 
-import { execSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";

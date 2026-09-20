@@ -7,7 +7,6 @@ import {
   Card,
   CardTitle,
   Button,
-  IconButton,
   Tag,
   Avatar,
   EmptyState,
@@ -18,6 +17,7 @@ import {
   Select,
   Checkbox,
   ColorPicker,
+  ItemActions,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -96,6 +96,9 @@ export function AnniversariesClient({
     .sort(compareDecorated);
 
   const featured = decorated.filter((x) => x.d.days >= 0).slice(0, 3);
+  // 위에 크게 실은 것은 아래에서 뺀다 — 6건 보려고 두 벌을 스크롤하지 않게.
+  const featuredIds = new Set(featured.map((x) => x.item.id));
+  const rest = decorated.filter((x) => !featuredIds.has(x.item.id));
 
   function openAdd() {
     setEditing(null);
@@ -227,16 +230,18 @@ export function AnniversariesClient({
             </section>
           )}
 
-          {/* 전체 기념일 */}
+          {/* 그 밖의 날들 — featured 에 이미 실은 3건은 여기서 뺀다.
+              예전에는 `decorated` 를 통째로 다시 그려 같은 생일이 위아래로 두 번 나왔다. */}
+          {rest.length > 0 && (
           <section>
             <div className="mb-3 flex items-center gap-2">
-              <CardTitle>전체 기념일</CardTitle>
+              <CardTitle>{featured.length > 0 ? "그 밖의 날들" : "전체 기념일"}</CardTitle>
               <Tag color="lavender" className="font-num">
-                {items.length}
+                {rest.length}
               </Tag>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {decorated.map(({ item, d }) => (
+              {rest.map(({ item, d }) => (
                 <ListCard
                   key={item.id}
                   item={item}
@@ -247,6 +252,7 @@ export function AnniversariesClient({
               ))}
             </div>
           </section>
+          )}
         </div>
       )}
 
@@ -548,13 +554,11 @@ function CardActions({
   onRemove: () => void;
 }) {
   return (
-    <div className="absolute right-3 top-3 flex gap-1 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-      <IconButton variant="surface" size="sm" aria-label="수정" onClick={onEdit}>
-        <Pencil className="h-3.5 w-3.5" />
-      </IconButton>
-      <IconButton variant="danger" size="sm" aria-label="삭제" onClick={onRemove}>
-        <Trash2 className="h-3.5 w-3.5" />
-      </IconButton>
-    </div>
+    <ItemActions
+      actions={[
+        { label: "수정", icon: Pencil, onClick: onEdit },
+        { label: "삭제", icon: Trash2, onClick: onRemove, danger: true },
+      ]}
+    />
   );
 }

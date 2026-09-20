@@ -13,3 +13,4 @@ export { IconButton } from "./icon-button";
 export { Modal } from "./modal";
 export { Spinner, LoadingBlock } from "./spinner";
 export { Segmented } from "./segmented";
+export { ItemActions, type ItemAction } from "./item-actions";
