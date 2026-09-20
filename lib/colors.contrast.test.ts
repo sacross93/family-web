@@ -129,9 +129,13 @@ describe("글자 대비", () => {
     // 사이드바·상단바·탭바·히어로가 전부 이 색 위에 있다. 틀이 연한 로즈로 밝아졌어도
     // ink 세 벌을 그대로 옮겨 쓸 수는 없다 — `ink-faint` 는 이 로즈 위에서 4.34:1 로
     // AA 에 못 미친다. `chrome-faint`(5.2)가 따로 있는 이유가 그것이다.
+    // 히어로는 평평한 로즈가 아니라 **로즈 → 복숭아 기울기**다. 글자가 양 끝 어디에
+    // 놓일지 모르므로 두 끝에서 다 재야 한다 — 한쪽만 재면 반대쪽에서 흐려진다.
     for (const fg of ["chrome-ink", "chrome-faint"]) {
-      const r = contrast(token(fg), token("chrome"));
-      expect(r, `${fg} on chrome = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+      for (const bg of ["chrome", "peach-soft"]) {
+        const r = contrast(token(fg), token(bg));
+        expect(r, `${fg} on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
     // 두 단계가 구별돼야 위계가 산다.
     expect(contrast(token("chrome-ink"), token("chrome"))).toBeGreaterThan(

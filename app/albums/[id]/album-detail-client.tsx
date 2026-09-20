@@ -131,7 +131,7 @@ export function AlbumDetailClient({
       </Link>
 
       {/* 앨범 헤더 — 다른 상세 화면(아기·계획)과 같은 진한 판. */}
-      <section className="on-chrome relative mb-7 overflow-hidden rounded-xl bg-chrome p-6 sm:p-8">
+      <section className="on-chrome relative mb-7 overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
         {album.coverUrl && (
           <>
             <img

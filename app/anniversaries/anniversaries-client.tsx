@@ -418,7 +418,7 @@ function FeaturedCard({
   const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
 
   return (
-    <section className="on-chrome relative rounded-xl bg-chrome p-6 sm:p-8">
+    <section className="on-chrome relative rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
       <CardActions onEdit={onEdit} onRemove={onRemove} />
 
       <div className="flex items-center gap-2.5 pr-10">

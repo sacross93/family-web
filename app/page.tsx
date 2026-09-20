@@ -242,7 +242,7 @@ export default async function HomePage() {
           사진은 글자 **옆에** 놓는다. 예전엔 `absolute -right-4 -top-4` 라서
           폰(390px)에서 인사말 두 줄째를 통째로 덮었다 — 실제 배포본에서 그랬다.
           나란히 놓으면 사진이 커지든 글자가 길어지든 겹칠 자리가 없다. */}
-      <section className="on-chrome flex items-start gap-4 rounded-xl bg-chrome p-6 sm:gap-8 sm:p-8">
+      <section className="on-chrome flex items-start gap-4 rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:gap-8 sm:p-8">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <p className="font-num text-sm font-semibold text-accent-ink">
             {kDate(new Date())}

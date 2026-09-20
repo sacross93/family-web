@@ -461,7 +461,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           예전 히어로는 파스텔 판 위에 제목·기간·장소·시차·설명을 다 쌓아 폰에서 450px 을
           차지했고, 정작 보러 온 체크리스트는 첫 화면에 한 줄도 안 보였다.
           진한 판으로 바꾸고 **준비 진행**을 여기로 올린다 — 열자마자 알고 싶은 것이 그거다. */}
-      <section className="on-chrome relative mb-6 rounded-xl bg-chrome p-5 sm:p-6">
+      <section className="on-chrome relative mb-6 rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-2xl">
             {plan.emoji}

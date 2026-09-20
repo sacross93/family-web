@@ -52,7 +52,7 @@ export function BabyHero({
   const pct = Math.round(p.progress * 100);
 
   return (
-    <section className="on-chrome relative overflow-hidden rounded-xl bg-chrome p-6 sm:p-8">
+    <section className="on-chrome relative overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
       <IconButton
         variant="ghost"
         size="sm"
