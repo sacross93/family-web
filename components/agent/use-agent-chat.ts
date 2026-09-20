@@ -54,12 +54,25 @@ async function readError(response: Response, fallback: string): Promise<string> 
   return fallback;
 }
 
+/** 여러 개가 동시에 돌 때는 개수로 말한다. 이름표를 늘어놓으면 폰에서 줄이 넘친다. */
+function summarizeTools(labels: string[]): string | null {
+  if (!labels.length) return null;
+  if (labels.length === 1) return labels[0];
+  return `${labels.length}곳을 살펴보는 중…`;
+}
+
 export function useAgentChat(): AgentChatState {
   const [chatId, setChatId] = useState<string | null>(null);
   // 말풍선과 "빈 줄을 미뤄 뒀는가"는 한 덩어리다 — 따로 두면 둘이 어긋난다.
   const [stream, setStream] = useState<StreamBubbles>(EMPTY_STREAM);
   const [running, setRunning] = useState(false);
-  const [toolLabel, setToolLabel] = useState<string | null>(null);
+  /**
+   * 지금 돌고 있는 도구들의 이름표.
+   *
+   * 하나만 두면 안 된다 — 모델은 한 턴에 여러 도구를 한꺼번에 부르고(주소 3개면 read_url 3번),
+   * 그러면 **첫 결과가 오는 순간 표시가 사라진다.** 나머지 둘은 아직 도는데도.
+   */
+  const [toolLabels, setToolLabels] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // send 가 useCallback 안에 갇혀 있어도 최신 값을 봐야 하는 것들.
@@ -99,7 +112,7 @@ export function useAgentChat(): AgentChatState {
   const idle = useCallback(() => {
     runningRef.current = false;
     setRunning(false);
-    setToolLabel(null);
+    setToolLabels([]);
   }, []);
 
   /** 서버 이벤트 하나를 화면에 반영한다. 스트림이 끝났으면 true. */
@@ -118,11 +131,12 @@ export function useAgentChat(): AgentChatState {
         }
         case "tool_start": {
           const label = event.label;
-          setToolLabel(typeof label === "string" && label ? label : null);
+          setToolLabels((prev) => [...prev, typeof label === "string" && label ? label : "살펴보는 중…"]);
           return false;
         }
         case "tool_result": {
-          setToolLabel(null);
+          // 결과는 부른 순서대로 온다(lib/agent/loop.ts) — 앞에서 하나씩 뺀다.
+          setToolLabels((prev) => prev.slice(1));
           const result = asOkResult(event.result);
           if (result) setStream((prev) => pushResult(prev, result));
           return false;
@@ -149,7 +163,7 @@ export function useAgentChat(): AgentChatState {
       const controller = claim();
       runningRef.current = true;
       setRunning(true);
-      setToolLabel(null);
+      setToolLabels([]);
       setError(null);
       // 보내자마자 자기 사진이 보여야 한다 — 올라간 주소를 그대로 말풍선에 싣는다.
       setStream((prev) => pushUser(prev, text, image?.url));
@@ -250,7 +264,7 @@ export function useAgentChat(): AgentChatState {
   );
 
   return useMemo(
-    () => ({ chatId, bubbles: stream.bubbles, running, toolLabel, error, send, stop, reset, load }),
-    [chatId, stream, running, toolLabel, error, send, stop, reset, load],
+    () => ({ chatId, bubbles: stream.bubbles, running, toolLabel: summarizeTools(toolLabels), error, send, stop, reset, load }),
+    [chatId, stream, running, toolLabels, error, send, stop, reset, load],
   );
 }

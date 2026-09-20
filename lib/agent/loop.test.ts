@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runAgent } from "@/lib/agent/loop";
+import { inWaves, readBudget, runAgent } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -364,5 +364,143 @@ describe("runAgent — 도구가 가져온 그림", () => {
     await drain(runAgent({ question: "발리?", provider: p, ctx, catalog: "" }));
     const toolMessage = p.calls[1].messages.find((m: AgentMessage) => m.role === "tool")!;
     expect(toolMessage.imageData).toBeUndefined();
+  });
+});
+
+describe("readBudget — 여러 곳을 읽을 때 몫 나누기", () => {
+  it("한 곳이면 예전 그대로", () => {
+    expect(readBudget(1, 6000)).toBe(6000);
+    expect(readBudget(0, 6000)).toBe(6000);
+  });
+
+  it("여러 곳이면 총량을 나눈다 — 5곳 × 6,000자면 한 턴이 터진다", () => {
+    expect(readBudget(2, 6000)).toBe(6000); // 12,000/2
+    expect(readBudget(3, 6000)).toBe(4000);
+    expect(readBudget(5, 6000)).toBe(2400);
+  });
+
+  it("아무리 많아도 바닥은 있다 — 너무 잘리면 읽으나 마나다", () => {
+    expect(readBudget(20, 6000)).toBe(1500);
+  });
+
+  it("설정값보다 많이 주지는 않는다", () => {
+    expect(readBudget(2, 1000)).toBe(1000);
+  });
+});
+
+describe("inWaves — 동시에 돌리되 순서는 지킨다", () => {
+  it("부른 순서대로 결과를 돌려준다", async () => {
+    const delays = [50, 10, 30, 5];
+    const out = await inWaves(delays, 4, async (ms) => {
+      await new Promise((r) => setTimeout(r, ms));
+      return ms;
+    });
+    expect(out).toEqual(delays); // 끝난 순서가 아니라 부른 순서
+  });
+
+  it("한 번에 열어 두는 수를 넘기지 않는다", async () => {
+    let live = 0;
+    let peak = 0;
+    await inWaves([1, 2, 3, 4, 5, 6, 7, 8], 3, async () => {
+      live += 1;
+      peak = Math.max(peak, live);
+      await new Promise((r) => setTimeout(r, 10));
+      live -= 1;
+      return null;
+    });
+    expect(peak).toBeLessThanOrEqual(3);
+  });
+
+  it("빈 목록도 안전하다", async () => {
+    expect(await inWaves([], 4, async () => 1)).toEqual([]);
+  });
+});
+
+describe("runAgent — 한 턴에 여러 도구", () => {
+  /** 몇 개가 동시에 떠 있었는지 센다. */
+  function countingCtx() {
+    let live = 0;
+    const peak = { value: 0 };
+    return {
+      peak,
+      ctx: {
+        ...ctx,
+        fetchImpl: (async () => {
+          live += 1;
+          peak.value = Math.max(peak.value, live);
+          await new Promise((r) => setTimeout(r, 40));
+          live -= 1;
+          return new Response(`<title>글</title><body><main>${"본문입니다. ".repeat(40)}</main></body>`, {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+        }) as unknown as typeof fetch,
+      },
+    };
+  }
+
+  it("한 턴에 온 도구 호출들을 **동시에** 실행한다", async () => {
+    const { ctx: c, peak } = countingCtx();
+    const p = createFakeProvider([
+      [
+        { type: "tool_call", id: "a", name: "read_url", args: { url: "https://a.example.com" } },
+        { type: "tool_call", id: "b", name: "read_url", args: { url: "https://b.example.com" } },
+        { type: "tool_call", id: "c", name: "read_url", args: { url: "https://c.example.com" } },
+        { type: "done" },
+      ],
+      [{ type: "text", delta: "다 읽었어요" }, { type: "done" }],
+    ]);
+    const t0 = Date.now();
+    const events = await drain(runAgent({ question: "세 곳 읽어줘", provider: p, ctx: c, catalog: "" }));
+    const ms = Date.now() - t0;
+
+    expect(peak.value).toBeGreaterThan(1); // 줄 세우면 1 이다
+    expect(ms).toBeLessThan(110); // 순차면 120ms 이상
+    expect(events.filter((e) => e.type === "tool_result")).toHaveLength(3);
+  });
+
+  it("결과는 부른 순서대로 나온다 — 끝난 순서면 카드 순서가 매번 달라진다", async () => {
+    const p = createFakeProvider([
+      [
+        { type: "tool_call", id: "a", name: "open_page", args: { path: "/plans/p1" } },
+        { type: "tool_call", id: "b", name: "open_page", args: { path: "/plans" } },
+        { type: "done" },
+      ],
+      [{ type: "text", delta: "네" }, { type: "done" }],
+    ]);
+    await drain(runAgent({ question: "둘 다", provider: p, ctx, catalog: "" }));
+    const toolMsgs = p.calls[1].messages.filter((m: AgentMessage) => m.role === "tool");
+    expect(toolMsgs.map((m: AgentMessage) => m.toolCallId)).toEqual(["a", "b"]);
+  });
+
+  it("여러 곳을 읽으면 한 곳당 몫이 줄어든다", async () => {
+    const seen: number[] = [];
+    const long = "가".repeat(30000);
+    const c = {
+      ...ctx,
+      fetchImpl: (async () =>
+        new Response(`<title>t</title><body><main>${long}</main></body>`, {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+    };
+    const p = createFakeProvider([
+      [
+        { type: "tool_call", id: "a", name: "read_url", args: { url: "https://a.example.com" } },
+        { type: "tool_call", id: "b", name: "read_url", args: { url: "https://b.example.com" } },
+        { type: "tool_call", id: "c", name: "read_url", args: { url: "https://c.example.com" } },
+        { type: "done" },
+      ],
+      [{ type: "text", delta: "끝" }, { type: "done" }],
+    ]);
+    const events = await drain(runAgent({ question: "셋", provider: p, ctx: c, catalog: "" }));
+    for (const e of events) {
+      if (e.type === "tool_result" && e.result.ok) {
+        seen.push(String((e.result.data as { wrapped: string }).wrapped).length);
+      }
+    }
+    expect(seen).toHaveLength(3);
+    // 한 곳만 읽었으면 6,000자 언저리. 셋이면 4,000자 언저리로 줄어야 한다.
+    for (const n of seen) expect(n).toBeLessThan(5000);
   });
 });

@@ -16,10 +16,13 @@ export type AssistantBubble = Extract<Bubble, { kind: "assistant" }>;
 export type OkResult = Extract<ToolResult, { ok: true }>;
 
 /**
- * "찾아준 곳" 카드의 상한. 왕복이 6번까지 허용되므로(lib/agent/loop.ts) 그대로 두면
- * 390px 화면이 거쳐 간 페이지들로 가득 찬다. **만든 것에는 적용하지 않는다** — 아래 참고.
+ * "찾아준 곳" 카드의 상한.
+ *
+ * 한 턴에 주소 여러 개를 읽는 일이 흔하다(모델이 한꺼번에 부른다). 5개를 읽었는데 2개만
+ * 보이면 나머지는 읽고도 못 간다. 그렇다고 무제한이면 390px 화면이 거쳐 간 페이지로 찬다.
+ * **만든 것에는 이 상한을 적용하지 않는다** — 아래 참고.
  */
-const MAX_PLACE_CARDS = 2;
+const MAX_PLACE_CARDS = 5;
 
 /**
  * 말풍선 하나에 실제로 그릴 결과들.

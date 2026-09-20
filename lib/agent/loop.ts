@@ -169,6 +169,45 @@ function recentHistory(history: AgentMessage[], limit: number): AgentMessage[] {
   return recent.slice(start);
 }
 
+// ── 여러 도구를 한꺼번에 ────────────────────────────────────────
+
+/** 한 번에 열어 둘 도구 실행 수. fetch 하나가 최대 2MiB 라 무제한이면 메모리가 곱해진다. */
+const MAX_PARALLEL_TOOLS = 4;
+
+/** 한 턴의 읽기에 나눠 줄 글자 총량. 한 곳만 읽으면 fetchMaxChars 를 그대로 쓴다. */
+const READ_TURN_BUDGET = 12000;
+
+/** 한 곳도 이보다 적게 주지는 않는다 — 너무 잘리면 읽으나 마나다. */
+const MIN_READ_CHARS = 1500;
+
+/**
+ * 이 턴에 read_url 이 n 번 불렸을 때 한 곳당 줄 글자 수.
+ *
+ * 실측: 한 곳은 6,000자면 기사 한 편이 들어간다. 다섯 곳이면 30,000자가 되어 한 턴이 터진다.
+ * 그래서 총량을 고정하고 나눈다. 한 곳뿐이면 예전과 똑같다.
+ */
+export function readBudget(reads: number, maxChars: number): number {
+  if (reads <= 1) return maxChars;
+  // 바닥(MIN_READ_CHARS)이 설정값을 넘지 않게 **설정값으로 한 번 더 조인다** —
+  // 안 그러면 AGENT_FETCH_MAX_CHARS 를 줄여도 그보다 많이 주게 된다.
+  return Math.min(maxChars, Math.max(MIN_READ_CHARS, Math.floor(READ_TURN_BUDGET / reads)));
+}
+
+/** 동시에 최대 `size` 개씩 돌리고, **부른 순서 그대로** 결과를 돌려준다. */
+export async function inWaves<T, R>(items: T[], size: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await run(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
+  return out;
+}
+
 // ── 루프 ──────────────────────────────────────────────────────
 
 export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
@@ -197,6 +236,8 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
     let said = "";
     const calls: NonNullable<AgentMessage["toolCalls"]> = [];
     const results: AgentMessage[] = [];
+    /** 이 턴에 모델이 부른 도구들. 스트림이 끝난 뒤 한꺼번에 돌린다. */
+    const pending: { id: string; name: string; args: Record<string, unknown> }[] = [];
 
     // 배열을 그대로 넘기면 아래에서 push 한 것이 이미 보낸 턴에도 비친다(같은 참조).
     // 공급자가 입력을 붙들고 있어도 그 턴의 모습 그대로 남도록 복사해서 넘긴다.
@@ -214,21 +255,10 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
           args: event.args,
           label: toolLabel(event.name, event.args, resources),
         };
-        // executeTool 은 던지지 않는다. 실패도 결과로 받아 모델에게 그대로 돌려준다.
-        const result = await executeTool(event.name, event.args, ctx);
-        // 모델에게 보낼 본문을 먼저 굳힌다. yield 에서 제너레이터가 멈춰 있는 동안
-        // 소비자가 result 를 화면용으로 손대도(길이 줄이기 등) 모델이 보는 것은 그대로다.
-        calls.push({ id: event.id, name: event.name, args: event.args });
-        // 그림은 **글에서 떼어내** 따로 싣는다. imageData 를 그대로 직렬화하면 수 MB 짜리
-        // base64 가 대화에 글로 박혀 한 턴을 통째로 먹는다. 모델에게는 그림 파트로 간다.
-        const { imageData, ...forModel } = result.ok ? result : { ...result, imageData: undefined };
-        results.push({
-          role: "tool",
-          content: JSON.stringify(forModel),
-          toolCallId: event.id,
-          ...(imageData ? { imageData, imageDetail: "low" as const } : {}),
-        });
-        yield { type: "tool_result", result };
+        // **여기서 기다리지 않는다.** 모델은 한 턴에 여러 도구를 한꺼번에 부른다(실측: 주소 3개를
+        // 주면 한 턴에 read_url 3번). 하나씩 기다리면 우리가 그 병렬성을 도로 줄 세우게 된다.
+        // 실제 실행은 아래 waves 에서 동시에 돌린다.
+        pending.push({ id: event.id, name: event.name, args: event.args });
         continue;
       }
       if (event.type === "error") {
@@ -238,10 +268,43 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
       break; // done — 이번 턴 끝
     }
 
-    if (calls.length === 0) {
+    // 도구를 하나도 안 불렀다면 이번 턴이 마지막이다.
+    // **calls 가 아니라 pending 을 본다** — calls 는 아래에서 실행한 뒤에야 채워진다.
+    if (pending.length === 0) {
       if (said) messages.push({ role: "assistant", content: said });
       yield { type: "done" };
       return;
+    }
+
+    if (pending.length) {
+      // 여러 곳을 읽을 때는 한 곳당 몫을 줄인다. 안 줄이면 5곳 × 6,000자 = 30,000자가
+      // 한 턴에 들어와 대화가 터진다. 나누는 규칙은 tools 가 아니라 여기 있다 —
+      // "이 턴에 몇 군데를 읽는가" 는 루프만 아는 값이다.
+      const reads = pending.filter((c) => c.name === "read_url").length;
+      const perRead = readBudget(reads, config.fetchMaxChars);
+
+      // 동시에 돌리되 한꺼번에 다 열지는 않는다. fetch 하나가 최대 2MiB 라 무제한이면
+      // 메모리가 그만큼 곱해진다.
+      const settled = await inWaves(pending, MAX_PARALLEL_TOOLS, (call) =>
+        executeTool(call.name, call.args, call.name === "read_url" ? { ...ctx, maxChars: perRead } : ctx)
+      );
+
+      for (let i = 0; i < pending.length; i += 1) {
+        const call = pending[i];
+        const result = settled[i];
+        calls.push({ id: call.id, name: call.name, args: call.args });
+        // 그림은 **글에서 떼어내** 따로 싣는다. imageData 를 그대로 직렬화하면 수 MB 짜리
+        // base64 가 대화에 글로 박혀 한 턴을 통째로 먹는다. 모델에게는 그림 파트로 간다.
+        const { imageData, ...forModel } = result.ok ? result : { ...result, imageData: undefined };
+        results.push({
+          role: "tool",
+          content: JSON.stringify(forModel),
+          toolCallId: call.id,
+          ...(imageData ? { imageData, imageDetail: "low" as const } : {}),
+        });
+        // 부른 순서대로 알린다 — 끝난 순서대로 주면 화면의 카드 순서가 매번 달라진다.
+        yield { type: "tool_result", result };
+      }
     }
 
     // "무엇을 불렀는지"(assistant)와 "무엇을 돌려받았는지"(tool)를 한 쌍으로 남긴다.

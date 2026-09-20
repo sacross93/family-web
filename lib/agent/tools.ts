@@ -34,6 +34,11 @@ export interface ToolContext {
   resources?: AgentResource[];
   /** 테스트 주입용. 없으면 전역 fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * 이번 read_url 에 줄 글자 수. 없으면 설정값(`fetchMaxChars`).
+   * 루프가 한 턴의 읽기 수를 보고 나눠 넣는다 — "몇 군데를 읽는가" 는 루프만 아는 값이다.
+   */
+  maxChars?: number;
 }
 
 export type ToolResult =
@@ -793,7 +798,7 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
     description: "",
     body: summary,
     bodySource: "요약정보",
-    maxChars: agentConfig().fetchMaxChars,
+    maxChars: ctx.maxChars ?? agentConfig().fetchMaxChars,
   });
   return {
     ok: true,
@@ -890,7 +895,7 @@ async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise
     description: clip(parts.description, 300),
     body: picked.body,
     bodySource: picked.source,
-    maxChars: agentConfig().fetchMaxChars,
+    maxChars: ctx.maxChars ?? agentConfig().fetchMaxChars,
   });
 
   // 페이지가 스스로 내놓은 그림 한 장. 스크린샷 대신이다(§20.3) — og:image 는 애초에

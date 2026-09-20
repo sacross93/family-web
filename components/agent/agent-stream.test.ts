@@ -216,9 +216,10 @@ describe("visibleResults", () => {
     expect(kept).toHaveLength(1);
   });
 
-  it("찾아준 곳은 두 장까지만", () => {
-    const kept = visibleResults([found("가", "/a"), found("나", "/b"), found("다", "/c")]);
-    expect(kept.map((r) => r.label)).toEqual(["가", "나"]);
+  it("찾아준 곳은 다섯 장까지 — 주소 여러 개를 한 번에 읽는 일이 흔하다", () => {
+    const five = ["가","나","다","라","마"].map((n, i) => found(n, `/${i}`));
+    expect(visibleResults(five).map((r) => r.label)).toEqual(["가","나","다","라","마"]);
+    expect(visibleResults([...five, found("바", "/5")])).toHaveLength(5);
   });
 
   it("만든 카드가 이미 가리키는 곳은 또 보여주지 않는다", () => {
