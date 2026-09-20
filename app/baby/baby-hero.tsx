@@ -65,7 +65,7 @@ export function BabyHero({
 
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/10 text-xl">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/90 text-xl">
             {baby.emoji}
           </span>
           <p className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</p>

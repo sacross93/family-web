@@ -271,6 +271,10 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     }
   }
 
+  // 준비 진행(두 묶음 합산) — 히어로가 읽는다.
+  const prepTotal = plan.checklist.length;
+  const prepDone = plan.checklist.filter((c) => c.done).length;
+
   // ── 준비 체크리스트 (여행 전 준비 / 준비물) ───
   async function addCheck(kind: "prep" | "packing", text: string) {
     const t = text.trim();
@@ -452,66 +456,93 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         editing={decorating}
         onEditingChange={setDecorating}
       >
-      {/* 헤더 (히어로) */}
-      <Card flush className="group relative mb-6 overflow-hidden">
-        <div className={cn("bg-gradient-to-br p-5 sm:p-6", pal.gradient)}>
-          <div className="flex items-start gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface/70 text-3xl shadow-sm">
-              {plan.emoji}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <Tag color={plan.color}>{plan.type}</Tag>
-                {countdown && countdown.days >= 0 && (
-                  <span className="inline-flex items-center rounded-full bg-surface/80 px-2.5 py-1 font-num text-xs font-bold text-ink">
-                    {countdown.label}
-                  </span>
-                )}
-              </div>
-              <h1 className="mt-1.5 break-keep font-display text-2xl font-bold leading-tight text-ink">
-                {plan.title}
-              </h1>
-              <div className="mt-1.5 flex flex-col gap-1">
-                {period && (
-                  <p className="flex items-center gap-1.5 text-sm text-ink-soft">
-                    <CalendarRange className="h-4 w-4 shrink-0 text-ink-faint" />
-                    {period}
-                  </p>
-                )}
-                {plan.location && (
-                  <p className="flex items-center gap-1.5 text-sm text-ink-soft">
-                    <MapPin className="h-4 w-4 shrink-0 text-ink-faint" />
-                    {plan.location}
-                  </p>
-                )}
-                {plan.tzOffsetMin !== 0 && (
-                  <p className="flex items-center gap-1.5 text-sm text-ink-soft">
-                    <Clock className="h-4 w-4 shrink-0 text-ink-faint" />
-                    현지 시차 · {tzOffsetLabel(plan.tzOffsetMin)}
-                  </p>
-                )}
-              </div>
-              {plan.description && (
-                <div className="mt-2.5 text-sm text-ink-soft">
-                  <MarkdownView>{plan.description}</MarkdownView>
-                </div>
+      {/* 헤더 (히어로)
+          이 화면은 가족이 **실제로 가장 많이 쓰는** 상세 화면이다(발리 준비물 14개).
+          예전 히어로는 파스텔 판 위에 제목·기간·장소·시차·설명을 다 쌓아 폰에서 450px 을
+          차지했고, 정작 보러 온 체크리스트는 첫 화면에 한 줄도 안 보였다.
+          진한 판으로 바꾸고 **준비 진행**을 여기로 올린다 — 열자마자 알고 싶은 것이 그거다. */}
+      <section className="on-chrome relative mb-6 rounded-xl bg-chrome p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white/90 text-2xl">
+            {plan.emoji}
+          </span>
+          <div className="min-w-0 flex-1 pr-10">
+            <div className="flex flex-wrap items-center gap-2">
+              <Tag color={plan.color}>{plan.type}</Tag>
+              {countdown && countdown.days >= 0 && (
+                <span className="font-num inline-flex items-center rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-chrome-ink">
+                  {countdown.label}
+                </span>
               )}
             </div>
-            {/* 아이콘 넷이 제목과 같은 줄을 먹어 폰에서 글자 폭이 100px 밖에 안 남았다 —
-                "이번/주말/계획" 처럼 한 줄에 한 단어, 날짜는 "7월/25일/(토)부/터" 로 넉 줄.
-                `…` 하나로 모아 줄에서 빼면 제목이 제 폭을 갖는다. */}
-            <ItemActions
-              className="right-4 top-4 sm:right-5 sm:top-5"
-              actions={[
-                { label: "사진 꾸미기", icon: Sparkles, onClick: () => setDecorating(true) },
-                { label: "시차 설정", icon: Clock, onClick: openTz },
-                { label: "계획 수정", icon: Pencil, onClick: openEditPlan },
-                { label: "계획 삭제", icon: Trash2, onClick: deletePlan, danger: true },
-              ]}
-            />
+            <h1 className="mt-2 break-keep font-display text-2xl font-bold leading-tight text-chrome-ink sm:text-3xl">
+              {plan.title}
+            </h1>
+            <div className="mt-2 flex flex-col gap-1">
+              {period && (
+                <p className="flex items-center gap-1.5 text-sm text-chrome-faint">
+                  <CalendarRange className="h-4 w-4 shrink-0" />
+                  {period}
+                </p>
+              )}
+              {plan.location && (
+                <p className="flex items-center gap-1.5 text-sm text-chrome-faint">
+                  <MapPin className="h-4 w-4 shrink-0" />
+                  {plan.location}
+                </p>
+              )}
+              {plan.tzOffsetMin !== 0 && (
+                <p className="flex items-center gap-1.5 text-sm text-chrome-faint">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  현지 시차 {tzOffsetLabel(plan.tzOffsetMin)}
+                </p>
+              )}
+            </div>
+            {plan.description && (
+              <div className="mt-2.5 text-sm text-chrome-faint">
+                <MarkdownView>{plan.description}</MarkdownView>
+              </div>
+            )}
           </div>
+          {/* 아이콘 넷이 제목과 같은 줄을 먹어 폰에서 글자 폭이 100px 밖에 안 남았다 —
+              "이번/주말/계획" 처럼 한 줄에 한 단어, 날짜는 "7월/25일/(토)부/터" 로 넉 줄.
+              `…` 하나로 모아 줄에서 빼면 제목이 제 폭을 갖는다. */}
+          <ItemActions
+            className="right-4 top-4 sm:right-5 sm:top-5"
+            actions={[
+              { label: "사진 꾸미기", icon: Sparkles, onClick: () => setDecorating(true) },
+              { label: "시차 설정", icon: Clock, onClick: openTz },
+              { label: "계획 수정", icon: Pencil, onClick: openEditPlan },
+              { label: "계획 삭제", icon: Trash2, onClick: deletePlan, danger: true },
+            ]}
+          />
         </div>
-      </Card>
+
+        {/* 준비 진행 — 이 화면에 오는 이유. 막대의 양 끝이 곧 설명이다. */}
+        {prepTotal > 0 && (
+          <div className="mt-5">
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-white/15"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={prepTotal}
+              aria-valuenow={prepDone}
+              aria-label="준비 진행"
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-all"
+                style={{ width: `${Math.round((prepDone / prepTotal) * 100)}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-chrome-faint">
+              <span>준비</span>
+              <span className="font-num">
+                {prepDone === prepTotal ? "다 챙겼어요 🎉" : `${prepTotal - prepDone}개 남음`}
+              </span>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* 해외 여행이면 시차 설정 안내 */}
       {plan.tzOffsetMin === 0 && (
@@ -1038,7 +1069,7 @@ function ChecklistSection({
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>
           {emoji}
         </span>
-        <h3 className="text-base font-bold text-ink">{title}</h3>
+        <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
         {items.length > 0 && (
           <Tag color={color} className="font-num ml-auto">
             {doneCount}/{items.length}
@@ -1188,12 +1219,15 @@ function ChecklistRow({
       >
         {item.text}
       </span>
+      {/* 휴지통은 조용하게. `danger`(분홍 알약)로 두면 14줄짜리 준비물에서
+          분홍 알약 열넷이 세로로 서서, 체크하러 온 화면이 지우기 화면처럼 보였다.
+          폰에서는 늘 보이게 둔다(손 얹어야 나타나는 것을 만들지 않는다). */}
       <IconButton
-        variant="danger"
+        variant="ghost"
         size="sm"
         aria-label="삭제"
         onClick={() => onRemove(item.id)}
-        className="opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100"
+        className="text-ink-faint opacity-100 transition hover:text-danger-ink lg:opacity-0 lg:group-hover:opacity-100"
       >
         <Trash2 className="h-4 w-4" />
       </IconButton>

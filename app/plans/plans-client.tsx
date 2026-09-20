@@ -164,7 +164,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
                     )}
                     <p className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-ink-faint">
                       <ListChecks className="h-3.5 w-3.5" />
-                      일정 <span className="font-num">{plan._count.items}</span>개
+                      일정 <span>{plan._count.items}</span>개
                     </p>
                   </div>
                 </Card>

@@ -335,6 +335,41 @@ body {
 }
 .md-content th { background: var(--color-sunken); font-weight: 700; }
 
+/* 진한 틀(.on-chrome) 안에서 마크다운을 그릴 때.
+   `.md-content` 는 밝은 판 기준 색이라 그대로 두면 **검은 글씨가 검은 판에** 놓인다.
+   계획 상세의 설명이 진한 히어로 안에 있다. */
+.on-chrome .md-content {
+  color: var(--color-chrome-faint);
+}
+.on-chrome .md-content strong,
+.on-chrome .md-content h1,
+.on-chrome .md-content h2,
+.on-chrome .md-content h3 {
+  color: var(--color-chrome-ink);
+}
+.on-chrome .md-content a {
+  color: var(--color-chrome-ink);
+}
+.on-chrome .md-content del,
+.on-chrome .md-content li::marker {
+  color: var(--color-chrome-faint);
+}
+.on-chrome .md-content blockquote {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--color-chrome-ink);
+  color: var(--color-chrome-faint);
+}
+.on-chrome .md-content code,
+.on-chrome .md-content pre,
+.on-chrome .md-content th {
+  background: rgba(255, 255, 255, 0.1);
+}
+.on-chrome .md-content hr,
+.on-chrome .md-content th,
+.on-chrome .md-content td {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 /* 접근성: 모션 최소화 선호 시 애니메이션 억제 */
 @media (prefers-reduced-motion: reduce) {
   *,
