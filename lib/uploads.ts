@@ -45,29 +45,41 @@ export function safeBasename(url: string): string | null {
 }
 
 /**
- * 파일 하나를 지운다. 실패해도 던지지 않는다 — DB 행은 이미 사라진 뒤라,
- * 파일 정리가 안 됐다고 사용자에게 오류를 보일 이유가 없다.
+ * 파일 하나를 지운다. **지워졌는지(또는 지울 게 없었는지)** 를 돌려준다.
+ *
+ * 호출하는 쪽은 이 결과를 보고 DB 행을 지운다 — 순서가 중요하다.
+ * 행을 먼저 지우면 파일 삭제가 실패했을 때 **어느 파일이었는지조차 모르는 고아**가
+ * 남는다. 그게 바로 고치려던 상태다. 파일부터 지우고, 실패하면 행을 그대로 둔다.
+ * 사용자는 "못 지웠어요" 를 보고 다시 누르면 된다.
  */
-export async function removeUpload(url: string | null | undefined): Promise<void> {
+export async function removeUpload(url: string | null | undefined): Promise<boolean> {
   const kind = uploadKind(url);
-  if (kind === "external" || !url) return;
+  if (kind === "external" || !url) return true; // 지울 게 없다
 
   try {
     if (kind === "blob") {
-      if (!process.env.BLOB_READ_WRITE_TOKEN) return;
+      // 배포에는 토큰이 있다(없으면 애초에 blob 주소가 생기지 않는다).
+      // 그래도 없다면 지울 방법이 없으니 성공했다고 하지 않는다.
+      if (!process.env.BLOB_READ_WRITE_TOKEN) return false;
       const { del } = await import("@vercel/blob");
       await del(url);
-      return;
+      return true;
     }
     const name = safeBasename(url);
-    if (!name) return;
+    if (!name) return true; // 우리 규칙의 주소가 아니다 — 지울 것도 없다
     await unlink(path.join(process.cwd(), "public", "uploads", name));
-  } catch {
-    // 이미 없거나 권한이 없을 수 있다. 조용히 넘어간다.
+    return true;
+  } catch (e) {
+    // 이미 없으면 지워진 것과 같다.
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return true;
+    return false;
   }
 }
 
-/** 여러 개를 한꺼번에. 하나가 실패해도 나머지는 계속한다. */
-export async function removeUploads(urls: (string | null | undefined)[]): Promise<void> {
-  await Promise.all(urls.map((u) => removeUpload(u)));
+/** 여러 개를 한꺼번에. 하나라도 못 지우면 false. 같은 주소는 한 번만 부른다. */
+export async function removeUploads(urls: (string | null | undefined)[]): Promise<boolean> {
+  // 앨범 표지가 그 앨범의 첫 사진인 경우가 흔하다 — 같은 주소를 두 번 지우려 들지 않게.
+  const unique = [...new Set(urls.filter(Boolean) as string[])];
+  const results = await Promise.all(unique.map((u) => removeUpload(u)));
+  return results.every(Boolean);
 }

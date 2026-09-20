@@ -26,13 +26,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  // 지울 주소를 먼저 챙긴다 — 행이 사라지면 어느 파일인지 알 수 없다.
   const album = await prisma.album.findUnique({
     where: { id },
     select: { coverUrl: true, photos: { select: { url: true } } },
   });
+  if (!album) return NextResponse.json({ ok: true });
+
+  // 파일을 먼저 지운다(사진 삭제와 같은 이유).
+  const gone = await removeUploads([album.coverUrl, ...album.photos.map((p) => p.url)]);
+  if (!gone) {
+    return NextResponse.json({ error: "사진 파일을 못 지웠어요. 잠시 후 다시 시도해 주세요." }, { status: 502 });
+  }
   // photos 는 스키마 onDelete:Cascade 로 함께 삭제됨
   await prisma.album.delete({ where: { id } });
-  await removeUploads([album?.coverUrl, ...(album?.photos.map((p) => p.url) ?? [])]);
   return NextResponse.json({ ok: true });
 }

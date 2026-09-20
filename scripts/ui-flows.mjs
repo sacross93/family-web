@@ -15,10 +15,9 @@
 // **로컬에서만 돌릴 것.** 실제로 만들고 지운다. 만든 것은 각 흐름 끝에서 되돌린다.
 // playwright 찾는 방법은 ui-audit.mjs 와 같다.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { writeFileSync, unlinkSync } from "node:fs";
 
 const BASE = process.argv[2] || "http://localhost:3000";
 const USER = process.argv[3] || process.env.AUDIT_USER;
@@ -277,6 +276,12 @@ await step("계획 지우기", async () => {
 });
 
 
+// 올린 파일이 실제로 지워지는지 — DB 행만 지우고 파일을 남기면 무료 용량을 계속 먹고,
+// 주소를 아는 사람은 "지운" 사진을 그대로 볼 수 있다.
+const uploadDir = join(process.cwd(), "public", "uploads");
+const fileCount = () => (existsSync(uploadDir) ? readdirSync(uploadDir).filter((f) => !f.startsWith(".")).length : 0);
+const filesBefore = fileCount();
+
 console.log("앨범");
 await page.goto(BASE + "/albums", { waitUntil: "networkidle" });
 await page.waitForTimeout(400);
@@ -307,7 +312,7 @@ await step("새로고침해도 사진이 남아 있다", async () => {
   const imgs = await page.evaluate(() => [...document.querySelectorAll("img")].filter(i => /uploads|blob/.test(i.src)).length);
   if (!imgs) throw new Error("새로고침하니 사라졌다");
 });
-await step("앨범 지우기", async () => {
+await step("앨범 지우기 — 올린 파일도 같이 지워진다", async () => {
   await page.getByRole("button", { name: "더보기" }).first().click();
   await page.waitForTimeout(350);
   await page.locator('[data-item-menu] button:has-text("앨범 삭제")').click();
@@ -317,6 +322,10 @@ await step("앨범 지우기", async () => {
   await page.waitForTimeout(1500);
   await page.goto(BASE + "/albums", { waitUntil: "networkidle" });
   if ((await text()).includes(MARK + "앨범")) throw new Error("지웠는데 남아 있다");
+  const after = fileCount();
+  if (after !== filesBefore) {
+    throw new Error(`파일이 남았다: ${filesBefore}개 → ${after}개`);
+  }
 });
 
 console.log("할일");

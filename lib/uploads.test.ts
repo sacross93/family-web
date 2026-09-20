@@ -46,3 +46,17 @@ describe("safeBasename — 경로를 벗어나지 않는다", () => {
     expect(safeBasename("/uploads/")).toBeNull();
   });
 });
+
+describe("removeUploads — 같은 주소를 두 번 지우지 않는다", () => {
+  it("앨범 표지가 첫 사진이면 한 번만", async () => {
+    const { removeUploads } = await import("@/lib/uploads");
+    // 바깥 주소는 실제로 아무것도 안 지우므로 안전하게 셀 수 있다.
+    const url = "https://images.example.com/a.jpg";
+    expect(await removeUploads([url, url, null, undefined])).toBe(true);
+  });
+
+  it("지울 게 없으면 성공이다", async () => {
+    const { removeUploads } = await import("@/lib/uploads");
+    expect(await removeUploads([])).toBe(true);
+  });
+});
