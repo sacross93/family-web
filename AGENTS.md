@@ -96,6 +96,18 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 매니페스트의 `background_color`·`theme_color` 와 `layout.tsx` 의 `themeColor` 는 CSS 변수를
   못 읽어 **손으로 베낀 값**이다. 셋 다 `lib/design-doc.test.ts` 가 토큰과 대조한다.
 
+## 오프라인 구명정 (`public/sw.js`)
+- 서비스 워커가 **딱 한 가지**만 한다: 화면을 여는 요청이 **네트워크 때문에** 실패하면
+  `/offline` 로 돌린다. 그 밖의 요청은 `respondWith` 를 안 불러 **손대지 않는다**.
+- **데이터도 화면도 캐시하지 않는다.** 들고 있는 건 `/offline` 한 장과 `/icon.svg` 뿐이다 —
+  가족 사이트에서 오래된 장보기 목록을 최신인 척 보여 주는 쪽이 훨씬 나쁘다.
+  그래서 이 워커는 낡을 수가 없다. **캐시를 늘리고 싶어지면 그 이유부터 여기 적을 것.**
+- 사본을 **남의 주소에 그냥 그려 주면 안 된다** — Next 가 "주소는 `/shopping` 인데 내용은
+  `/offline`" 을 만나 오류 경계로 떨어진다(실제로 그랬다). 그래서 `Response.redirect` 다.
+- 등록은 `components/service-worker.tsx`, **운영에서만**(dev 새로고침과 섞이면 원인을 못 찾는다).
+- 빼는 법: `public/sw.js` 를 지우고 배포하면 다음 방문에 등록이 풀린다. 급하면
+  개발자도구 → Application → Service Workers → Unregister.
+
 ## 사이트 커스터마이즈 (브랜드·홈·메뉴)
 - `SiteConfig`(싱글턴 id="main": siteName·tagline·brandEmoji/Image·heroSubtitle·heroEmoji/Image) + `NavItem`(href별 emoji·label·description 오버라이드).
 - 로더 `lib/site.ts`의 `getSiteConfig()`·`getNav()` — **DB 없으면 기본값(lib/nav, SITE_DEFAULTS) 폴백** → 시드 안 해도, 배포 DB에서도 동작.

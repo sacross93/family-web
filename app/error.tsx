@@ -1,5 +1,6 @@
 "use client"; // 오류 경계는 클라이언트 컴포넌트여야 한다
 
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 
@@ -22,16 +23,35 @@ export default function Error({
   error: Error & { digest?: string };
   unstable_retry: () => void;
 }) {
+  // 브라우저가 아는 연결 상태. 서버가 없어도 이건 읽을 수 있다.
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    const read = () => setOffline(!navigator.onLine);
+    read();
+    addEventListener("online", read);
+    addEventListener("offline", read);
+    return () => {
+      removeEventListener("online", read);
+      removeEventListener("offline", read);
+    };
+  }, []);
+
   return (
     <Card className="flex flex-col items-center gap-4 py-12 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-md bg-sunken text-3xl">
         🫖
       </span>
       <div>
-        <h1 className="font-display text-xl font-bold text-ink">잠시 문제가 있었어요</h1>
-        {/* 사과하지 않고 방법을 알려준다(DESIGN.md §8). 원인은 가족이 알 바가 아니다. */}
+        <h1 className="font-display text-xl font-bold text-ink">
+          {offline ? "연결이 없어요" : "잠시 문제가 있었어요"}
+        </h1>
+        {/* 사과하지 않고 방법을 알려준다(DESIGN.md §8). 원인은 가족이 알 바가 아니다.
+            연결이 끊긴 것과 서버가 탈 난 것은 **할 말이 다르다** — 연결이 없는데
+            "다시 불러오면 괜찮아져요" 라고 하면 눌러도 안 되니 거짓말이 된다. */}
         <p className="mt-1.5 text-[0.9375rem] text-ink-soft">
-          다시 불러오면 대개 괜찮아져요. 계속 이러면 조금 있다 다시 와 주세요.
+          {offline
+            ? "연결되면 바로 다시 불러올게요."
+            : "다시 불러오면 대개 괜찮아져요. 계속 이러면 조금 있다 다시 와 주세요."}
         </p>
       </div>
       <Button onClick={() => unstable_retry()}>

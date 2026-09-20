@@ -3,6 +3,7 @@ import { Jua } from "next/font/google";
 import "./pretendard.css";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
+import { ServiceWorker } from "@/components/service-worker";
 import { getCurrentUser } from "@/lib/current-user";
 import { getSiteConfig, getNav } from "@/lib/site";
 import { agentConfig } from "@/lib/agent/config";
@@ -66,6 +67,8 @@ export default async function RootLayout({
         <AppShell user={user} site={site} nav={nav} agentEnabled={agentConfig().enabled}>
           {children}
         </AppShell>
+        {/* 연결이 끊겼을 때 브라우저 기본 오류 화면 대신 우리 화면을 보여 주는 구명정. */}
+        <ServiceWorker />
       </body>
     </html>
   );

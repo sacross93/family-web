@@ -8,7 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 // 로그인 없이 접근 가능한 경로
-const PUBLIC = ["/login", "/api/auth/login", "/api/auth/logout"];
+// `/offline` 은 로그인을 안 본다 — 서비스 워커가 **미리 받아 두는** 사본이라
+// 세션이 있든 없든 받아져야 하고, 안에 가족 데이터가 없다.
+const PUBLIC = ["/login", "/api/auth/login", "/api/auth/logout", "/offline"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
