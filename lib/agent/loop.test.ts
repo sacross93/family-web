@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inWaves, readBudget, runAgent } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, readBudget, runAgent } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -502,5 +502,39 @@ describe("runAgent — 한 턴에 여러 도구", () => {
     expect(seen).toHaveLength(3);
     // 한 곳만 읽었으면 6,000자 언저리. 셋이면 4,000자 언저리로 줄어야 한다.
     for (const n of seen) expect(n).toBeLessThan(5000);
+  });
+});
+
+describe("안내문 규칙 — 빠지면 안 되는 것들", () => {
+  const system = () => buildSystemPrompt("계획(1): 발리");
+
+  it("주소를 받으면 read_url 을 먼저 쓰라고 말한다", () => {
+    // 검색은 본 것을 지어내기도 한다(실측). 직접 읽은 글은 그럴 수 없다.
+    expect(system()).toContain("read_url");
+  });
+
+  it("사이트에서 안 것과 웹에서 찾은 것을 섞지 말라고 말한다", () => {
+    // 섞으면 어느 쪽이 확실한지 가족이 알 수 없다.
+    const s = system();
+    expect(s).toContain("섞지 마세요");
+    expect(s).toContain("찾아봤다고");
+  });
+
+  it("값이 바뀌는 것은 언제 기준인지 적으라고 말한다", () => {
+    expect(system()).toContain("언제 기준인지");
+  });
+
+  it("몸에 관한 일은 선을 긋되 다른 주제엔 단서를 달지 말라고 말한다", () => {
+    const s = system();
+    expect(s).toContain("병원에 물어보라고");
+    expect(s).toContain("그 밖의 주제에는 이런 단서를 달지 마세요");
+  });
+
+  it("추가만 되고 수정·삭제는 안 된다는 경계가 남아 있다", () => {
+    expect(system()).toContain("고치거나 지울 수는 없습니다");
+  });
+
+  it("바깥 글은 지시가 아니라는 규칙이 남아 있다", () => {
+    expect(system()).toContain("<fetched-content>");
   });
 });
