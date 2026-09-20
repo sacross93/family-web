@@ -328,6 +328,40 @@ const browser = await chromium.launch({ executablePath: findChromium() });
 const problems = [];
 const rows = [];
 
+// ── 먼저: 이 서버가 정말 지금 빌드를 내주고 있는가 ────────
+// 오늘 세 번 돌려 두 번이 **거짓말** 이었다. 20분 전에 띄워 둔 `next start` 가 포트를
+// 잡고 있었고(`pkill -f "next start"` 는 프로세스 이름이 `next-server` 라 안 맞는다),
+// 그 서버가 옛 HTML 을 내주는 사이 `.next` 만 새로 빌드돼서 **스타일시트가 500** 이었다.
+// 화면이 통째로 민짜인데 검사는 그냥 "840건" 이라고만 했다 — 원인을 못 짚어 준다.
+// 스타일이 안 먹은 화면에서는 무엇을 재도 뜻이 없으므로, 재기 전에 멈춘다.
+{
+  const page = await browser.newPage();
+  const res = await page.goto(BASE + "/login", { waitUntil: "networkidle" }).catch(() => null);
+  if (!res || !res.ok()) {
+    console.error(`${BASE} 가 응답하지 않아요. 서버부터 띄워 주세요.`);
+    process.exit(1);
+  }
+  const bad = await page.evaluate(() =>
+    [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href)
+  );
+  const dead = [];
+  for (const href of bad) {
+    const r = await page.request.get(href).catch(() => null);
+    if (!r || !r.ok()) dead.push(`${href.replace(/^.*\/\//, "")} → ${r ? r.status() : "없음"}`);
+  }
+  // 토큰이 실제로 먹었는지 — 바탕이 흰색이면 CSS 가 안 붙은 것이다(paper 는 연분홍).
+  const paper = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.close();
+  if (dead.length || paper === "rgba(0, 0, 0, 0)" || paper === "rgb(255, 255, 255)") {
+    console.error("스타일이 안 먹은 화면입니다 — 잰 값이 전부 거짓이 되므로 멈춥니다.");
+    if (dead.length) console.error("  못 받은 스타일시트: " + dead.join(", "));
+    console.error(`  body 배경: ${paper}`);
+    console.error("  옛 서버가 포트를 잡고 있는지 보세요:  lsof -nP -iTCP:3000 -sTCP:LISTEN");
+    console.error("  그 다음:  npm run build && npm start");
+    process.exit(1);
+  }
+}
+
 for (const { w, h, tag } of WIDTHS) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
@@ -641,11 +675,83 @@ for (const { w, h, tag } of WIDTHS) {
   }
 }
 
+// ── 글자 대비 (화면에 그려진 대로) ──────────────────────
+// `lib/colors.contrast.test.ts` 는 **토큰 짝** 을 잰다 — "로즈 잉크가 로즈 soft 위에서".
+// 그런데 진짜 문제는 **어느 잉크가 어느 판에 얹혔느냐** 다. 사이드바의 파스텔 잉크는
+// 흰 판 위에 놓이는데 그 짝은 아무도 안 재고 있었고, 그래서 37곳이 통과한 채 나갔다.
+// 여기서는 조상들을 타고 올라가 실제 배경을 합성해서 잰다.
+// 이모지는 제 색으로 그려지므로 `color` 를 재 봐야 뜻이 없다 — 뺀다.
+{
+  const scan = () => {
+    const parse = (c) => {
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    };
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const lum = (c) => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+    const ratio = (a, b) => { const l1 = lum(a), l2 = lum(b); const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1]; return (hi + 0.05) / (lo + 0.05); };
+    const over = (fg, bg) => ({ r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 });
+    // 사진·그라디언트 위 글자는 한 색으로 잴 수 없다 — 건너뛴다(눈으로 본다).
+    const bgOf = (el) => {
+      let cur = el, acc = null;
+      while (cur) {
+        const cs = getComputedStyle(cur);
+        if (cs.backgroundImage && cs.backgroundImage !== "none") return null;
+        const c = parse(cs.backgroundColor);
+        if (c && c.a > 0) {
+          acc = acc ? over(acc, c) : c;
+          if (acc.a >= 0.999) return acc;
+        }
+        cur = cur.parentElement;
+      }
+      return null;
+    };
+    const out = [];
+    for (const el of document.querySelectorAll("body *")) {
+      if (el.children.length || el.closest("nextjs-portal")) continue;
+      const text = (el.textContent || "").trim();
+      if (!text) continue;
+      if (!text.replace(/[\p{Extended_Pictographic}\p{Emoji_Component}️‍\s]/gu, "")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === "hidden" || cs.opacity === "0") continue;
+      const fg = parse(cs.color);
+      if (!fg || fg.a === 0) continue;
+      const bg = bgOf(el);
+      if (!bg) continue;
+      const size = parseFloat(cs.fontSize);
+      const need = size >= 24 || (size >= 18.66 && (Number(cs.fontWeight) || 400) >= 700) ? 3 : 4.5;
+      const cr = ratio(fg.a < 1 ? over(fg, bg) : fg, bg);
+      if (cr < need) out.push(`"${text.slice(0, 14)}" ${cr.toFixed(2)}:1 (${need} 필요, ${Math.round(size)}px)`);
+    }
+    return [...new Set(out)].slice(0, 5);
+  };
+  for (const { w, h, tag } of WIDTHS.filter((x) => x.w !== 768)) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    if (USER && PASS) {
+      await page.goto(BASE + "/login");
+      await page.locator('input[autocomplete="username"]').fill(USER);
+      await page.locator('input[autocomplete="current-password"]').fill(PASS);
+      await page.getByRole("button", { name: "로그인" }).click();
+      await page.waitForURL(BASE + "/", { timeout: 15000 });
+    }
+    for (const path of PATHS) {
+      await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
+      for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}: 대비 부족 — ${bad}`);
+    }
+    await ctx.close();
+  }
+}
+
 await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

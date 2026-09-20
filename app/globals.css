@@ -72,23 +72,23 @@
 
   --color-peach: #ffc9a9;
   --color-peach-soft: #ffe9dc;
-  --color-peach-ink: #c26a3f;
+  --color-peach-ink: #a05733;
 
   --color-mint: #a8e0c5;
   --color-mint-soft: #dff5ea;
-  --color-mint-ink: #348a63;
+  --color-mint-ink: #2e7957;
 
   --color-sky: #a9d4f5;
   --color-sky-soft: #e2f0fd;
-  --color-sky-ink: #3877b8;
+  --color-sky-ink: #346eaa;
 
   --color-butter: #fbe29a;
   --color-butter-soft: #fff6d9;
-  --color-butter-ink: #a67f22;
+  --color-butter-ink: #8c6b1d;
 
   --color-rose: #f5b7c9;
   --color-rose-soft: #fde5ec;
-  --color-rose-ink: #c1567c;
+  --color-rose-ink: #b14169;
 
   /* ── 상태색 ──
      브랜드가 로즈가 된 뒤로 **위험색이 분홍이면 안 된다** — 예전 danger-ink(#a6475d)는

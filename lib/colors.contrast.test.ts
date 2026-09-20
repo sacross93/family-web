@@ -50,6 +50,19 @@ function hue(hex: string): number {
   return (h * 60 + 360) % 360;
 }
 
+/** HSL 채도(0~1). "대비를 맞춘다" 며 색을 회색으로 만들어 버리지 않았는지 보는 데 쓴다. */
+function saturation(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const mx = Math.max(r, g, b);
+  const mn = Math.min(r, g, b);
+  const l = (mx + mn) / 2;
+  if (mx === mn) return 0;
+  return l > 0.5 ? (mx - mn) / (2 - mx - mn) : (mx - mn) / (mx + mn);
+}
+
 /** 두 색이 색상환에서 벌어진 각도(0~180). */
 function hueApart(a: string, b: string): number {
   const d = Math.abs(hue(a) - hue(b));
@@ -197,11 +210,29 @@ describe("글자 대비", () => {
     }
   });
 
-  it("파스텔 태그는 제 짝 배경 위에서 3:1 을 넘는다", () => {
-    // Tag 는 `bg-<색>-soft` 위에 `text-<색>-ink` 로 그려진다.
+  it("파스텔 잉크는 **본문 기준(4.5:1)** 이다 — 3:1 로 재던 것이 화면에서 37곳을 놓쳤다", () => {
+    // 이 여섯 잉크는 태그 안에만 있는 게 아니다: 사이드바에서 **지금 있는 메뉴의 이름**
+    // ("장보기" 15px · "공유 장보기 목록" 11px), 게시판 쪽지의 **쓴 사람**,
+    // 캘린더의 **요일·주말 날짜** 가 전부 이 색이다. 전부 작은 본문 글씨다.
+    //
+    // 예전엔 3:1(UI 요소 기준)만 요구했고, 그래서 버터 3.42 · 피치 3.31 · 로즈 3.60 이
+    // 통과한 채 배포됐다. 화면에 그려진 색을 실제로 재 보고서야 드러났다.
+    //
+    // 두 판 다 본다 — 태그는 `-soft` 위, 사이드바 이름은 **흰 판** 위에 놓인다.
     for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {
-      const r = contrast(token(`${key}-ink`), token(`${key}-soft`));
-      expect(r, `${key}-ink on ${key}-soft = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
+      for (const bg of [`${key}-soft`, "surface"]) {
+        const r = contrast(token(`${key}-ink`), token(bg));
+        expect(r, `${key}-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("잉크를 어둡게 해도 파스텔 알맹이는 파스텔로 남는다 — 진해지면 아기자기함이 죽는다", () => {
+    // 위 검사를 만족시키는 가장 쉬운 길은 여섯 색을 전부 검정에 가깝게 만드는 것이다.
+    // 그러면 통과는 하지만 팔레트가 사라진다. 채도로 막아 둔다.
+    for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {
+      const s = saturation(token(`${key}-ink`));
+      expect(s, `${key}-ink 채도 = ${s.toFixed(2)}`).toBeGreaterThanOrEqual(0.3);
     }
   });
 });
