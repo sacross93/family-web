@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { PageHeader, Button } from "@/components/ui";
+import { PageHeader, Button, useConfirm } from "@/components/ui";
 import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem, BabyLink } from "@/lib/types";
 import { fromDateInput } from "@/lib/date";
 import { BabySetup, type BabySetupPayload } from "./baby-setup";
@@ -28,6 +28,7 @@ export function BabyClient({
   initialBaby: BabyDetail | null;
   members: FamilyMember[];
 }) {
+  const { confirm, dialog } = useConfirm();
   const [baby, setBaby] = useState<BabyDetail | null>(initialBaby);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filter, setFilter] = useState<EntryFilter>("all");
@@ -101,7 +102,13 @@ export function BabyClient({
 
   async function deleteEntry(entry: BabyEntryWithAuthor) {
     if (!baby) return;
-    if (!confirm("이 기록을 지울까요?")) return;
+    if (
+      !(await confirm({
+        title: "이 기록을 지울까요?",
+        description: "글과 함께 붙여둔 사진도 사라지고, 다시 볼 수 없어요.",
+      }))
+    )
+      return;
     const prev = baby.entries;
     setBaby((b) => (b ? { ...b, entries: b.entries.filter((e) => e.id !== entry.id) } : b));
     setEntryModal(null);
@@ -252,6 +259,7 @@ export function BabyClient({
       {settingsOpen && (
         <BabySettingsModal baby={baby} onClose={() => setSettingsOpen(false)} onSave={saveSettings} />
       )}
+      {dialog}
       {entryModal && (
         <EntryModal
           members={members}

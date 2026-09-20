@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 
-import { IconButton, Spinner } from "@/components/ui";
+import { IconButton, Spinner, useConfirm } from "@/components/ui";
 import { isToday, kDateShort, kTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { AgentChatState } from "./use-agent-chat";
@@ -51,6 +51,7 @@ export function AgentHistory({
   /** 대화 하나를 열었다. 어느 화면으로 갈지는 시트가 정한다 — 목록은 그 규칙을 모른다. */
   onOpened: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const { chatId, load, reset } = state;
   // null = 아직 모른다(불러오는 중). 빈 배열 = 정말 없다.
   const [chats, setChats] = useState<ChatRow[] | null>(null);
@@ -93,6 +94,11 @@ export function AgentHistory({
     async (id: string) => {
       const at = chats?.findIndex((chat) => chat.id === id) ?? -1;
       if (!chats || at < 0) return;
+      // 휴지통이 여는 자리 바로 옆에 있다 — 잘못 누르면 나눈 이야기가 통째로 사라진다.
+      // 말풍선은 되살릴 수 없으니 한 번 묻는다.
+      const title = chats[at].title.trim() || UNTITLED;
+      if (!(await confirm({ title: `"${title}" 대화를 지울까요?`, description: "주고받은 말이 모두 사라지고, 다시 볼 수 없어요." })))
+        return;
       const removed = chats[at];
       // 먼저 지우고, 서버가 거절하면 되돌린다(이 저장소의 낙관적 업데이트 패턴).
       setChats((prev) => prev?.filter((chat) => chat.id !== id) ?? prev);
@@ -120,7 +126,7 @@ export function AgentHistory({
       // 되돌릴 일이 없는 것이 확실해진 뒤에만 한다 — 말풍선은 되살릴 수 없다.
       if (id === chatId) reset();
     },
-    [chatId, chats, reset],
+    [chatId, chats, reset, confirm],
   );
 
   if (chats === null) {
@@ -140,6 +146,7 @@ export function AgentHistory({
   }
 
   return (
+    <>
     <ul className="scrollbar-thin flex-1 space-y-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {chats.map((chat) => {
         const title = chat.title.trim() || UNTITLED;
@@ -177,5 +184,7 @@ export function AgentHistory({
         );
       })}
     </ul>
+    {dialog}
+    </>
   );
 }

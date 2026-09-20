@@ -31,6 +31,7 @@ import {
   Select,
   ColorPicker,
   Segmented,
+  useConfirm,
 } from "@/components/ui";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
@@ -119,6 +120,7 @@ function periodLabel(plan: Plan): string | null {
 }
 
 export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
   const [plan, setPlan] = useState(initialPlan);
   const [busy, setBusy] = useState(false);
@@ -409,7 +411,13 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
 
   async function deletePlan() {
     if (busy) return;
-    if (!window.confirm("이 계획을 삭제할까요? 담긴 일정도 함께 사라져요.")) return;
+    if (
+      !(await confirm({
+        title: "이 계획을 지울까요?",
+        description: "담긴 일정과 준비물, 메모에 붙인 사진까지 함께 사라져요.",
+      }))
+    )
+      return;
     setBusy(true);
     const res = await fetch(`/api/plans/${plan.id}`, { method: "DELETE" });
     if (res.ok) {
@@ -708,6 +716,8 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         </div>
       )}
       </DecorationSurface>
+
+      {dialog}
 
       {/* 일정 추가/수정 모달 */}
       <Modal

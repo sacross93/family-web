@@ -9,6 +9,7 @@ import {
   ColorPicker,
   Avatar,
   ItemActions,
+  useConfirm,
   EmptyState,
   Modal,
 } from "@/components/ui";
@@ -66,6 +67,7 @@ export function BoardClient({
   const [composing, setComposing] = useState(false);
   const [editing, setEditing] = useState<BoardPostWithAuthor | null>(null);
   const [decoratingId, setDecoratingId] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   const pinnedCount = posts.filter((p) => p.pinned).length;
 
@@ -115,6 +117,9 @@ export function BoardClient({
   }
 
   async function remove(id: string) {
+    // 가족이 쓴 말은 다시 만들 수 없다 — 지우기 전에 한 번 묻는다.
+    if (!(await confirm({ title: "이 쪽지를 지울까요?", description: "붙여둔 사진도 함께 사라지고, 다시 볼 수 없어요." })))
+      return;
     const prev = posts;
     setPosts((p) => p.filter((x) => x.id !== id));
     const res = await fetch(`/api/board/${id}`, { method: "DELETE" }).catch(
@@ -224,6 +229,8 @@ export function BoardClient({
           </div>
         </>
       )}
+
+      {dialog}
 
       {editing && (
         <EditModal

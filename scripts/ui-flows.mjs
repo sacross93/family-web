@@ -235,6 +235,8 @@ await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 �
   // 한쪽만 지우면 사진은 남아야 한다
   await openMenu(NOTES, MARK + "사진A");
   await menuItem("삭제").click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "지우기" }).click();
   await page.waitForTimeout(1800);
   if (fileCount() !== base + 1) throw new Error("다른 글이 쓰는 사진을 지워 버렸다");
 
@@ -242,13 +244,28 @@ await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 �
   await page.reload({ waitUntil: "networkidle" });
   await openMenu(NOTES, MARK + "사진B");
   await menuItem("삭제").click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "지우기" }).click();
   await page.waitForTimeout(1800);
   if (fileCount() !== base) throw new Error("아무도 안 쓰는데 사진이 남았다");
+});
+
+await step("지우기 전에 한 번 묻는다 — 취소하면 그대로 있다", async () => {
+  // 가족이 쓴 말은 다시 만들 수 없다. 잘못 눌러 사라지면 안 된다.
+  await openMenu(NOTES, MARK);
+  await menuItem("삭제").click();
+  await page.waitForTimeout(700);
+  if (!(await text()).includes("지울까요?")) throw new Error("묻지 않고 바로 지운다");
+  await page.getByRole("button", { name: "그대로 두기" }).click();
+  await page.waitForTimeout(900);
+  if (!(await text()).includes(MARK)) throw new Error("취소했는데 지워졌다");
 });
 
 await step("지우기 — 새로고침해도 안 되살아난다", async () => {
   await openMenu(NOTES, MARK);
   await menuItem("삭제").click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "지우기" }).click();
   await page.waitForTimeout(1100);
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(500);
@@ -311,8 +328,10 @@ await step("아래로 내려간 채로 히어로의 … 열기", async () => {
   if (!items.includes("계획 삭제")) throw new Error("메뉴가 안 열린다: " + JSON.stringify(items));
 });
 
-await step("계획 지우기", async () => {
+await step("계획 지우기 — 확인을 거친다", async () => {
   await menuItem("계획 삭제").click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "지우기" }).click();
   await page.waitForTimeout(1500);
   if ((await text()).includes(MARK)) throw new Error("지웠는데 남아 있다");
 });
