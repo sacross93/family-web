@@ -125,7 +125,7 @@ export function ShoppingClient({
           type="button"
           onClick={() => setMore((v) => !v)}
           aria-expanded={more}
-          className="flex items-center gap-2 self-start rounded-full px-1 py-1 text-xs font-medium text-ink-faint transition hover:text-ink"
+          className="flex h-10 items-center gap-2 self-start rounded-full px-1 text-xs font-medium text-ink-faint transition hover:text-ink"
         >
           <span className={cn("h-2.5 w-2.5 rounded-full", palette(category).dot)} />
           {addedBy && (

@@ -434,7 +434,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
     <div>
       <Link
         href="/plans"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft transition hover:text-ink"
+        className="mb-2 -ml-2 inline-flex items-center gap-1.5 px-2 py-2.5 text-sm font-semibold text-ink-soft transition hover:text-ink"
       >
         <ArrowLeft className="h-4 w-4" /> 계획 목록
       </Link>
@@ -1027,7 +1027,8 @@ function ChecklistSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-2.5 text-left"
+        // 접었다 펴는 머리글 — 폰에서 눌리는 높이를 44px 로(DESIGN.md §9).
+        className="flex min-h-11 items-center gap-2.5 text-left lg:min-h-0"
       >
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>
           {emoji}
@@ -1128,7 +1129,9 @@ function ChecklistSection({
                 key={s}
                 type="button"
                 onClick={() => onAdd(s)}
-                className="rounded-full border border-line bg-sunken px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink"
+                // 칩이 스물일곱 개 붙어 있는데 26px 이면 손가락이 옆 것을 짚는다.
+                // 폰에서만 40px, 데스크톱은 그대로.
+                className="flex h-10 items-center rounded-full border border-line bg-sunken px-3 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink lg:h-7"
               >
                 + {s}
               </button>

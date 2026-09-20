@@ -29,7 +29,8 @@ export function IconButton({
     <button
       className={cn(
         "inline-flex items-center justify-center rounded-full transition-all duration-200 active:scale-90 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-        size === "sm" ? "h-8 w-8" : "h-10 w-10",
+        // 작은 버튼은 폰에서 눌리는 넓이만 넓힌다(globals.css 의 .tap-target)
+        size === "sm" ? "tap-target h-8 w-8" : "h-10 w-10",
         VARIANTS[variant],
         className
       )}

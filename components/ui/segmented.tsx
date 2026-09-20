@@ -35,7 +35,8 @@ export function Segmented<T extends string>({
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all duration-200",
+              // 폰에서 40px 은 되게 — 필터를 바꾸는 일이 잦은데 32px 은 빗나간다.
+              "flex h-10 items-center rounded-full px-3.5 text-sm font-semibold transition-all duration-200 lg:h-8",
               active
                 ? "bg-surface text-ink shadow-sm"
                 : "text-ink-faint hover:text-ink-soft"

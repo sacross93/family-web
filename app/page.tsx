@@ -187,9 +187,11 @@ function DashCard({
           </span>
           <h3 className="text-base font-bold text-ink">{title}</h3>
         </div>
+        {/* -my-2 로 자리는 그대로 두고 누를 수 있는 높이만 키운다 — 16px 짜리 글자
+            링크는 폰에서 빗나가기 쉽다. */}
         <Link
           href={href}
-          className="flex items-center gap-0.5 text-xs font-semibold text-ink-faint transition hover:text-primary"
+          className="-my-3 flex items-center gap-0.5 py-3 pl-3 text-xs font-semibold text-ink-faint transition hover:text-primary"
         >
           {action ?? "전체보기"}
           <ChevronRight className="h-3.5 w-3.5" />

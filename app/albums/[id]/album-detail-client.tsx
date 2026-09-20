@@ -121,7 +121,7 @@ export function AlbumDetailClient({
       {/* 뒤로가기 */}
       <Link
         href="/albums"
-        className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-ink-soft transition hover:text-ink"
+        className="mb-2 -ml-2 inline-flex items-center gap-1 px-2 py-2.5 text-sm font-semibold text-ink-soft transition hover:text-ink"
       >
         <ChevronLeft className="h-4 w-4" /> 앨범 목록
       </Link>

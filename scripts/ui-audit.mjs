@@ -4,6 +4,7 @@
 //   2. 가려짐            떠 있는 것(하단 탭바·물어보기)이 글자나 버튼을 덮는가
 //   3. 페이지 길이       몇 화면어치인가 — 짧을수록 좋다는 뜻은 아니고, 늘어나면 눈에 띄게
 //   4. `…` 메뉴          펼친 항목이 잘리지 않는가, 바깥을 누르면 닫히는가 (폰만)
+//   5. 탭 타깃           폰에서 누를 수 있는 넓이가 40px 이상인가, 서로 훔치지 않는가
 //
 // 4번이 있는 이유: 조상에 overflow-hidden 이 있으면 메뉴가 잘려 아래 항목을 아예
 // 누를 수 없고(계획 상세에서 "수정·삭제" 가 그랬다), 조상에 transform 이 있으면
@@ -192,6 +193,72 @@ const probeMenu = () => {
   return bad;
 };
 
+/**
+ * 폰에서 누를 수 있는 넓이(DESIGN.md §9 는 40px 이상).
+ * **보이는 크기가 아니라 실제로 눌리는 넓이**를 잰다 — `.tap-target`(globals.css)이
+ * 보이지 않는 가짜 요소로 넓혀 두는 자리가 있어서, getBoundingClientRect 만으로는
+ * 장보기 체크 동그라미가 영영 24px 로 보인다.
+ * 넓힌 영역이 옆 버튼의 한가운데를 훔치는지도 같이 본다.
+ */
+const probeTapTargets = () => {
+  const skip = (el) => !el || el.closest("nextjs-portal, [data-nextjs-toast]");
+  const hit = (el) => {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const reach = (dx, dy) => {
+      let last = 0;
+      for (let d = 2; d <= 30; d += 2) {
+        const t = document.elementFromPoint(cx + dx * d, cy + dy * d);
+        if (t && (t === el || el.contains(t))) last = d; else break;
+      }
+      return last;
+    };
+    // reach 는 **중심에서** 잰 거리다. 폭을 또 더하면 두 배로 세어,
+    // 24px 짜리 동그라미가 46px 로 나온다(실제로 그렇게 새고 있었다).
+    return {
+      // 실제 크기보다 작게 나올 수는 없다(reach 는 30px 에서 멈춘다).
+      w: Math.max(Math.round(r.width), reach(1, 0) + reach(-1, 0)),
+      h: Math.max(Math.round(r.height), reach(0, 1) + reach(0, -1)),
+    };
+  };
+
+  const small = [];
+  const stolen = [];
+  const seen = new Set();
+  for (const el of document.querySelectorAll("button, a[href], [role='checkbox'], input:not([type='hidden'])")) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4 || r.top < 0 || r.bottom > innerHeight) continue;
+    if (skip(el) || getComputedStyle(el).visibility === "hidden") continue;
+    const label = (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().replace(/\s+/g, " ").slice(0, 20);
+
+    // 한가운데를 눌렀을 때 자기가 잡히는가 (넓힌 영역끼리 겹쳐 남의 것을 훔치는 경우).
+    // 하단 탭바에 깔린 것은 뺀다 — 화면 가장자리에 늘 있는 것이고, 조금만 굴리면 나온다
+    // (가려짐 검사와 같은 기준).
+    const inBottomBar = (node) => {
+      for (let e = node; e; e = e.parentElement) {
+        const st = getComputedStyle(e);
+        if (st.position !== "fixed") continue;
+        const br = e.getBoundingClientRect();
+        if (br.left <= 1 && br.right >= innerWidth - 1 && br.bottom >= innerHeight - 1) return true;
+      }
+      return false;
+    };
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (top && !skip(top) && !inBottomBar(top) && top !== el && !el.contains(top) && !top.contains(el)) {
+      stolen.push({ label, by: (top.getAttribute("aria-label") || top.textContent || top.tagName).trim().slice(0, 20) });
+    }
+
+    if (Math.min(r.width, r.height) >= 40) continue;
+    const h = hit(el);
+    if (Math.min(h.w, h.h) >= 40) continue;
+    const key = label + r.width + r.height;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    small.push({ label, 보임: `${Math.round(r.width)}×${Math.round(r.height)}`, 눌림: `${h.w}×${h.h}` });
+  }
+  return { small, stolen };
+};
+
 const pwPath = findPlaywright();
 if (!pwPath) {
   console.error("playwright 를 못 찾았어요. `npx playwright install chromium` 뒤에 다시 돌려 주세요.");
@@ -248,6 +315,19 @@ for (const { w, h, tag } of WIDTHS) {
       problems.push(`${tag} ${path}: "${o.float}" 가 "${o.covered}" 를 덮음`);
     }
 
+    // 탭 타깃은 폰에서만 문제다(마우스는 정확하다).
+    if (w < 1024) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(200);
+      const { small, stolen } = await page.evaluate(probeTapTargets);
+      for (const s2 of small) {
+        problems.push(`${tag} ${path}: "${s2.label}" 이 작다 — 보임 ${s2.보임}, 눌림 ${s2.눌림} (40px 이상이어야)`);
+      }
+      for (const s2 of stolen) {
+        problems.push(`${tag} ${path}: "${s2.label}" 한가운데를 누르면 "${s2.by}" 가 눌린다`);
+      }
+    }
+
     // `…` 메뉴는 폰에서만 뜬다.
     if (w < 1024) {
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -273,7 +353,7 @@ await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 맨 아래에서 가려지는 것 없음 · `…` 메뉴 정상");
+  console.log("✓ 가로 스크롤 없음 · 맨 아래에서 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

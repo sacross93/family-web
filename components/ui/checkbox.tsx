@@ -30,7 +30,8 @@ export function Checkbox({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 active:scale-90",
+        // tap-target: 보이는 동그라미는 그대로 두고 눌리는 넓이만 44px 로(globals.css)
+        "tap-target flex shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 active:scale-90",
         dim,
         checked
           ? cn(pal.dot, "border-transparent text-white shadow-sm")

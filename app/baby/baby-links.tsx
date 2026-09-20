@@ -64,7 +64,8 @@ export function BabyLinks({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 text-left lg:pointer-events-none"
+        // 접었다 펴는 머리글 — 폰에서 눌리는 높이를 44px 로(DESIGN.md §9).
+        className="flex min-h-11 w-full items-center gap-2.5 text-left lg:min-h-0 lg:pointer-events-none"
       >
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>🔗</span>
         <h3 className="text-base font-bold text-ink">참고 사이트</h3>
