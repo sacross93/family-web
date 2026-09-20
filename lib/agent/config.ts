@@ -9,6 +9,8 @@ export interface AgentConfig {
   history: number;
   catalogMaxChars: number;
   fetchMaxChars: number;
+  /** 모델 쪽 내장 웹검색을 켤지. 끄면 우리 도구만 쓴다. */
+  webSearch: boolean;
 }
 
 /** 양수 정수만 허용. 아니면 기본값. */
@@ -34,5 +36,8 @@ export function agentConfig(): AgentConfig {
     // 3,000 은 한 문단짜리 소개글에나 맞다. 실측한 기사·백과 항목이 6,000~43,000자였고,
     // 6,000 이면 대부분의 기사 한 편이 통째로 들어간다. 넘치면 얼마나 잘렸는지 숫자로 알린다.
     fetchMaxChars: num("AGENT_FETCH_MAX_CHARS", 6000),
+    // 기본값 켬. 우리 fetch 가 막히는 사이트(쿠팡 등)를 모델이 대신 읽어 준다(실측).
+    // 끄려면 AGENT_WEB_SEARCH="false".
+    webSearch: process.env.AGENT_WEB_SEARCH !== "false",
   };
 }

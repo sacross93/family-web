@@ -180,13 +180,25 @@ function actionBlock(name: string, args: Record<string, unknown>): string {
  *    엄격하게 쓸 수 있는 스키마는 `strict:true` 로, `create_item` 의 `args` 처럼 properties 가 없는
  *    `{type:"object"}` 는 `strict:false` 로 에코됐습니다(probe-2·3·5). 우리가 정할 이유가 없습니다.
  */
-function toolsField(tools: ToolSchema[]) {
-  return tools.map((tool) => ({
+/**
+ * 와이어로 나갈 `tools` 배열.
+ *
+ * 우리 함수 도구들 뒤에 **모델 쪽 내장 웹검색**을 붙인다(실측: HTTP 200, 실제로 검색하고
+ * 출처까지 단다). 이건 우리가 실행하는 도구가 아니라 공급자가 서버에서 돌리는 것이라
+ * "도구 5개 고정" 규칙의 바깥이다 — 루프는 이 호출을 보지 못하고 결과 글만 받는다.
+ *
+ * 값: 우리 fetch 가 막히는 사이트를 대신 읽어 준다(실측: 쿠팡 403 을 정확히 보고했다).
+ * 한계: **본 것을 지어내기도 한다** — 유튜브 도입부 대사를 물었더니 실제와 다른 문장을
+ * 인용했다. 그래서 안내문에서 "주소를 받으면 read_url 을 먼저"라고 못 박는다.
+ */
+function toolsField(tools: ToolSchema[], webSearch: boolean) {
+  const fns = tools.map((tool) => ({
     type: "function" as const,
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
   }));
+  return webSearch ? [...fns, { type: "web_search" as const }] : fns;
 }
 
 /** json 모드 안내문. 도구 목록과 `action` 블록 사용법을 안내문 뒤에 붙입니다. */
@@ -221,7 +233,10 @@ function buildBody(input: SendTurnInput, mode: WireToolMode): Json {
     instructions: mode === "json" ? withJsonToolGuide(input.system, input.tools) : input.system,
     input: toInputItems(input.messages, mode),
   };
-  if (mode === "native" && input.tools.length) body.tools = toolsField(input.tools);
+  const webSearch = agentConfig().webSearch;
+  // 내장 웹검색은 native 모드에서만. json 모드는 우리가 글로 도구를 설명하는 안전망이라
+  // 공급자 도구를 섞으면 두 방식이 한 요청에 겹친다.
+  if (mode === "native" && (input.tools.length || webSearch)) body.tools = toolsField(input.tools, webSearch);
   return body;
 }
 

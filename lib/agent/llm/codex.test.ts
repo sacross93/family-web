@@ -428,7 +428,7 @@ describe("codex 공급자 — auto 모드 강등 (실측으로는 안 밟히는 
     const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
     const ev = await drain(p.sendTurn({ system: "안내", messages: [], tools: [OPEN_PAGE] }));
     expect(f).toHaveBeenCalledTimes(2);
-    expect(bodyOf(f, 0).tools).toHaveLength(1);
+    expect(bodyOf(f, 0).tools.filter((t: { type: string }) => t.type === "function")).toHaveLength(1);
     expect(bodyOf(f, 1).tools).toBeUndefined();
     expect(bodyOf(f, 1).instructions).toContain("action");
     expect(texts(ev)).toEqual(["네"]);
@@ -681,5 +681,43 @@ describe("codex 공급자 — 도구가 가져온 그림", () => {
     const input = bodyOf(f, 0).input as Record<string, unknown>[];
     expect(input.filter((i) => Array.isArray(i.content))).toHaveLength(0);
     expect(input[input.length - 1].type).toBe("function_call_output");
+  });
+});
+
+
+describe("codex 공급자 — 내장 웹검색", () => {
+  afterEach(() => { delete process.env.AGENT_WEB_SEARCH; });
+
+  it("우리 함수 도구 뒤에 web_search 를 붙인다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", messages: [{ role: "user", content: "안녕" }], tools: [OPEN_PAGE] }));
+    const tools = bodyOf(f, 0).tools as { type: string; name?: string }[];
+    expect(tools.map((t) => t.type)).toEqual(["function", "web_search"]);
+    expect(tools[0].name).toBe("open_page");
+  });
+
+  it("끄면 붙이지 않는다", async () => {
+    process.env.AGENT_WEB_SEARCH = "false";
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", messages: [{ role: "user", content: "안녕" }], tools: [OPEN_PAGE] }));
+    expect((bodyOf(f, 0).tools as { type: string }[]).map((t) => t.type)).toEqual(["function"]);
+  });
+
+  it("json 모드에는 섞지 않는다 — 두 방식이 한 요청에 겹친다", async () => {
+    process.env.AGENT_TOOL_MODE = "json";
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", messages: [{ role: "user", content: "안녕" }], tools: [OPEN_PAGE] }));
+    expect(bodyOf(f, 0).tools).toBeUndefined();
+    delete process.env.AGENT_TOOL_MODE;
+  });
+
+  it("우리 도구가 없어도 웹검색만으로 나갈 수 있다", async () => {
+    const f = vi.fn(async () => sse([W.completed]));
+    const p = createCodexProvider({ fetchImpl: f as unknown as typeof fetch, token });
+    await drain(p.sendTurn({ system: "s", messages: [{ role: "user", content: "안녕" }], tools: [] }));
+    expect((bodyOf(f, 0).tools as { type: string }[]).map((t) => t.type)).toEqual(["web_search"]);
   });
 });
