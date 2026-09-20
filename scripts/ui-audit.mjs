@@ -3,6 +3,11 @@
 //   1. 가로 스크롤      (AGENTS.md: 가로 스크롤 금지)
 //   2. 가려짐            떠 있는 것(하단 탭바·물어보기)이 글자나 버튼을 덮는가
 //   3. 페이지 길이       몇 화면어치인가 — 짧을수록 좋다는 뜻은 아니고, 늘어나면 눈에 띄게
+//   4. `…` 메뉴          펼친 항목이 잘리지 않는가, 바깥을 누르면 닫히는가 (폰만)
+//
+// 4번이 있는 이유: 조상에 overflow-hidden 이 있으면 메뉴가 잘려 아래 항목을 아예
+// 누를 수 없고(계획 상세에서 "수정·삭제" 가 그랬다), 조상에 transform 이 있으면
+// 바깥 탭이 먹지 않는다(게시판 쪽지). 둘 다 닫힌 버튼만 봐서는 안 보인다.
 //
 // 가려짐은 "문서 맨 아래까지 내렸을 때"만 문제로 센다. 스크롤 도중 탭바 밑으로 콘텐츠가
 // 지나가는 것은 모든 모바일 앱이 그렇고, 더 내리면 보인다. 맨 아래에서도 덮여 있으면
@@ -26,6 +31,25 @@ const PATHS = [
   "/", "/todos", "/shopping", "/albums", "/calendar",
   "/baby", "/board", "/anniversaries", "/plans",
 ];
+
+/**
+ * 상세 페이지도 돈다 — 목록만 보면 놓친다.
+ * 계획 상세의 `…` 메뉴가 카드 overflow 에 잘려 폰에서 수정·삭제를 아예 못 눌렀는데,
+ * `/plans` 만 검사해서는 보이지 않았다. id 는 로그인한 뒤 API 로 알아온다.
+ */
+async function detailPaths(page) {
+  const j = async (u) => page.evaluate(async (u) => {
+    try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; }
+  }, u);
+  const out = [];
+  const plans = await j("/api/plans");
+  const albums = await j("/api/albums");
+  const planId = plans?.[0]?.id ?? plans?.plans?.[0]?.id;
+  const albumId = albums?.[0]?.id ?? albums?.albums?.[0]?.id;
+  if (planId) out.push(`/plans/${planId}`);
+  if (albumId) out.push(`/albums/${albumId}`);
+  return out;
+}
 const WIDTHS = [
   { w: 390, h: 844, tag: "폰" },
   { w: 1280, h: 900, tag: "데스크톱" },
@@ -121,6 +145,31 @@ const probeOcclusion = () => {
   return out;
 };
 
+/** 펼친 `…` 메뉴의 항목이 잘리거나 화면 밖으로 나가지 않았는가. */
+const probeMenu = () => {
+  const menu = document.querySelector("[data-item-menu]");
+  if (!menu) return [];
+  const bad = [];
+  for (const b of menu.querySelectorAll("button")) {
+    const r = b.getBoundingClientRect();
+    const label = (b.textContent || "").trim();
+    if (r.bottom > innerHeight || r.top < 0) {
+      bad.push({ label, why: "화면 밖에 있음" });
+      continue;
+    }
+    for (let el = b.parentElement; el; el = el.parentElement) {
+      const s = getComputedStyle(el);
+      if (s.overflow === "visible" || s.overflow === "") continue;
+      const pr = el.getBoundingClientRect();
+      if (r.bottom > pr.bottom + 1 || r.right > pr.right + 1 || r.top < pr.top - 1) {
+        bad.push({ label, why: "조상의 overflow 에 잘림" });
+        break;
+      }
+    }
+  }
+  return bad;
+};
+
 const pwPath = findPlaywright();
 if (!pwPath) {
   console.error("playwright 를 못 찾았어요. `npx playwright install chromium` 뒤에 다시 돌려 주세요.");
@@ -144,7 +193,9 @@ for (const { w, h, tag } of WIDTHS) {
     await page.waitForURL(BASE + "/", { timeout: 15000 });
   }
 
-  for (const path of PATHS) {
+  const paths = [...PATHS, ...(USER && PASS ? await detailPaths(page) : [])];
+
+  for (const path of paths) {
     await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
     await page.waitForTimeout(250);
 
@@ -161,6 +212,25 @@ for (const { w, h, tag } of WIDTHS) {
     for (const o of await page.evaluate(probeOcclusion)) {
       problems.push(`${tag} ${path}: "${o.float}" 가 "${o.covered}" 를 덮음`);
     }
+
+    // `…` 메뉴는 폰에서만 뜬다.
+    if (w < 1024) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const more = page.getByRole("button", { name: "더보기" }).first();
+      if (await more.count()) {
+        await more.click().catch(() => {});
+        await page.waitForTimeout(300);
+        for (const bad of await page.evaluate(probeMenu)) {
+          problems.push(`${tag} ${path}: "${bad.label}" 가 ${bad.why}`);
+        }
+        // 바깥을 눌러 닫히는지 — 메뉴 밖 왼쪽 위를 누른다.
+        await page.mouse.click(20, 300);
+        await page.waitForTimeout(250);
+        if (await page.evaluate(() => !!document.querySelector('[data-item-menu]'))) {
+          problems.push(`${tag} ${path}: \`…\` 메뉴가 바깥을 눌러도 닫히지 않음`);
+        }
+      }
+    }
   }
   await ctx.close();
 }
@@ -168,7 +238,7 @@ await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 맨 아래에서 가려지는 것 없음");
+  console.log("✓ 가로 스크롤 없음 · 맨 아래에서 가려지는 것 없음 · `…` 메뉴 정상");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);

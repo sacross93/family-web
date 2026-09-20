@@ -35,8 +35,20 @@ export function ItemActions({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    // 바깥을 누르면 닫는다. `fixed inset-0` 짜리 덮개를 쓰면 안 된다 —
+    // 게시판 쪽지처럼 조상에 transform 이 걸린 곳에서는 fixed 가 화면이 아니라
+    // 그 조상 기준으로 놓여, 쪽지 밖을 누르면 아무 일도 일어나지 않는다.
+    const onDown = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
   }, [open]);
 
   return (
@@ -53,34 +65,28 @@ export function ItemActions({
           <MoreHorizontal className="h-4 w-4" />
         </IconButton>
         {open && (
-          <>
-            {/* 바깥을 누르면 닫힌다 */}
-            <button
-              type="button"
-              aria-label="닫기"
-              onClick={() => setOpen(false)}
-              className="fixed inset-0 z-10 cursor-default"
-            />
-            <div className="absolute right-0 top-9 z-20 flex min-w-[7.5rem] flex-col overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg">
-              {actions.map((a) => (
-                <button
-                  key={a.label}
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    a.onClick();
-                  }}
-                  className={cn(
-                    "flex items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition",
-                    a.danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-sunken"
-                  )}
-                >
-                  <a.icon className="h-4 w-4 shrink-0" />
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </>
+          <div
+            data-item-menu
+            className="absolute right-0 top-9 z-20 flex min-w-[7.5rem] flex-col overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
+          >
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  a.onClick();
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition",
+                  a.danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-sunken"
+                )}
+              >
+                <a.icon className="h-4 w-4 shrink-0" />
+                {a.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
