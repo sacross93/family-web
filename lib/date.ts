@@ -29,6 +29,21 @@ export function kDot(d: Date | string) {
   return format(new Date(d), "yyyy. M. d.", { locale: ko });
 }
 
+/**
+ * 목록에서 훑어 읽기 좋은 날짜: 가까우면 "오늘"·"내일"·"모레", 멀면 "9월 27일 (일)".
+ * 가족이 목록에서 찾는 건 대개 "이번 주에 뭐 있지?" 라, 며칠 뒤인지가 날짜 자체보다 빠르다.
+ * 지난 날짜는 상대말로 바꾸지 않는다 — "어제"보다 언제였는지가 궁금한 자리다.
+ */
+export function kDateRelative(d: Date | string, today: Date = new Date()): string {
+  // differenceInCalendarDays 가 양쪽을 달력 날짜로 맞춰 준다 — 시각으로 빼면
+  // 오늘 아침 일정이 "어제"가 된다.
+  const days = differenceInCalendarDays(new Date(d), today);
+  if (days === 0) return "오늘";
+  if (days === 1) return "내일";
+  if (days === 2) return "모레";
+  return kDateShort(d);
+}
+
 /** 요일 한 글자: 일 월 화 ... */
 export function kWeekday(d: Date | string) {
   return format(new Date(d), "EEEEE", { locale: ko });

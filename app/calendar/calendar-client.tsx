@@ -34,9 +34,10 @@ import {
   Checkbox,
   ColorPicker,
   EmptyState,
+  Segmented,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
-import { kDate, kDateShort, kTime } from "@/lib/date";
+import { kDate, kDateRelative, kTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "@/lib/types";
 
@@ -115,6 +116,11 @@ export function CalendarClient({
     if (list) list.push(e);
     else byDay.set(key, [e]);
   }
+
+  // 폰에서 무엇을 보여줄지. 55px 짜리 칸에는 일정 이름이 안 들어가서
+  // 격자만으로는 "이번 주에 뭐 있지?" 를 답하지 못한다. 그래서 폰은 목록이 기본.
+  // 데스크톱은 칸이 넓어 격자가 제 몫을 하므로 늘 격자 + 옆 목록 그대로다.
+  const [phoneView, setPhoneView] = useState<"list" | "grid">("list");
 
   // 다가오는 일정 (오늘 이후)
   const upcoming = [...events]
@@ -225,9 +231,21 @@ export function CalendarClient({
         </Button>
       </PageHeader>
 
+      {/* 폰에서만 보이는 전환. 데스크톱은 둘 다 늘 보이므로 고를 것이 없다. */}
+      <div className="mb-4 lg:hidden">
+        <Segmented
+          value={phoneView}
+          onChange={setPhoneView}
+          options={[
+            { value: "list", label: "목록" },
+            { value: "grid", label: "달력" },
+          ]}
+        />
+      </div>
+
       <div className="grid animate-fade-up gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* 달력 */}
-        <div>
+        <div className={cn(phoneView === "grid" ? "" : "hidden lg:block")}>
           {/* 월 이동 */}
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
@@ -345,7 +363,7 @@ export function CalendarClient({
         </div>
 
         {/* 다가오는 일정 */}
-        <aside>
+        <aside className={cn(phoneView === "list" ? "" : "hidden lg:block")}>
           <Card flush className="overflow-hidden">
             <div className="border-b border-line px-4 py-3">
               <p className="text-sm font-bold text-ink">다가오는 일정</p>
@@ -374,7 +392,7 @@ export function CalendarClient({
                           {ev.title}
                         </span>
                         <span className="mt-0.5 block text-xs text-ink-soft">
-                          {kDateShort(ev.start)}
+                          {kDateRelative(ev.start)}
                           {" · "}
                           {ev.allDay ? "종일" : kTime(ev.start)}
                         </span>

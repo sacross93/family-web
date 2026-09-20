@@ -8,6 +8,7 @@ import {
   toDateInput,
   fromDateInput,
   parseDateInput,
+  kDateRelative,
 } from "@/lib/date";
 
 // 예정일 2027-05-20 고정. daysBefore(n) = 예정일 n일 전.
@@ -128,5 +129,31 @@ describe("parseDateInput", () => {
     expect(parseDateInput(null)).toBeNull();
     expect(parseDateInput(undefined)).toBeNull();
     expect(parseDateInput(123)).toBeNull();
+  });
+});
+
+describe("kDateRelative", () => {
+  const today = new Date("2026-09-20T15:00:00");
+  const at = (iso: string) => kDateRelative(new Date(iso), today);
+
+  it("오늘·내일·모레는 상대말로", () => {
+    expect(at("2026-09-20T09:00:00")).toBe("오늘");
+    expect(at("2026-09-21T23:59:00")).toBe("내일");
+    expect(at("2026-09-22T00:01:00")).toBe("모레");
+  });
+
+  it("사흘 뒤부터는 날짜로 — 세고 있기엔 머니까", () => {
+    expect(at("2026-09-23T09:00:00")).toBe("9월 23일 (수)");
+  });
+
+  it("같은 날이면 시각이 일러도 '오늘' — 달력 날짜로 센다", () => {
+    // 시각 차이로 빼면 오늘 아침 일정이 '어제'가 된다.
+    expect(at("2026-09-20T00:30:00")).toBe("오늘");
+    expect(at("2026-09-20T23:30:00")).toBe("오늘");
+  });
+
+  it("지난 날은 상대말로 바꾸지 않는다 — 언제였는지가 궁금한 자리다", () => {
+    expect(at("2026-09-19T09:00:00")).toBe("9월 19일 (토)");
+    expect(at("2026-09-13T09:00:00")).toBe("9월 13일 (일)");
   });
 });
