@@ -31,7 +31,7 @@ export function CheckCircle({
         size === "sm" ? "h-5 w-5" : "h-6 w-6",
         checked
           ? cn(pal.dot, "border-transparent text-white")
-          : "border-line-strong bg-surface text-transparent",
+          : "border-control bg-surface text-transparent",
         className
       )}
     >
