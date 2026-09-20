@@ -670,14 +670,44 @@ describe("read_url — 유튜브", () => {
     expect((r as { label: string }).label).toBe("신경망이란 무엇인가");
   });
 
-  it("영상 정보를 못 읽으면 그렇게 말한다", async () => {
-    const r = await executeTool(
-      "read_url",
-      { url: "https://www.youtube.com/watch?v=aircAruvnKk" },
-      ctx(serve(`<html>동의 화면</html>`) as unknown as typeof fetch)
+  it("watch 를 못 읽어도 oEmbed 로 제목을 가져오고 **영상 탓을 하지 않는다**", async () => {
+    // 배포 환경에서 실제로 일어나는 일 — 유튜브가 우리 서버를 막아 멀쩡한 영상이 안 읽힌다.
+    // 사용자가 "비공개·삭제된 영상일 수 있어요" 라는 틀린 진단을 실제로 봤다.
+    const f = vi.fn(async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("/oembed")) return Response.json({ title: "세전230 내 집 마련 가능할까요?", author_name: "신춘" });
+      if (u.includes("i.ytimg.com")) return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      return new Response("<html>로그인이 필요합니다</html>", { status: 200, headers: { "content-type": "text/html" } });
+    });
+    const r = await executeTool("read_url", { url: "https://youtu.be/eExo4z-Ia0E" }, ctx(f as unknown as typeof fetch));
+    expect(r.ok).toBe(true);
+    const w = wrappedOf(r);
+    expect(w).toContain("세전230 내 집 마련 가능할까요?");
+    expect(w).toContain("이 서버에서 오는 요청을 제한");
+    expect(w).not.toContain("비공개");
+    expect((r as { imageData?: string }).imageData).toMatch(/^data:image\/jpeg;base64,/); // 썸네일은 준다
+  });
+
+  it("oEmbed 도 거절하면 그때는 영상이 없는 것이다", async () => {
+    const f = vi.fn(async (input: string | URL | Request) =>
+      String(input).includes("/oembed")
+        ? new Response("", { status: 400 })
+        : new Response("<html>x</html>", { status: 200, headers: { "content-type": "text/html" } })
     );
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toContain("비공개이거나 삭제된");
+  });
+
+  it("watch 를 읽었을 때도 썸네일을 함께 준다", async () => {
+    const f = vi.fn(async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("i.ytimg.com")) return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      if (u.includes("/youtubei/")) return new Response("x", { status: 500 });
+      return new Response(WATCH, { status: 200, headers: { "content-type": "text/html" } });
+    });
+    const r = await executeTool("read_url", { url: "https://youtu.be/aircAruvnKk" }, ctx(f as unknown as typeof fetch));
+    expect((r as { imageData?: string }).imageData).toBeTruthy();
   });
 });
 

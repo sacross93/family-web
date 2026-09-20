@@ -307,6 +307,43 @@ export function youtubeSummaryText(info: YoutubeInfo, caption?: FetchedCaption):
   return lines.join("\n");
 }
 
+/**
+ * oEmbed — **봇 게이트가 없는 공개 API.** watch 페이지가 막히는 배포 환경에서도 열린다(실측).
+ * 없는 영상에는 HTTP 400 을 주므로 "영상이 없는 것"과 "우리가 못 읽는 것"을 가르는 데도 쓴다.
+ */
+export interface OembedInfo {
+  title: string;
+  author: string;
+}
+
+export function parseOembed(value: unknown): OembedInfo | null {
+  if (typeof value !== "object" || value === null) return null;
+  const o = value as Record<string, unknown>;
+  const title = str(o.title);
+  return title ? { title, author: str(o.author_name) } : null;
+}
+
+/** 영상 썸네일. i.ytimg.com 은 CDN 이라 막히지 않는다. hqdefault 는 항상 있다(maxres 는 없을 수 있다). */
+export function thumbnailUrl(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
+/**
+ * watch 페이지를 못 읽었을 때, oEmbed 로 알아낸 것만으로 쓰는 글.
+ * **영상 탓을 하지 않는다** — oEmbed 가 됐다는 건 영상이 멀쩡히 공개돼 있다는 뜻이다.
+ */
+export function oembedOnlyText(info: OembedInfo): string {
+  return [
+    `제목: ${info.title}`,
+    info.author ? `채널: ${info.author}` : "",
+    "",
+    "유튜브가 이 서버에서 오는 요청을 제한해서 **영상 페이지의 설명·챕터·자막은 읽지 못했습니다.**",
+    "영상 자체는 공개돼 있습니다(제목을 가져왔으니까요). 아래 썸네일과 위 제목까지가 확인된 전부입니다.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** 실제로 읽어 온 자막. */
 export interface FetchedCaption {
   languageCode: string;

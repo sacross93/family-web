@@ -17,6 +17,9 @@ import {
   pickCaptionTrack,
   playerCaptionTracks,
   playerRequestBody,
+  oembedOnlyText,
+  parseOembed,
+  thumbnailUrl,
   youtubeId,
   youtubeSummaryText,
 } from "./read/youtube";
@@ -675,6 +678,39 @@ async function fetchCaption(
 }
 
 /** 유튜브. 자막을 받아 오고, 못 받으면 설명과 챕터로 답하며 그 사실을 글 안에 담는다. */
+/**
+ * watch 페이지를 못 읽었을 때의 마지막 수단.
+ *
+ * oEmbed 는 봇 게이트가 없어 배포 환경에서도 열린다(실측). 여기서 제목이 나오면 **영상은 멀쩡한
+ * 것**이고 못 읽은 쪽이 우리다 — 그 구분을 안 하면 "비공개·삭제된 영상일 수 있다"고 엉뚱한
+ * 진단을 내놓게 된다(사용자가 실제로 그 화면을 봤다).
+ */
+async function readYoutubeByOembed(
+  videoId: string,
+  watch: string,
+  thumb: string | undefined,
+  doFetch: typeof fetch
+): Promise<ToolResult> {
+  const api = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
+  try {
+    const res = await doFetch(api, { headers: { accept: "application/json", "user-agent": BROWSER_UA }, signal: timeoutSignal() });
+    // 없는 영상에는 400/404 를 준다 — 그때만 영상 탓을 해도 된다.
+    if (!res.ok) return fail("그 영상을 찾지 못했어요. 비공개이거나 삭제된 영상일 수 있어요.");
+
+    const info = parseOembed(await res.json());
+    if (!info) return fail("그 영상의 정보를 읽지 못했어요.");
+
+    return {
+      ok: true,
+      data: { url: watch, wrapped: frame(watch, oembedOnlyText(info)) },
+      label: clip(info.title, 30),
+      ...(thumb ? { imageData: thumb } : {}),
+    };
+  } catch {
+    return fail("그 영상의 정보를 읽지 못했어요. 잠시 뒤 다시 해볼까요?");
+  }
+}
+
 async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResult> {
   const watch = `https://www.youtube.com/watch?v=${videoId}&hl=ko`;
   const doFetch = ctx.fetchImpl ?? fetch;
@@ -685,9 +721,14 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
   const body = await readBodyText(outcome.res);
   if ("error" in body) return fail(body.error);
 
+  // 썸네일은 CDN 이라 막히지 않는다. 영상에 대한 시각 정보를 언제나 한 장은 준다.
+  const thumb = await fetchImageData(thumbnailUrl(videoId), doFetch);
+
   const info = parseWatchPage(body.text, videoId);
   if (!info || !info.title) {
-    return fail("그 영상의 정보를 읽지 못했어요. 비공개이거나 삭제된 영상일 수 있어요.");
+    // watch 페이지를 못 읽었다. **영상 탓을 하기 전에** oEmbed 로 영상이 있는지부터 본다 —
+    // 배포 환경에서는 유튜브가 우리 서버를 막아 멀쩡한 영상도 안 읽힌다(실측).
+    return await readYoutubeByOembed(videoId, watch, thumb, doFetch);
   }
 
   const caption = await fetchCaption(videoId, body.text, doFetch);
@@ -704,6 +745,7 @@ async function readYoutube(videoId: string, ctx: ToolContext): Promise<ToolResul
     ok: true,
     data: { url: watch, wrapped: frame(watch, composed.text) },
     label: clip(info.title, 30),
+    ...(thumb ? { imageData: thumb } : {}),
   };
 }
 
