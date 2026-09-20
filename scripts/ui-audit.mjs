@@ -932,7 +932,10 @@ for (const { w, h, tag } of WIDTHS) {
     await page.waitForURL(BASE + "/", { timeout: 15000 });
   }
   const seen = new Map();
-  for (const path of PATHS) {
+  // 상세 화면(앨범·계획)까지 본다 — **가족이 실제로 즐겨찾기 하는 자리**인데
+  // 목록 화면의 제목이 자식 구간으로 안 내려와서 루트 기본값이 그대로 나오고 있었다.
+  const titlePaths = [...PATHS, ...(USER && PASS ? await detailPaths(page) : [])];
+  for (const path of titlePaths) {
     await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
     const title = (await page.title()).trim();
     const h1 = await page.evaluate(() => document.querySelectorAll("h1").length);
