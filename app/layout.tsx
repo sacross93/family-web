@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fredoka } from "next/font/google";
+import { Gowun_Batang } from "next/font/google";
 import "./pretendard.css";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
@@ -7,14 +7,18 @@ import { getCurrentUser } from "@/lib/current-user";
 import { getSiteConfig, getNav } from "@/lib/site";
 import { agentConfig } from "@/lib/agent/config";
 
-// Pretendard 는 `app/pretendard.css` 의 구간별 @font-face 로 불러온다 —
+// Pretendard(본문)는 `app/pretendard.css` 의 구간별 @font-face 로 불러온다 —
 // next/font/local 은 한 파일만 받을 수 있어 2.0MB 를 통째로 내려받게 된다.
-// 이름은 globals.css 의 --font-pretendard 가 가리킨다.
-
-const fredoka = Fredoka({
+//
+// 제목은 **고운바탕**(한글 명조). 여기엔 아기에게 쓰는 편지가 있고, 편지는 명조로 쓴다.
+// 한글 글꼴은 통째로 받으면 몇 MB 라서, 구글이 쪼개 둔 구간(unicode-range)을
+// next/font 가 그대로 가져온다 — 쓰는 글자가 든 구간만 내려온다.
+// 바뀌면 `npm run build` 뒤 .next/static/media 의 gowun 파일 개수를 세어 확인할 것
+// (한 덩어리로 합쳐지면 몇 MB 를 통째로 받게 된다).
+const gowun = Gowun_Batang({
   subsets: ["latin"],
-  variable: "--font-fredoka",
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-gowun",
+  weight: ["400", "700"],
   display: "swap",
 });
 
@@ -27,7 +31,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#fbfaf7",
+  // 폰 상태바 색. 상단바가 진해졌으니 거기에 맞춘다(globals.css --color-chrome).
+  themeColor: "#362c4e",
   width: "device-width",
   initialScale: 1,
 };
@@ -43,7 +48,7 @@ export default async function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${fredoka.variable} h-full antialiased`}
+      className={`${gowun.variable} h-full antialiased`}
     >
       <body className="min-h-full font-sans">
         <AppShell user={user} site={site} nav={nav} agentEnabled={agentConfig().enabled}>

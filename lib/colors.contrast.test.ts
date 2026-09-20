@@ -90,6 +90,42 @@ describe("글자 대비", () => {
     expect(contrast(token("danger"), token("surface"))).toBeGreaterThanOrEqual(3);
   });
 
+  it("진한 틀(chrome) 위의 글자도 AA 를 넘는다", () => {
+    // 사이드바·상단바·탭바·히어로가 전부 이 색 위에 있다. 옅은 파스텔 ink 를
+    // 그대로 옮기면 안 읽힌다 — primary-ink(#5647c9)는 chrome 위에서 1.3:1 이다.
+    for (const fg of ["chrome-ink", "chrome-faint"]) {
+      const r = contrast(token(fg), token("chrome"));
+      expect(r, `${fg} on chrome = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // 두 단계가 구별돼야 위계가 산다.
+    expect(contrast(token("chrome-ink"), token("chrome"))).toBeGreaterThan(
+      contrast(token("chrome-faint"), token("chrome")) * 1.3
+    );
+  });
+
+  it("틀 위에서 뒤집힌 알약(포동이 버튼)도 읽힌다", () => {
+    // 진한 틀 위에서는 primary 가 2.7:1 로 묻힌다. 밝은 쪽을 채우고 글자를 어둡게 한다.
+    expect(contrast(token("chrome"), token("chrome-ink"))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("주요 버튼의 흰 글자가 AA 를 넘는다", () => {
+    // 예전 primary(#7a6cf0)는 4.01:1 이라 버튼 글씨가 기준에 못 미쳤다.
+    expect(contrast("#ffffff", token("primary"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#ffffff", token("primary-hover"))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("강조색은 글자로 쓰지 않는다 — 대신 accent-ink 가 있다", () => {
+    // accent(#e0913a)는 흰 판에서 2.54:1 이다. 그래픽·진한 틀 위 큰 숫자 전용.
+    expect(contrast(token("accent"), token("surface"))).toBeLessThan(4.5);
+    // 진한 틀 위에서는 UI 기준(3:1)을 넘는다 — 거기서만 눈에 띄는 색으로 쓴다.
+    expect(contrast(token("accent"), token("chrome"))).toBeGreaterThanOrEqual(3);
+    // 밝은 판에 글자로 써야 하면 이쪽.
+    for (const bg of BACKGROUNDS) {
+      const r = contrast(token("accent-ink"), token(bg));
+      expect(r, `accent-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("파스텔 태그는 제 짝 배경 위에서 3:1 을 넘는다", () => {
     // Tag 는 `bg-<색>-soft` 위에 `text-<색>-ink` 로 그려진다.
     for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {

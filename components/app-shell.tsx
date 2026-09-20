@@ -38,16 +38,17 @@ function NavList({
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-200",
+              // 진한 틀 위. 지금 있는 곳만 밝은 파스텔 알약이 되고, 나머지는 조용하다.
+              "group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-200",
               active
-                ? cn(pal.soft, pal.ink, "font-semibold shadow-sm")
-                : "text-ink-soft hover:bg-sunken hover:text-ink",
+                ? cn(pal.soft, pal.ink, "font-semibold")
+                : "text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink",
             )}
           >
             <span
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-lg transition-transform duration-200 group-hover:scale-110",
-                active ? "bg-white/70 shadow-sm" : "bg-sunken",
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg",
+                active ? "bg-white/70" : "bg-white/10",
               )}
             >
               {item.emoji}
@@ -57,7 +58,7 @@ function NavList({
               <span
                 className={cn(
                   "text-[0.6875rem] font-normal",
-                  active ? "opacity-70" : "text-ink-faint",
+                  active ? "opacity-70" : "text-chrome-faint/70",
                 )}
               >
                 {item.desc}
@@ -73,7 +74,7 @@ function NavList({
 function Brand({ site }: { site: SiteConfigData }) {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-1 py-1">
-      <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl shadow-sm">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl">
         {site.brandImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -86,10 +87,10 @@ function Brand({ site }: { site: SiteConfigData }) {
         )}
       </span>
       <span className="flex flex-col leading-none">
-        <span className="font-display text-2xl font-bold text-ink">
+        <span className="font-display text-2xl font-bold text-chrome-ink">
           {site.siteName}
         </span>
-        <span className="mt-1 text-[0.6875rem] text-ink-faint">{site.tagline}</span>
+        <span className="mt-1.5 text-[0.6875rem] text-chrome-faint">{site.tagline}</span>
       </span>
     </Link>
   );
@@ -114,12 +115,12 @@ function Footer({
   }
 
   return (
-    <div className="mt-auto flex flex-col gap-2 border-t border-line pt-3">
+    <div className="mt-auto flex flex-col gap-2 border-t border-white/10 pt-3">
       {onDecorate && (
         <button
           type="button"
           onClick={onDecorate}
-          className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-medium text-ink-soft transition hover:bg-sunken hover:text-ink"
+          className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm font-medium text-chrome-faint transition hover:bg-chrome-soft hover:text-chrome-ink"
         >
           <Sparkles className="h-4 w-4" /> 이 페이지 꾸미기
         </button>
@@ -127,13 +128,13 @@ function Footer({
       {user?.isAdmin && (
         <Link
           href="/admin"
-          className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-medium text-ink-soft transition hover:bg-sunken hover:text-ink"
+          className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm font-medium text-chrome-faint transition hover:bg-chrome-soft hover:text-chrome-ink"
         >
           <Palette className="h-4 w-4" /> 관리자
         </Link>
       )}
       <div className="flex items-center justify-between gap-2 px-1">
-        <span className="truncate text-xs text-ink-faint">
+        <span className="truncate text-xs text-chrome-faint">
           {user ? user.name || user.username : "포동"} 님
         </span>
         {user && (
@@ -142,7 +143,7 @@ function Footer({
             onClick={logout}
             disabled={busy}
             aria-label="로그아웃"
-            className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-danger-soft hover:text-danger-ink"
+            className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-chrome-faint transition hover:bg-danger-soft hover:text-danger-ink"
           >
             <LogOut className="h-3.5 w-3.5" /> 로그아웃
           </button>
@@ -217,16 +218,17 @@ export function AppShell({
       <ToastProvider>
       <div className="min-h-dvh">
         {/* ── 데스크톱 사이드바 ── */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 border-r border-line bg-surface/80 px-4 py-6 backdrop-blur-sm lg:flex">
+        <aside className="on-chrome fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col gap-4 bg-chrome px-4 py-6 lg:flex">
           <Brand site={site} />
-          {/* 폰에서는 하단 탭바에 있다. 데스크톱은 탭바가 없으니 여기가 포동이의 자리. */}
+          {/* 폰에서는 하단 탭바에 있다. 데스크톱은 탭바가 없으니 여기가 포동이의 자리.
+              진한 틀 위에서는 보라(primary)가 2.7:1 로 묻힌다 — 밝은 쪽을 채워 뒤집는다. */}
           {agentEnabled && (
             <button
               type="button"
               onClick={() => setAsking(true)}
-              className="flex items-center gap-2.5 rounded-2xl bg-primary px-3 py-2.5 font-semibold text-white shadow-sm transition hover:bg-primary-hover active:scale-[0.98]"
+              className="flex items-center gap-2.5 rounded-lg bg-chrome-ink px-3 py-2.5 font-semibold text-chrome transition hover:brightness-95 active:scale-[0.98]"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-chrome/10">
                 <MessageCircle className="h-4.5 w-4.5" />
               </span>
               <span className="text-[0.9375rem]">포동이에게 물어보기</span>
@@ -240,11 +242,11 @@ export function AppShell({
 
         {/* ── 모바일 상단바 ── 페이지마다 브랜드를 되풀이하지 않고 지금 어디인지 말한다.
            메뉴는 아래 탭바로 내려갔다(엄지가 닿는 자리). */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-line bg-surface/85 px-4 backdrop-blur-md lg:hidden">
+        <header className="on-chrome sticky top-0 z-30 flex h-14 items-center justify-between gap-2 bg-chrome px-4 lg:hidden">
           {current && current.href !== "/" ? (
             <span className="flex min-w-0 items-center gap-2">
               <span className="text-xl">{current.emoji}</span>
-              <span className="truncate font-display text-lg font-bold text-ink">
+              <span className="truncate font-display text-xl font-bold text-chrome-ink">
                 {current.label}
               </span>
             </span>
@@ -259,8 +261,8 @@ export function AppShell({
               className={cn(
                 "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition",
                 decorating
-                  ? "bg-primary text-white"
-                  : "bg-sunken text-ink-soft hover:text-ink",
+                  ? "bg-accent text-chrome"
+                  : "bg-white/10 text-chrome-faint",
               )}
             >
               <Sparkles className="h-4 w-4" />
@@ -276,7 +278,7 @@ export function AppShell({
               type="button"
               aria-label="메뉴 닫기"
               onClick={() => setOpen(false)}
-              className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
+              className="absolute inset-0 bg-chrome/50 backdrop-blur-sm"
             />
             <aside
             ref={drawer}
@@ -284,7 +286,7 @@ export function AppShell({
             role="dialog"
             aria-modal="true"
             aria-label="메뉴"
-            className="absolute inset-y-0 left-0 flex w-[80%] max-w-[300px] flex-col gap-6 bg-surface px-4 py-6 shadow-lg animate-[pop-in_.25s_ease]"
+            className="on-chrome absolute inset-y-0 left-0 flex w-[80%] max-w-[300px] flex-col gap-6 bg-chrome px-4 py-6 shadow-lg animate-[pop-in_.25s_ease]"
           >
               <div className="flex items-center justify-between">
                 <Brand site={site} />
@@ -292,7 +294,7 @@ export function AppShell({
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="메뉴 닫기"
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sunken text-ink"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/10 text-chrome-ink"
                 >
                   <X className="h-5 w-5" />
                 </button>

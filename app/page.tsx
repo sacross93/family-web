@@ -185,7 +185,7 @@ function DashCard({
           >
             {emoji}
           </span>
-          <h3 className="text-base font-bold text-ink">{title}</h3>
+          <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
         </div>
         {/* -my-2 로 자리는 그대로 두고 누를 수 있는 높이만 키운다 — 16px 짜리 글자
             링크는 폰에서 빗나가기 쉽다. */}
@@ -236,12 +236,26 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ── 히어로 ── */}
-      <section className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-lavender-soft via-surface to-peach-soft p-6 shadow-sm sm:p-8">
-        <div className="relative z-10 flex flex-col gap-4">
+      {/* ── 히어로 ──
+          사진은 글자 **옆에** 놓는다. 예전엔 `absolute -right-4 -top-4` 라서
+          폰(390px)에서 인사말 두 줄째를 통째로 덮었다 — 실제 배포본에서 그랬다.
+          나란히 놓으면 사진이 커지든 글자가 길어지든 겹칠 자리가 없다. */}
+      <section className="on-chrome flex items-start gap-4 rounded-xl bg-chrome p-6 sm:gap-8 sm:p-8">
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <p className="font-num text-sm font-semibold text-accent">
+            {kDate(new Date())}
+          </p>
+          {/* 제목의 한 단어만 색칠하지 않는다 — 강조가 흩어지면 아무것도 강조되지 않는다. */}
+          <h1 className="font-display text-[1.75rem] font-bold leading-[1.25] text-chrome-ink sm:text-4xl">
+            <span className="block break-keep">{greeting()},</span>
+            <span className="block break-keep">{site.siteName} 가족</span>
+          </h1>
+          <p className="max-w-md text-sm leading-relaxed text-chrome-faint">
+            {site.heroSubtitle}
+          </p>
           {/* 구성원이 없으면 "가족 0명" 만 덩그러니 남는다. 추가할 화면도 없으니 줄째로 뺀다. */}
           {members.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="mt-1 flex items-center gap-2">
               {members.map((m) => (
                 <Avatar
                   key={m.id}
@@ -251,26 +265,11 @@ export default async function HomePage() {
                   size="sm"
                 />
               ))}
-              <span className="ml-1 text-sm font-medium text-ink-soft">
-                가족 {members.length}명
-              </span>
             </div>
           )}
-          <div>
-            <p className="text-sm font-semibold text-primary-ink">
-              {kDate(new Date())}
-            </p>
-            <h1 className="mt-1 break-keep font-display text-3xl font-bold leading-tight text-ink sm:text-4xl">
-              {greeting()},{" "}
-              <span className="text-primary">{site.siteName}</span> 가족! 👋
-            </h1>
-            <p className="mt-2 max-w-md text-sm text-ink-soft">
-              {site.heroSubtitle}
-            </p>
-          </div>
         </div>
         {site.heroImageUrl ? (
-          <div className="pointer-events-none absolute -right-4 -top-4 h-40 w-40 overflow-hidden rounded-3xl opacity-90 sm:h-52 sm:w-52">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md sm:h-28 sm:w-28">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={site.heroImageUrl}
@@ -279,9 +278,11 @@ export default async function HomePage() {
             />
           </div>
         ) : (
-          <div className="pointer-events-none absolute -right-6 -top-6 text-[120px] opacity-20 sm:text-[160px]">
+          /* 사진이 없으면 빈 네모를 그리지 않는다 — 덜 만든 화면처럼 보인다.
+             이모지만 크게, 판 없이 둔다. */
+          <span aria-hidden className="shrink-0 text-5xl leading-none sm:text-6xl">
             {site.heroEmoji}
-          </div>
+          </span>
         )}
       </section>
 

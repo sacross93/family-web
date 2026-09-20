@@ -1,7 +1,7 @@
 "use client";
 
 import { Settings } from "lucide-react";
-import { IconButton, Tag } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import {
@@ -25,6 +25,17 @@ export function findNextCheckup(entries: BabyEntryWithAuthor[]): BabyEntryWithAu
   );
 }
 
+/**
+ * 이 사이트에서 가장 중요한 한 가지.
+ *
+ * 예전엔 `8주 1일` 이 파스텔 카드 안의 48px 숫자였다 — 목록의 카드 제목과 크게 다르지 않아,
+ * 가장 중요한 것이 가장 크지 않았다. 이제 진한 판 위에 명조로 크게 쓴다.
+ * **과감함은 여기 한 곳에만 쓴다**(DESIGN.md). 나머지 화면은 조용하다.
+ *
+ * 남은 날·예정일은 진행 막대의 **양 끝**에 붙는다. 가운뎃점으로 이어 붙인 메타 줄
+ * (`1분기 · 5월 1일 · D-223`)은 읽는 순서가 없어 눈이 헤맨다 — 막대는 왼쪽에서
+ * 오른쪽으로 간다는 뜻이 이미 있으니, 그 끝에 놓으면 설명이 필요 없다.
+ */
 export function BabyHero({
   baby,
   entries,
@@ -38,84 +49,79 @@ export function BabyHero({
   const nextCheckup = findNextCheckup(entries);
   const born = !!baby.birthDate;
   const p = pregnancyProgress(baby.dueDate);
+  const pct = Math.round(p.progress * 100);
 
   return (
-    <section
-      className={cn(
-        "relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br p-6 shadow-sm sm:p-8",
-        pal.gradient
-      )}
-    >
+    <section className="on-chrome relative overflow-hidden rounded-xl bg-chrome p-6 sm:p-8">
       <IconButton
-        variant="surface"
+        variant="ghost"
         size="sm"
         aria-label="아기 설정"
         onClick={onOpenSettings}
-        className="absolute right-4 top-4 z-20"
+        className="absolute right-4 top-4 z-20 text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
       >
         <Settings className="h-4 w-4" />
       </IconButton>
 
-      <div className="relative z-10 flex flex-col gap-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-2xl shadow-sm">
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/10 text-xl">
             {baby.emoji}
           </span>
-          <div>
-            <p className="font-display text-xl font-bold text-ink">{baby.nickname}</p>
-            <p className="text-xs text-ink-soft">
-              {born ? `${kDate(baby.birthDate!)} 태어남` : `출산 예정 ${kDate(baby.dueDate)}`}
-            </p>
-          </div>
+          <p className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</p>
         </div>
 
         {born ? (
           <div>
-            <p className="text-sm font-semibold text-ink-soft">태어난 지</p>
-            <p className="font-num text-5xl font-bold leading-none text-ink">
+            <p className="font-display text-6xl font-bold leading-none text-chrome-ink sm:text-7xl">
               {daysSinceBirth(baby.birthDate!)}
-              <span className="ml-1 text-2xl">일</span>
+              <span className="ml-2 text-3xl sm:text-4xl">일째</span>
+            </p>
+            <p className="mt-3 text-sm text-chrome-faint">
+              {kDate(baby.birthDate!)}에 태어났어요
             </p>
           </div>
         ) : (
-          <>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="font-num text-5xl font-bold leading-none text-ink">{weekLabel(p)}</p>
-                <p className="mt-2 text-sm text-ink-soft">
-                  {p.overdue ? "예정일이 지났어요 · 곧 만나요 🤍" : `${p.trimester}분기`}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Tag color={baby.color} className="font-num bg-surface/80">
-                  출산 {p.dueLabel}
-                </Tag>
-                {nextCheckup && (
-                  <Tag color="sky" className="font-num bg-surface/80">
-                    다음 검진 {dday(nextCheckup.date).label} · {kDateShort(nextCheckup.date)}
-                  </Tag>
-                )}
-              </div>
-            </div>
+          <div>
+            <p className="font-display text-6xl font-bold leading-none text-chrome-ink sm:text-7xl">
+              {weekLabel(p)}
+            </p>
+            {/* 강조색은 '지금 벌어지는 일' 에만 쓴다 — 여기가 그 자리다. */}
+            <p className="font-num mt-3 text-base text-accent">
+              {p.overdue
+                ? `예정일에서 ${Math.abs(p.dueDays)}일 지났어요. 곧 만나요 🤍`
+                : `${p.dueDays}일 남았어요`}
+            </p>
+
             <div
-              className="h-2 w-full overflow-hidden rounded-full bg-white/60"
+              className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white/15"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={Math.round(p.progress * 100)}
+              aria-valuenow={pct}
               aria-label="임신 진행"
             >
               <div
                 className={cn("h-full rounded-full transition-all", pal.dot)}
-                style={{ width: `${Math.round(p.progress * 100)}%` }}
+                style={{ width: `${pct}%` }}
               />
             </div>
-          </>
+            {/* 막대의 양 끝이 곧 설명이다 — 왼쪽은 지금, 오른쪽은 만나는 날.
+                가운뎃점으로 이어 붙인 메타 줄보다 읽는 순서가 분명하다. */}
+            <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-chrome-faint">
+              <span>{p.trimester}분기</span>
+              <span className="font-num">{kDate(baby.dueDate)} 예정</span>
+            </div>
+          </div>
         )}
-      </div>
 
-      <div className="pointer-events-none absolute -right-6 -bottom-8 text-[140px] opacity-15 sm:text-[180px]">
-        {baby.emoji}
+        {nextCheckup && (
+          <p className="flex items-baseline gap-2 border-t border-white/10 pt-4 text-sm text-chrome-faint">
+            <span className="text-chrome-ink">다음 검진</span>
+            <span className="font-num">{kDateShort(nextCheckup.date)}</span>
+            <span className="font-num text-accent">{dday(nextCheckup.date).label}</span>
+          </p>
+        )}
       </div>
     </section>
   );

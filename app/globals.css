@@ -1,37 +1,59 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
-   포동(Podong) 디자인 시스템 · 경쾌한 파스텔
+   포동(Podong) 디자인 시스템 · 「편지」
    토큰의 단일 출처(Single Source of Truth). 규칙은 DESIGN.md 참고.
+
+   바꾼 이유: 예전 판은 13개 화면이 전부 같은 것이었다 —
+   흰 카드 + 같은 모서리 + 같은 그림자. 위계가 없으니 무엇이 중요한지 화면이 말해
+   주지 못했다. 이번 판은 **틀은 진하게, 내용은 밝게** 두고, 위계를 글자와 여백으로
+   만든다. 카드 테두리로 만들지 않는다.
    ═══════════════════════════════════════════════════════════════ */
 
 @theme {
-  /* ── 폰트 ── */
-  /* Pretendard 는 app/pretendard.css 의 구간별 @font-face 로 들어온다 */
+  /* ── 글꼴 ── */
+  /* 본문·UI: Pretendard (app/pretendard.css 의 구간별 @font-face) */
   --font-sans: Pretendard, ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fredoka), Pretendard, sans-serif;
+  /* 제목: 고운바탕 — 한글 명조. 이 사이트엔 아기에게 쓰는 편지가 있다.
+     18px 미만에는 쓰지 않는다(명조는 작을수록 읽기 어렵다). */
+  --font-display: var(--font-gowun), Pretendard, serif;
 
-  /* ── 중립색 (종이 · 표면 · 잉크) ── */
-  --color-paper: #fbfaf7;
-  --color-surface: #ffffff;
-  --color-sunken: #f3f1ec;
-  /* 글자 세 단계. 흰 배경(#fff)·종이(#fbfaf7) 기준 대비를 적어 둔다 —
-     WCAG AA 본문은 4.5:1 이다. 예전 --color-ink-faint(#a6a6b2)는 **2.41:1** 이라
-     날짜·개수·캡션이 사실상 안 읽혔다. 세 단계 간격은 유지하면서 가장 옅은 것도
-     기준을 넘도록 다시 잡았다. 더 옅게 만들고 싶으면 대비부터 재 볼 것. */
-  --color-ink: #3a3a44; /* 11.2 : 1 */
-  --color-ink-soft: #585862; /* 7.0 : 1 */
-  --color-ink-faint: #717179; /* 4.8 : 1 (예전 2.4) */
-  --color-line: #ece9e3;
-  --color-line-strong: #e0dcd4;
+  /* ── 바탕 · 판 · 틀 ── */
+  --color-paper: #eceaf2; /* 페이지 바탕. 옅은 라일락 회색 */
+  --color-surface: #ffffff; /* 내용 판 */
+  --color-sunken: #e7e4ee; /* 판 안에서 한 단 들어간 자리 */
+  /* 틀(사이드바·상단바·탭바·히어로). 진한 자두 먹 — 검정 대용이 아니라 색이다. */
+  --color-chrome: #362c4e;
+  --color-chrome-soft: #473a63; /* 틀 위에서 한 단 뜬 자리(눌린 탭·호버) */
+  --color-chrome-ink: #ede8f7; /* 틀 위 글자 — 10.8 : 1 */
+  --color-chrome-faint: #b9aed0; /* 틀 위 흐린 글자 — 6.2 : 1 */
 
-  /* ── 브랜드 / 주요 액션 (소프트 그레이프) ── */
-  --color-primary: #7a6cf0;
-  --color-primary-hover: #6a5ce8;
-  --color-primary-soft: #ece9fd;
+  /* ── 글자 세 단계 ──
+     흰 판(#fff) / 바탕(#eceaf2) / 들어간 자리(#e7e4ee) 어디에 놓여도 AA(4.5:1)를 넘는다.
+     예전 --color-ink-faint(#a6a6b2)는 흰 배경에서 2.41:1 이라 날짜·개수가 안 읽혔다.
+     더 옅게 만들고 싶으면 lib/colors.contrast.test.ts 부터 볼 것. */
+  --color-ink: #241f30; /* 흰 판 16.0 : 1 */
+  --color-ink-soft: #524b63; /* 8.3 : 1 */
+  --color-ink-faint: #6a6279; /* 5.8 : 1 (들어간 자리 4.6) */
+  --color-line: #ddd8e8;
+  --color-line-strong: #cfc8de;
+
+  /* ── 브랜드 / 주요 액션 (그레이프) ──
+     예전 #7a6cf0 은 흰 글자가 4.01:1 이라 버튼 글씨가 AA 를 못 넘었다. 한 단 낮췄다. */
+  --color-primary: #6c5ce8; /* 흰 글자 4.85 : 1 */
+  --color-primary-hover: #5f4fdc;
+  --color-primary-soft: #e9e5fd;
   --color-primary-ink: #5647c9;
 
-  /* ── 파스텔 카테고리 (각 색: base 점 · soft 배경 · ink 글자) ── */
+  /* ── 강조 한 색 ──
+     '지금 벌어지고 있는 일' 에만 쓴다 — 주차 숫자, 오늘, 진행 막대.
+     글자로 쓰지 않는다: 흰 판에서 2.54:1 이다. 글자가 필요하면 accent-ink. */
+  --color-accent: #e0913a; /* 틀 위 5.1 : 1 — 그래픽·큰 숫자용 */
+  --color-accent-ink: #8a5312; /* 흰 판 6.3 : 1 — 글자용 */
+  --color-accent-soft: #fbead4;
+
+  /* ── 파스텔 분류색 (각 색: base 점 · soft 배경 · ink 글자) ──
+     가족이 고른 색이고 스티커·사진이 이 위에 산다. 값은 그대로 둔다. */
   --color-lavender: #c7b9f5;
   --color-lavender-soft: #ede8fe;
   --color-lavender-ink: #6455c4;
@@ -63,17 +85,22 @@
   /* danger-soft 위에 얹는 글자. --color-danger 를 글자로 쓰면 2.84:1 로 안 읽힌다. */
   --color-danger-ink: #a6475d; /* danger-soft 위 4.7:1 */
 
-  /* ── 모서리 ── */
-  --radius-sm: 0.625rem; /* 10px */
-  --radius-md: 1rem; /* 16px */
-  --radius-lg: 1.5rem; /* 24px */
-  --radius-xl: 2rem; /* 32px */
+  /* ── 모서리 ──
+     전부 같은 값을 쓰면 위계가 사라진다. 크기가 아니라 **무엇인가**로 고른다:
+     칩·버튼은 완전 둥글게, 판은 lg, 사진·타일은 md, 판 안의 작은 것은 sm. */
+  --radius-sm: 0.625rem; /* 10px — 판 안의 작은 조각 */
+  --radius-md: 1rem; /* 16px — 사진, 채운 타일 */
+  --radius-lg: 1.25rem; /* 20px — 내용 판 (예전 24px 카드보다 덜 둥글다) */
+  --radius-xl: 1.75rem; /* 28px — 히어로처럼 큰 덩어리 */
 
-  /* ── 그림자 (부드럽고 컬러 살짝) ── */
-  --shadow-sm: 0 1px 2px rgba(70, 60, 110, 0.05), 0 1px 3px rgba(70, 60, 110, 0.04);
-  --shadow-md: 0 4px 16px -4px rgba(80, 70, 120, 0.1), 0 2px 6px -3px rgba(80, 70, 120, 0.06);
-  --shadow-lg: 0 14px 34px -10px rgba(80, 70, 120, 0.16), 0 4px 10px -4px rgba(80, 70, 120, 0.08);
-  --shadow-pop: 0 20px 44px -14px rgba(90, 75, 150, 0.24);
+  /* ── 그림자 ──
+     **판에는 쓰지 않는다.** 정말로 떠 있는 것(모달·메뉴·알림)에만.
+     예전엔 34곳이 shadow-sm 을 달고 있어서 모든 것이 똑같이 떠 보였다. */
+  /* 남아 있는 shadow-sm 자리는 Tailwind 기본(회색)으로 떨어지지 않게 우리 색으로 못박는다.
+     새로 쓰지 말 것 — 판에는 그림자를 쓰지 않는다. */
+  --shadow-sm: 0 1px 2px rgba(54, 44, 78, 0.05);
+  --shadow-md: 0 4px 16px -4px rgba(54, 44, 78, 0.14), 0 2px 6px -3px rgba(54, 44, 78, 0.08);
+  --shadow-lg: 0 14px 34px -10px rgba(54, 44, 78, 0.22), 0 4px 10px -4px rgba(54, 44, 78, 0.1);
 
   /* ── 모션 ── */
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -170,9 +197,7 @@ body {
   overflow-x: hidden;
   overflow-x: clip;
   background-color: var(--color-paper);
-  /* 아주 옅은 도트 그리드 — '가족 게시판/모눈종이' 결을 은은하게 */
-  background-image: radial-gradient(rgba(120, 108, 160, 0.05) 1px, transparent 1px);
-  background-size: 22px 22px;
+  /* 도트 그리드는 뺐다 — 옛 '모눈종이' 컨셉의 흔적이고, 사진 위에서 지저분했다. */
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -192,6 +217,11 @@ body {
   border-radius: 4px;
 }
 
+/* 진한 틀(사이드바·상단바·탭바) 안에서는 보라 링이 안 보인다 — 밝은 링으로 바꾼다. */
+.on-chrome :focus-visible {
+  outline-color: var(--color-chrome-ink);
+}
+
 /* 얇은 스크롤바 */
 .scrollbar-thin {
   scrollbar-width: thin;
@@ -206,31 +236,20 @@ body {
   border-radius: 9999px;
 }
 
-/* 숫자를 Fredoka(디스플레이)로 — 날짜/카운트가 경쾌하게 */
+/* 숫자는 본문 글꼴 + 고정폭 자릿수.
+   **--font-display 를 쓰지 않는다**: 제목 글꼴이 명조로 바뀌면서 이걸 상속시키면
+   목록의 날짜·개수 45곳이 전부 명조가 된다. 작은 글씨의 명조는 읽기 어렵다.
+   큰 숫자(주차·D-day)만 따로 `.font-display` 를 직접 붙인다. */
 .font-num {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-feature-settings: "tnum";
   letter-spacing: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   시그니처: 사진/메모 카드의 '워시테이프' 조각
-   .tape 를 가진 요소 위쪽 가운데에 반투명 파스텔 테이프가 붙음
-   ═══════════════════════════════════════════════════════════════ */
-.tape::before {
-  content: "";
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  width: 74px;
-  height: 20px;
-  transform: translateX(-50%) rotate(-2.5deg);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 1px 3px rgba(80, 70, 120, 0.12);
-  backdrop-filter: blur(1px);
-  z-index: 2;
-  pointer-events: none;
+/* 명조로 크게 쓰는 자리. 한글 명조는 자간이 벌어 보여 살짝 좁힌다. */
+.font-display {
+  letter-spacing: -0.02em;
+  word-break: keep-all;
 }
 
 /* ═══════════════════════════════════════════════════════════════

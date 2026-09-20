@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import { Card, Tag, Avatar, Segmented, ItemActions, EmptyState, Button } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
 import { palette } from "@/lib/colors";
@@ -51,6 +51,16 @@ export function EntryTimeline({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* 목록에 이름을 붙이고, 더하는 버튼을 **그 목록 옆에** 둔다.
+          전에는 페이지 맨 위 빈 줄에 버튼 하나만 떠 있었다 — 폰에서는 제목이
+          상단바로 올라가면서 그 줄에 버튼만 남아, 무엇에 더하는 버튼인지 알 수 없었다. */}
+      <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+        <h2 className="font-display text-xl font-bold text-ink">일기</h2>
+        <Button size="sm" onClick={onCreate}>
+          <Plus className="h-4 w-4" /> 기록 남기기
+        </Button>
+      </div>
+
       <div className="overflow-x-auto pb-1">
         <Segmented value={filter} onChange={onFilterChange} options={FILTER_OPTIONS} />
       </div>

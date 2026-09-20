@@ -559,7 +559,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
       <button
         type="button"
         onClick={openMemo}
-        className="mb-8 flex w-full items-center gap-3 rounded-3xl border border-line bg-surface p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-pop"
+        className="mb-8 flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-butter-soft text-xl">
           💡

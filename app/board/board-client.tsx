@@ -281,13 +281,15 @@ function NoteCard({
   return (
     <div
       className={cn(
-        "group relative mb-4 break-inside-avoid rounded-3xl p-5 pt-7 shadow-sm transition-all duration-300 animate-pop-in",
+        "group relative mb-4 break-inside-avoid rounded-lg p-5 transition-all duration-300 animate-pop-in",
         pal.soft,
-        // 고정 쪽지는 핀, 일반 쪽지는 워시테이프
-        post.pinned ? "ring-2 ring-inset ring-primary/25" : "tape",
+        // 워시테이프(흰 반투명 조각)는 뗐다 — 옛 '코르크보드' 컨셉의 흔적이라
+        // 새 바탕 위에서는 쪽지 위에 얹힌 흰 얼룩처럼 보였다.
+        // 고정 쪽지는 핀 하나로 충분하다.
+        post.pinned && "ring-2 ring-inset ring-primary/25",
         decorating
-          ? "z-20 rotate-0 shadow-pop ring-2 ring-primary/40"
-          : cn(rotation, "hover:z-10 hover:rotate-0 hover:shadow-pop")
+          ? "z-20 rotate-0 ring-2 ring-primary/40"
+          : cn(rotation, "hover:z-10 hover:rotate-0")
       )}
     >
       {/* 고정 핀 */}

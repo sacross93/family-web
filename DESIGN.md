@@ -4,90 +4,108 @@
 새 화면·기능을 만들 때 **여기 정의된 토큰과 컴포넌트만 사용**하세요.
 새로운 색·간격·그림자를 즉흥적으로 만들지 않습니다. 일관성이 곧 완성도입니다.
 
-> 컨셉 한 줄: **"우리 집 냉장고 문 / 코르크보드"** — 온 가족이 사진과 메모를 붙여두는
-> 밝고 다정한 파스텔 보드. 심플·모던을 바탕으로, 포인트만 경쾌하게.
+> 컨셉 한 줄: **「편지」** — 두 사람이 셋이 되기를 기다리는 집.
+> 바깥 틀은 진하고 조용하게, 안쪽 내용은 밝게. 위계는 상자가 아니라 **글자와 여백**이 만든다.
+
+> **왜 바꿨나.** 앞선 판은 "냉장고 문 / 코르크보드" 였는데, 실제로 만들어진 것은
+> 13개 화면에 걸친 **똑같은 흰 카드 더미**였다 — 같은 모서리, 같은 그림자, 같은 여백.
+> 무엇이 중요한지 화면이 말해 주지 못했고, 가장 중요한 "8주 1일" 이 목록 제목보다
+> 크지 않았다. 이번 판은 그 세 가지를 뒤집는다: **틀을 진하게**, **판을 종류별로**,
+> **과감함은 한 곳에만**.
 
 ---
 
 ## 1. 디자인 원칙
 
-1. **밝고 다정하게.** 오프화이트 배경 + 파스텔 포인트. 무겁거나 차갑지 않게.
-2. **심플이 기본, 경쾌함은 포인트.** 여백을 넉넉히. 색은 '분류'에 쓰고, 화면당 강조는 하나만.
-3. **둥글게.** 카드·버튼·입력창 모두 크게 둥근 모서리. 각진 요소 지양.
-4. **색으로 분류한다.** 6가지 파스텔이 카테고리/앨범/일정 색이 됩니다. 의미 없이 색을 남발하지 않기.
-5. **한 화면, 한 주인공.** 시그니처(테이프 붙은 사진·핀 꽂힌 메모)는 절제해서 한 곳에만.
+1. **과감함은 한 곳에만 쓴다.** 화면마다 기억에 남을 것은 하나다 — 아기 페이지는 주차 숫자,
+   홈은 오늘 인사. 나머지는 조용히 뒤로 물러난다. 강조가 둘이 되면 강조가 없는 것과 같다.
+2. **위계는 상자가 아니라 글자와 여백이 만든다.** 무언가를 돋보이게 하려고 테두리·그림자를
+   더하지 않는다. 크기를 키우고 둘레를 비운다.
+3. **색은 정보다.** 파스텔 6색은 분류를 뜻한다(장보기 분류, 아기 색, 구성원). 장식이 아니다.
+   같은 색이 두 가지를 뜻하면 색은 아무것도 뜻하지 않게 된다.
+4. **없는 것은 자리를 덜 차지한다.** 빈 카드가 가득 찬 카드와 같은 높이를 갖지 않는다.
+   그래도 초대는 남긴다.
+5. **폰이 먼저다.** 390px 에서 손으로 만져 보고 고친다. 손 얹어야 나타나는 것을 만들지 않는다.
+6. **하나를 덜어낸다.** 다 만든 뒤 화면에서 장식 하나를 뺀다. 워시테이프도 그렇게 뗐다.
 
 ---
 
-## 2. 색상 (Color)
+## 2. 색 (Color)
 
-토큰의 실제 정의: [`app/globals.css`](app/globals.css) → 매핑: [`lib/colors.ts`](lib/colors.ts)
+값의 단일 출처는 `app/globals.css` 의 `@theme`. 코드에서 HEX 를 쓰지 않는다.
 
-### 중립색
+### 바탕 · 판 · 틀
 
-| 용도 | 토큰 / 클래스 | HEX |
+| 토큰 | 값 | 무엇 |
 |---|---|---|
-| 앱 배경 (은은한 도트) | `bg-paper` | `#FBFAF7` |
-| 카드·표면 | `bg-surface` | `#FFFFFF` |
-| 가라앉은 영역 (아이콘 타일 등) | `bg-sunken` | `#F3F1EC` |
-| 본문 텍스트 | `text-ink` | `#3A3A44` |
-| 보조 텍스트 | `text-ink-soft` | `#585862` |
-| 흐린 텍스트·플레이스홀더 | `text-ink-faint` | `#717179` |
-| 실선 | `border-line` | `#ECE9E3` |
-| 진한 실선 | `border-line-strong` | `#E0DCD4` |
+| `paper` | `#eceaf2` | 페이지 바탕 (옅은 라일락 회색) |
+| `surface` | `#ffffff` | 내용 판 |
+| `sunken` | `#e7e4ee` | 판 안에서 한 단 들어간 자리 |
+| `chrome` | `#362c4e` | **틀** — 사이드바·상단바·탭바·히어로 |
+| `chrome-soft` | `#473a63` | 틀 위에서 한 단 뜬 자리 |
+| `chrome-ink` | `#ede8f7` | 틀 위 글자 (10.8:1) |
+| `chrome-faint` | `#b9aed0` | 틀 위 흐린 글자 (6.2:1) |
+| `line` / `line-strong` | `#ddd8e8` / `#cfc8de` | 실선 |
 
-### 브랜드 / 주요 액션
+**틀 위에서는 밝은 쪽을 쓴다.** `primary`(보라)는 `chrome` 위에서 2.7:1 이라 묻힌다 —
+탭바의 포동이 버튼처럼 눈에 띄어야 하는 것은 `bg-chrome-ink text-chrome` 으로 **뒤집는다**.
 
-주요 버튼·링크·활성 상태는 **소프트 그레이프** 하나로 통일합니다.
+### 글자
 
-`bg-primary` `#7A6CF0` · hover `bg-primary-hover` `#6A5CE8` · 소프트 `bg-primary-soft` · 글자 `text-primary-ink`
+`ink`(#241f30) · `ink-soft`(#524b63) · `ink-faint`(#6a6279).
+흰 판·바탕·들어간 자리 어디에서도 4.5:1 을 넘는다. 더 옅게 만들고 싶으면
+`lib/colors.contrast.test.ts` 부터 볼 것.
 
-상태색: `text-success`, `bg-danger-soft`. **오류 글자는 `text-danger-ink`** — `text-danger`
-(`#E0607E`)는 흰 배경 3.4:1, 연분홍 배경 2.8:1 이라 읽히지 않는다. `danger` 는 아이콘·테두리·배경용.
+### 브랜드 · 강조
 
-### 파스텔 카테고리 (6색)
+- `primary` `#6c5ce8` — 주요 액션. 흰 글자가 4.85:1(예전 `#7a6cf0` 은 4.01 이라 기준 미달이었다).
+  밝은 판에 **글자로** 쓸 때는 `primary-ink`.
+- `accent` `#e0913a` — **"지금 벌어지는 일" 에만.** 오늘 날짜, 남은 날, 진행.
+  **글자로 쓰지 않는다**(흰 판에서 2.54:1). 밝은 판에 글자가 필요하면 `accent-ink`.
 
-앨범·일정·태그·구성원을 **색으로 구분**할 때 사용. 각 색은 3단으로 제공됩니다.
+### 파스텔 6색 (lavender·peach·mint·sky·butter·rose)
 
-| 키 | soft (배경) | ink (글자) | dot (진한 점) |
-|---|---|---|---|
-| `lavender` 라벤더 | `bg-lavender-soft` | `text-lavender-ink` | `bg-lavender` |
-| `peach` 피치 | `bg-peach-soft` | `text-peach-ink` | `bg-peach` |
-| `mint` 민트 | `bg-mint-soft` | `text-mint-ink` | `bg-mint` |
-| `sky` 스카이 | `bg-sky-soft` | `text-sky-ink` | `bg-sky` |
-| `butter` 버터 | `bg-butter-soft` | `text-butter-ink` | `bg-butter` |
-| `rose` 로즈 | `bg-rose-soft` | `text-rose-ink` | `bg-rose` |
-
-**항상 `lib/colors.ts`의 `palette(key)` 헬퍼로 접근**하세요. 문자열로 클래스를 조합하지 않습니다
-(`bg-${key}-soft` ❌ — Tailwind가 스캔 못 함). 상태색: `text-success`, `text-danger`, `bg-danger-soft`.
+각 색은 `-soft`(배경) · `-ink`(글자) · 기본(점·막대)의 세 벌. 분류에만 쓴다.
+`lib/colors.ts` 의 `palette(key)` 로만 접근한다 — `"bg-" + key` 같은 동적 조합은
+Tailwind v4 가 스캔하지 못한다.
 
 ---
 
-## 3. 타이포그래피 (Typography)
+## 3. 글꼴 (Typography)
 
-- **본문·UI: Pretendard** (`font-sans`, 기본). 깔끔한 한글.
-- **디스플레이·숫자: Fredoka** (`font-display`). 큰 제목과 **숫자(날짜·D-day·개수)**에 경쾌함을.
-  - 한글은 자동으로 Pretendard로 폴백됩니다 → 큰 제목에 `font-display`를 써도 안전.
-  - 숫자만 강조하려면 `.font-num` 유틸.
+| 역할 | 글꼴 | 어디에 |
+|---|---|---|
+| 제목 | **고운바탕** (한글 명조) `font-display` | 히어로 숫자, 페이지·판 제목, 브랜드 |
+| 본문·UI | **Pretendard** `font-sans` | 그 밖 전부 |
+| 숫자 | Pretendard + 고정폭 자릿수 `.font-num` | 날짜·개수·D-day |
 
-| 역할 | 클래스 |
-|---|---|
-| 페이지 제목 | `font-display text-[28px] font-bold` (→ `PageHeader`가 처리) |
-| 섹션 제목 | `text-base font-bold text-ink` (→ `CardTitle`) |
-| 본문 | 기본 (`text-[15px]`~`text-base`) `text-ink` |
-| 보조 설명 | `text-sm text-ink-soft` |
-| 캡션·메타 | `text-xs text-ink-faint` |
-
-기본 자간은 `-0.01em`(globals.css). 한글 가독성을 위해 굵기는 400/500/600/700을 주로 사용.
+- **명조는 18px 아래로 내려가지 않는다.** 작을수록 읽기 어렵다.
+  목록의 날짜·개수는 `.font-num`(고딕)이다 — `font-display` 를 상속시키지 않는다.
+- 큰 제목은 `leading-tight` + `break-keep`. 한글은 단어 중간에서 끊기면 읽기가 느려진다.
+- 제목의 **한 단어만 색칠하지 않는다.** 강조가 흩어지면 아무것도 강조되지 않는다.
+- 대문자 라벨(`ALL CAPS`), 가운뎃점으로 이은 메타 줄(`A · B · C`), 버튼 끝 화살표(`→`),
+  작은 라벨용 고정폭 글꼴 — 쓰지 않는다. 어느 사이트에나 붙는 기본값이다.
 
 ---
 
-## 4. 간격 · 모서리 · 그림자
+## 4. 여백 · 모서리 · 그림자
 
-- **간격**: Tailwind 4배수(4px) 스케일. 카드 내부 패딩 `p-5`, 섹션 간 `gap-4`~`gap-6`, 페이지 상단 `py-6 lg:py-10`.
-- **모서리**: 태그/버튼 = `rounded-full`. 입력창 = `rounded-2xl`. 카드 = `rounded-3xl`. 작은 타일 = `rounded-xl`.
-- **그림자**: `shadow-sm`(기본 카드) · `shadow-md`(강조) · `shadow-lg`(모달/드로어) · `shadow-pop`(호버 부양). 새 그림자 만들지 않기.
-- **호버 상호작용**: 클릭 가능한 카드는 `hover:-translate-y-1 hover:shadow-pop` (→ `Card interactive`).
+- **여백**: Tailwind 4배수. 판 안쪽 `p-5`, 덩어리 사이 `gap-4`~`gap-6`.
+- **모서리는 크기가 아니라 무엇인가로 고른다.**
+
+  | 토큰 | 값 | 무엇 |
+  |---|---|---|
+  | `rounded-full` | — | 칩·버튼·아바타 |
+  | `rounded-sm` | 10px | 판 안의 작은 조각 |
+  | `rounded-md` | 16px | 사진, 채운 타일 |
+  | `rounded-lg` | 20px | 내용 판 (`Card` 기본) |
+  | `rounded-xl` | 28px | 히어로처럼 큰 덩어리 |
+
+- **그림자는 판에 쓰지 않는다.** 정말로 떠 있는 것만 갖는다 —
+  `shadow-md`(메뉴·팝오버) · `shadow-lg`(모달·드로어·알림).
+  예전엔 34곳이 `shadow-sm` 을 달고 있어 모든 것이 똑같이 떠 보였다.
+- **누를 수 있는 판은 떠오르지 않는다.** `hover:-translate-y-1` 대신 테두리만 또렷해진다
+  (`Card interactive`). 카드마다 붙은 부양 효과는 어느 사이트에나 있는 기본값이다.
 
 ---
 
@@ -100,48 +118,56 @@ import {
   Button, Card, CardTitle, Tag, ColorDot, PageHeader, EmptyState,
   Field, Label, Input, Textarea, Select, Checkbox, ColorPicker,
   Avatar, IconButton, Modal, Spinner, LoadingBlock, Segmented,
+  ItemActions, CollapsibleCard, useConfirm, useToast, useFocusTrap,
 } from "@/components/ui";
 ```
 
+**`Card` 는 세 종류다.** 무엇을 담는가로 고른다.
+
+| variant | 모양 | 담는 것 |
+|---|---|---|
+| `plain`(기본) | 흰 판 + 실선 한 겹 | 목록·폼처럼 여러 가지가 들어가는 판 |
+| `tile` | 색으로 채움, 테두리 없음 | 하나만 담는 덩어리(주차 숫자, 오늘 요약) |
+| `photo` | 여백·테두리 없음 | 사진 |
+
 | 컴포넌트 | 용도 | 핵심 props |
 |---|---|---|
-| `Button` | 액션 | `variant`: primary·soft·ghost·outline·danger / `size`: sm·md·lg / `href`(링크) |
-| `IconButton` | 아이콘 전용 버튼 | `variant`: ghost·soft·danger·surface / `size`: sm·md |
-| `Card` | 콘텐츠 카드 | `interactive`(호버 부양) / `flush`(패딩 제거) |
-| `CardTitle` | 카드/섹션 제목 | — |
+| `Button` | 액션 | `variant`: primary·soft·ghost·outline·danger / `size` / `href` |
+| `IconButton` | 아이콘 전용 버튼 | `variant`: ghost·soft·danger·surface / `size` |
+| `Card` | 내용 판 | `variant` / `interactive` / `flush` |
+| `CardTitle` | 판 제목 (명조 18px) | — |
 | `Tag` | 색상 태그·뱃지 | `color`(팔레트 키) / `dot` |
-| `ColorDot` | 색 점 | `color` |
-| `PageHeader` | 페이지 상단 (이모지+제목+설명+액션) | `emoji` `title` `description` / children=우측 액션 |
+| `PageHeader` | 페이지 상단 | `emoji` `title` `description` / children=우측 액션 |
 | `EmptyState` | 빈 상태 | `emoji` `title` `description` `action` |
-| `Field`/`Label`/`Input`/`Textarea`/`Select` | 폼 | 표준 input 속성 |
-| `Checkbox` | 원형 체크 | `checked` `onChange` `color` |
-| `ColorPicker` | 파스텔 색 선택 | `value` `onChange` |
-| `Avatar` | 구성원 아바타 | `emoji` `color` `name` `size` |
+| `CollapsibleCard` | 접었다 펴는 판 | `emoji` `title` `summary` `defaultOpen` |
+| `ItemActions` | `…` 메뉴 | `actions` / `inline` |
 | `Modal` | 다이얼로그 | `open` `onClose` `title` `emoji` `footer` `size` |
 | `Segmented` | 뷰/필터 전환 | `value` `options` `onChange` |
-| `Spinner`/`LoadingBlock` | 로딩 | — |
+| `useConfirm` / `useToast` | 묻기 / 알리기 | §8 참고 |
 
-아이콘은 **`lucide-react`** (UI 크롬용, 얇고 심플) + **이모지**(카테고리·감정 표현). 혼용 규칙:
-lucide는 기능 아이콘(닫기·추가·수정·삭제), 이모지는 콘텐츠 성격(🌴 여행, 🎂 생일).
+아이콘은 **`lucide-react`**(기능: 닫기·추가·수정·삭제) + **이모지**(콘텐츠 성격: 🌴 여행, 🎂 생일).
 
 ---
 
 ## 6. 레이아웃 패턴
 
-- **앱 셸** (`components/app-shell.tsx`)
-  - 데스크톱: 좌측 사이드바 264px.
-  - 폰: **상단바 + 하단 탭바**. 상단바는 지금 페이지의 이모지·제목을 말하고(브랜드는 홈에서만),
-    메뉴는 아래 탭바에 있다 — 엄지가 닿는 자리다. 탭은 `getNav()` 앞 `TAB_COUNT`개 + `더보기`,
-    `더보기`가 전체 메뉴 드로어를 연다. **탭 목록을 따로 만들지 않는다**(`lib/nav.ts` 한 곳).
+- **앱 셸** (`components/app-shell.tsx`) — 틀은 전부 `bg-chrome` 한 색이다.
+  - 데스크톱: 좌측 사이드바 264px (진한 틀).
+  - 폰: **진한 상단바 + 진한 하단 탭바**. 상단바는 지금 페이지의 이모지·제목을 말하고
+    (브랜드는 홈에서만), 메뉴는 아래 탭바에 있다 — 엄지가 닿는 자리다.
+    탭은 `getNav()` 앞 `TAB_COUNT`개 + `더보기`. **탭 목록을 따로 만들지 않는다**(`lib/nav.ts` 한 곳).
+  - 틀 안에서는 `on-chrome` 클래스를 붙인다 — 포커스 링이 밝은 색으로 바뀐다.
 - **아래쪽 가장자리**: `--bottom-bar`(globals.css) 한 곳에서 온다. 탭바 높이 + iOS 안전영역.
-  떠 있는 버튼과 본문 아래 여백이 **모두 이 값을 읽는다**. 페이지에서 `pb-*`를 손으로 맞추지 않는다.
-- **떠 있는 버튼은 하나**(`물어보기`). 둘이 되면 목록 한가운데를 가린다 —
-  관리자용 `꾸미기`는 상단바·사이드바 안으로 들어가 있다.
-- **콘텐츠 폭**: `max-w-6xl` 중앙 정렬. 페이지는 항상 `PageHeader`로 시작.
-  상단바가 이미 제목을 띄운 페이지에서는 `PageHeader`가 폰에서 제목을 접고 액션만 남긴다
-  (`components/shell-context.tsx`의 `titleInTopBar`). 같은 제목을 위아래로 두 번 쓰지 않는다.
+  페이지에서 `pb-*` 를 손으로 맞추지 않는다.
+- **떠 있는 버튼을 만들지 않는다.** 화면 한가운데에 떠 있는 버튼은 그 자리의 콘텐츠를
+  누를 수 없게 만든다 — 아기 기록의 `…` 가 `물어보기` FAB 밑에 깔려, 일기를 고치려고
+  누르면 AI 채팅이 열렸다. 포동이는 탭바 안으로, 꾸미기는 상단바 안으로 들어가 있다.
+- **더하는 버튼은 더해지는 목록 옆에 둔다.** 페이지 맨 위 빈 줄에 버튼만 띄우지 않는다 —
+  폰에서는 제목이 상단바로 올라가면서 그 줄에 버튼 하나만 남아, 무엇에 더하는지 알 수 없다.
+- **사진은 글자 위에 겹치지 않는다.** `absolute` 로 얹지 말고 나란히 놓는다.
+  홈 히어로의 사진이 `-right-4 -top-4` 였을 때 폰에서 인사말 둘째 줄을 통째로 덮었다.
+- **콘텐츠 폭**: `max-w-6xl` 중앙 정렬.
 - **그리드**: 카드 목록은 `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` 류. 모바일 1열 필수.
-- **추가 액션**: 페이지 우상단 `Button`(primary, `+ 항목 추가`). 목록 비면 `EmptyState`의 `action`.
 
 ---
 
@@ -202,7 +228,10 @@ app/api/<feature>/[id]/route.ts   # PATCH(수정) · DELETE(삭제)
   흰 배경·종이 배경에서 `ink`·`ink-soft`·`ink-faint` 셋 다 **4.5:1 이상**.
   예전 `ink-faint`(#A6A6B2)는 2.41:1 이라 날짜·개수·캡션이 사실상 안 읽혔다.
   더 옅게 만들고 싶으면 대비부터 재 볼 것 — 세 단계 간격도 같이 본다(한 덩어리가 되면 위계가 사라진다).
-  `primary`는 4.01:1 이라 **아이콘·테두리·큰 글씨에만**. 작은 글자에는 `primary-ink`.
+  **진한 틀 위도 같이 잰다**: `chrome-ink`·`chrome-faint` 가 `chrome` 위에서 4.5:1 을 넘는지.
+  밝은 판의 글자색을 그대로 틀 위로 옮기면 안 읽힌다(`primary-ink` 는 틀 위에서 1.3:1).
+  `accent` 는 **글자로 쓰지 않는다**(흰 판 2.54:1) — 밝은 판에 글자가 필요하면 `accent-ink`.
+  검사는 값을 바꿔 **일부러 깨뜨려 보고** 남긴다. 안 깨지는 검사는 아무것도 지키지 못한다.
 - **모바일 탭 타깃 ≥ 40px** — `npm run ui:audit` 가
   보이는 크기가 아니라 **실제로 눌리는 넓이**를 잰다.
   - 버튼·칩은 폰에서 `h-10`(데스크톱은 `lg:h-8`처럼 낮춰도 된다. 마우스는 정확하다).
@@ -224,12 +253,13 @@ app/api/<feature>/[id]/route.ts   # PATCH(수정) · DELETE(삭제)
 
 ✅ **Do**
 - 공용 컴포넌트와 팔레트 토큰만 사용
-- 색은 분류에, 강조는 화면당 하나
-- 넉넉한 여백, 크게 둥근 모서리
+- 색은 분류에, 과감함은 화면당 한 곳에
+- 판을 담는 것에 맞춰 고르기(`plain`·`tile`·`photo`)
 - 빈 상태·로딩·에러를 항상 다정하게 처리
 
 🚫 **Don't**
 - 임의의 HEX/그림자/폰트 추가
-- `bg-${key}-soft`처럼 동적 클래스 조합 (Tailwind가 못 잡음)
-- 한 화면에 강조색 여러 개로 소란스럽게
-- 각진 박스, 딱딱한 회색 UI, 번역투 문구
+- `bg-${key}-soft` 처럼 동적 클래스 조합 (Tailwind 가 못 잡음)
+- 판에 그림자 달기, 카드마다 호버 부양
+- 대문자 라벨 · 가운뎃점 메타 줄 · 버튼 끝 화살표 · 제목 한 단어만 색칠
+- 떠 있는 버튼, 손 얹어야만 나타나는 액션

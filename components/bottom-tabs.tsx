@@ -42,7 +42,7 @@ export function BottomTabs({
   return (
     <nav
       aria-label="주요 메뉴"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur-md lg:hidden"
+      className="on-chrome fixed inset-x-0 bottom-0 z-40 bg-chrome lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <ul className="flex h-14 items-stretch">
@@ -59,7 +59,7 @@ export function BottomTabs({
                 <span
                   className={cn(
                     "flex h-7 w-11 items-center justify-center rounded-full text-base transition-colors",
-                    active && pal.soft,
+                    active ? pal.soft : "opacity-60",
                   )}
                 >
                   {item.emoji}
@@ -67,7 +67,7 @@ export function BottomTabs({
                 <span
                   className={cn(
                     "text-[0.625rem] leading-none",
-                    active ? cn(pal.ink, "font-bold") : "text-ink-faint",
+                    active ? "font-bold text-chrome-ink" : "text-chrome-faint",
                   )}
                 >
                   {item.label}
@@ -84,10 +84,10 @@ export function BottomTabs({
               aria-label="포동이에게 물어보기"
               className="flex h-full w-full flex-col items-center justify-center gap-0.5"
             >
-              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-chrome-ink text-chrome">
                 <MessageCircle className="h-4 w-4" />
               </span>
-              <span className="text-[0.625rem] font-bold leading-none text-primary-ink">
+              <span className="text-[0.625rem] font-bold leading-none text-chrome-ink">
                 포동이
               </span>
             </button>
@@ -103,20 +103,20 @@ export function BottomTabs({
             <span
               className={cn(
                 "flex h-7 w-11 items-center justify-center rounded-full transition-colors",
-                inMore && "bg-sunken",
+                inMore && "bg-white/15",
               )}
             >
               <MoreHorizontal
                 className={cn(
                   "h-5 w-5",
-                  inMore ? "text-ink" : "text-ink-faint",
+                  inMore ? "text-chrome-ink" : "text-chrome-faint",
                 )}
               />
             </span>
             <span
               className={cn(
                 "text-[0.625rem] leading-none",
-                inMore ? "font-bold text-ink" : "text-ink-faint",
+                inMore ? "font-bold text-chrome-ink" : "text-chrome-faint",
               )}
             >
               더보기

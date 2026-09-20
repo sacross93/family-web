@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
-import { PageHeader, Button, useConfirm } from "@/components/ui";
+import { PageHeader, useConfirm } from "@/components/ui";
 import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem, BabyLink } from "@/lib/types";
 import { fromDateInput } from "@/lib/date";
 import { BabySetup, type BabySetupPayload } from "./baby-setup";
@@ -214,12 +213,8 @@ export function BabyClient({
   // ── 아기 있음 ──
   return (
     <div className="flex flex-col gap-6 pb-24">
-      <PageHeader emoji={baby.emoji} title={baby.nickname} description="함께 쓰는 아기 일기">
-        <Button onClick={() => setEntryModal("new")}>
-          <Plus className="h-4 w-4" /> 기록 남기기
-        </Button>
-      </PageHeader>
-
+      {/* 제목줄이 없다 — 히어로가 이미 아기 이름을 말하고, 기록을 더하는 버튼은
+          더해지는 목록(일기) 옆으로 내려갔다. 같은 말을 위아래로 두 번 하지 않는다. */}
       <BabyHero baby={baby} entries={baby.entries} onOpenSettings={() => setSettingsOpen(true)} />
 
       <div className="grid gap-6 lg:grid-cols-3">
