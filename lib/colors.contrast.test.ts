@@ -210,6 +210,24 @@ describe("글자 대비", () => {
     }
   });
 
+  it("토스트가 페이지에서 떠 보인다 — 3초 뒤 사라지는 판이 바탕과 같은 색이면 못 본다", () => {
+    // 토스트는 본문 위 어디에나 뜬다: 페이지(paper)·흰 판(surface)·틀(chrome).
+    // 옛 오류 토스트는 `danger-soft` 라 페이지 위에서 **1.02:1** 이었다 — 테두리와
+    // 그림자만으로 버티고 있었고, `say()` 는 전부 오류라 가족이 보는 토스트는 그것뿐이었다.
+    for (const plate of ["ink", "danger-ink"]) {
+      for (const bg of ["paper", "surface", "chrome"]) {
+        const r = contrast(token(plate), token(bg));
+        expect(r, `토스트 ${plate} on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
+      }
+      // 판이 어두우니 글자는 흰색. 그 짝도 본문 기준을 넘어야 한다.
+      const w = contrast("#ffffff", token(plate));
+      expect(w, `흰 글자 on ${plate} = ${w.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // 오류인지 아닌지가 **색으로** 구별돼야 한다 — 둘 다 어두우니 명도로는 못 가린다.
+    const apart = hueApart(token("danger-ink"), token("ink"));
+    expect(apart, `danger-ink vs ink = ${apart.toFixed(0)}도`).toBeGreaterThanOrEqual(20);
+  });
+
   it("파스텔 잉크는 **본문 기준(4.5:1)** 이다 — 3:1 로 재던 것이 화면에서 37곳을 놓쳤다", () => {
     // 이 여섯 잉크는 태그 안에만 있는 게 아니다: 사이드바에서 **지금 있는 메뉴의 이름**
     // ("장보기" 15px · "공유 장보기 목록" 11px), 게시판 쪽지의 **쓴 사람**,

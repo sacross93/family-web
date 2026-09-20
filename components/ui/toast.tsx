@@ -63,11 +63,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {items.map((t) => (
               <div
                 key={t.id}
+                // 토스트는 **꽉 찬 어두운 판**이다. 옅은 판으로 두면 안 된다 —
+                // `bg-danger-soft`(#fde8e4)는 연분홍 페이지(#fbeaf2) 위에서 **1.02:1** 이라
+                // 테두리(ring-danger/30, 1.47:1)와 그림자만으로 버티고 있었다.
+                // 3초 뒤 사라지는 데다, `say()` 는 전부 오류라 가족이 보는 토스트는
+                // 이것 하나뿐이다. 못 보고 지나가면 실패한 줄도 모른다.
+                // 어두운 판은 페이지·흰 판·틀 어디에 떠도 5:1 아래로 안 내려간다.
                 className={cn(
                   "animate-fade-up max-w-md rounded-md px-4 py-3 text-sm font-medium shadow-lg",
-                  t.tone === "error"
-                    ? "bg-danger-soft text-danger-ink ring-1 ring-danger/30"
-                    : "bg-ink text-white"
+                  t.tone === "error" ? "bg-danger-ink text-white" : "bg-ink text-white"
                 )}
               >
                 {t.text}
