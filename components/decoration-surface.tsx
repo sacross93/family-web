@@ -14,6 +14,7 @@ import {
 import type { Decoration } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
+import { Button } from "@/components/ui";
 
 
 // z-index (같은 컨테이너): back<10=콘텐츠 뒤, 콘텐츠=10, front>10=콘텐츠 앞, 선택=50
@@ -398,23 +399,19 @@ function ToolbarButtons({
   onAdd: () => void;
   onDone: () => void;
 }) {
+  // 손으로 만든 <button> 이었는데 그래서 두 가지가 어긋나 있었다:
+  //  - 폰에서 **36px** (사이트 규칙은 40px). `Button` 의 `sm` 이 `h-10 lg:h-9` 로 맞춰 준다.
+  //  - `whitespace-nowrap` 이 없어 폰에서 **"사진 / 추가"** 로 접혔다. 알약 안에서 두 줄이 됐다.
+  // 끝내는 말도 상단바와 달랐다 — 같은 동작(편집 끄기)인데 위는 `마치기`, 여기는 `완료`.
+  // 한 동작은 흐름 내내 한 이름으로 부른다(DESIGN.md §8).
   return (
     <>
-      <button
-        type="button"
-        onClick={onAdd}
-        disabled={uploading}
-        className="flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-2 text-sm font-semibold text-primary-ink transition hover:brightness-95 disabled:opacity-50"
-      >
+      <Button variant="soft" size="sm" onClick={onAdd} disabled={uploading}>
         <Plus className="h-4 w-4" /> {uploading ? "올리는 중…" : "사진 추가"}
-      </button>
-      <button
-        type="button"
-        onClick={onDone}
-        className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
-      >
-        <Check className="h-4 w-4" /> 완료
-      </button>
+      </Button>
+      <Button size="sm" onClick={onDone}>
+        <Check className="h-4 w-4" /> 마치기
+      </Button>
     </>
   );
 }

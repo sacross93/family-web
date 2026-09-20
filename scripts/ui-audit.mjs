@@ -796,6 +796,33 @@ for (const { w, h, tag } of WIDTHS) {
     return [...new Set(out)].slice(0, 4);
   };
 
+  // ── 버튼 글자가 두 줄로 접히는가 ─────────────────────────
+  // 꾸미기 툴바의 `사진 추가` 가 알약 안에서 **"사진 / 추가"** 로 접혀 있었다.
+  // 손으로 만든 <button> 이라 `Button` 의 `whitespace-nowrap` 이 없었던 것.
+  // **직접 붙은 글자**만 본다 — 제목·설명이 각각 자식으로 들어간 메뉴 항목은 원래 두 줄이다.
+  const wrapped = () => {
+    const out = [];
+    for (const el of document.querySelectorAll("button,a[href]")) {
+      if (el.closest("nextjs-portal")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      const direct = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.nodeValue.trim()).join(" ").trim();
+      if (!direct || direct.length < 2) continue;
+      const range = document.createRange();
+      let lines = 0;
+      for (const n of el.childNodes) {
+        if (n.nodeType !== 3 || !n.nodeValue.trim()) continue;
+        range.selectNodeContents(n);
+        lines = Math.max(lines, new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size);
+      }
+      if (lines > 1) out.push(`"${direct.slice(0, 18)}" ${lines}줄`);
+    }
+    return [...new Set(out)].slice(0, 4);
+  };
+
+  // 꾸미기 모드에 **실제로 들어가 봤는지** 센다. 0이면 검사가 조용히 아무것도 안 한 것이다 —
+  // 그런 검사는 "문제 없음" 이라고 말하면서 아무것도 지키지 않는다. 오늘 두 번 당했다.
+  let decoVisits = 0;
   for (const { w, h, tag } of WIDTHS.filter((x) => x.w !== 768)) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
@@ -810,6 +837,39 @@ for (const { w, h, tag } of WIDTHS) {
       await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
       for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}: 대비 부족 — ${bad}`);
       for (const bad of await page.evaluate(plates)) problems.push(`${tag} ${path}: 판이 바탕에 묻힌다 — ${bad}`);
+      for (const bad of await page.evaluate(wrapped)) problems.push(`${tag} ${path}: 버튼 글자가 접힌다 — ${bad}`);
+
+      // **꾸미기 모드도 본다.** 감사가 한 번도 안 들어가 본 화면이고, 실제로 거기서
+      // `사진 추가` 가 두 줄로 접히고 `완료` 가 36px(규칙은 40px)이었다.
+      const deco = page.getByRole("button", { name: /^(꾸미기|이 페이지 꾸미기)$/ }).first();
+      if (await deco.isVisible().catch(() => false)) {
+        await deco.click().catch(() => {});
+        await page.waitForTimeout(700);
+        // 툴바가 떴는지로 확인한다 — 버튼만 누르고 모드가 안 켜졌으면 아래 검사가 공허하다.
+        if (await page.getByRole("button", { name: "마치기" }).first().isVisible().catch(() => false)) decoVisits++;
+        for (const bad of await page.evaluate(wrapped)) problems.push(`${tag} ${path}(꾸미기): 버튼 글자가 접힌다 — ${bad}`);
+        for (const bad of await page.evaluate(scan)) problems.push(`${tag} ${path}(꾸미기): 대비 부족 — ${bad}`);
+        for (const small of await page.evaluate(() => {
+          const out = [];
+          for (const el of document.querySelectorAll("button,a[href]")) {
+            if (el.closest("nextjs-portal")) continue;
+            const b = el.getBoundingClientRect();
+            if (b.width < 8 || b.height < 8) continue;
+            if (getComputedStyle(el).visibility === "hidden") continue;
+            if (b.width < 40 || b.height < 40) {
+              out.push(`"${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 14)}" ${Math.round(b.width)}×${Math.round(b.height)}`);
+            }
+          }
+          return [...new Set(out)].slice(0, 4);
+        })) {
+          // 데스크톱은 마우스라 36px 을 허용한다(DESIGN.md §9) — 폰에서만 잡는다.
+          if (w < 1024) problems.push(`${tag} ${path}(꾸미기): "${small}" 이 40px 아래`);
+        }
+        await page.getByRole("button", { name: "마치기" }).first().click().catch(() => {});
+        // 편집 상태는 localStorage 에 남는다 — 다음 화면이 꾸미기로 열리지 않게 지운다.
+        await page.evaluate(() => { try { localStorage.removeItem("podong_edit_mode"); } catch {} });
+        await page.waitForTimeout(350);
+      }
 
       // **모달 안도 본다.** 겹쳐 뜨는 판은 목록 화면을 훑는 것만으로는 한 번도 안 재진다 —
       // 오류 토스트가 페이지와 1.02:1 인 채로 오래 살아남은 것이 그래서였다(그건 눈으로 찾았다).
@@ -831,13 +891,16 @@ for (const { w, h, tag } of WIDTHS) {
     }
     await ctx.close();
   }
+  if (decoVisits === 0) {
+    problems.push("꾸미기 모드에 한 번도 못 들어갔습니다 — 그 검사는 아무것도 보지 못했습니다");
+  }
 }
 
 await browser.close();
 
 console.table(rows);
 if (problems.length === 0) {
-  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA · 판이 바탕에서 떠 보임");
+  console.log("✓ 가로 스크롤 없음 · 가려지는 것 없음 · `…` 메뉴 정상 · 탭 타깃 40px 이상 · 키보드 정상 · 글자 1.5배에서도 읽힘 · 입력칸에 이름 있음 · 한글이 어절로 끊김 · 그려진 글자가 전부 AA · 판이 바탕에서 떠 보임 · 버튼 글자가 한 줄 · 꾸미기 모드도 정상");
 } else {
   console.log(`⚠ ${problems.length}건`);
   for (const p of problems) console.log("  -", p);
