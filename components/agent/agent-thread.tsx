@@ -67,7 +67,7 @@ function ResultCard({
   const visitable = canVisit(result.path) ? result.path : null;
 
   return (
-    <div className="mt-3 rounded-2xl border border-line bg-sunken px-3.5 py-3">
+    <div className="mt-3 rounded-md border border-line bg-sunken px-3.5 py-3">
       {undone ? (
         <>
           <p className="text-sm font-semibold text-ink-soft">되돌렸어요</p>
@@ -207,7 +207,7 @@ export function AgentThread({
               <div key={index} className="flex justify-end">
                 <div
                   className={cn(
-                    "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-3xl rounded-br-lg px-4 py-2.5 text-[0.9375rem] leading-relaxed",
+                    "min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-xl rounded-br-sm px-4 py-2.5 text-[0.9375rem] leading-relaxed",
                     // soft 배경 + ink 글자 = palette 의 chip. 색은 여기서만 고른다.
                     palette("lavender").chip,
                   )}
@@ -218,7 +218,7 @@ export function AgentThread({
                       src={bubble.imageUrl}
                       loading="lazy"
                       alt=""
-                      className="mb-2 max-h-56 w-full rounded-2xl object-cover"
+                      className="mb-2 max-h-56 w-full rounded-md object-cover"
                     />
                   )}
                   {bubble.text}
@@ -226,7 +226,7 @@ export function AgentThread({
               </div>
             ) : bubble.text || bubble.results.length > 0 ? (
               <div key={index} className="flex justify-start">
-                <div className="min-w-0 max-w-[92%] break-words rounded-3xl rounded-bl-lg border border-line bg-surface px-4 py-2.5 shadow-sm">
+                <div className="min-w-0 max-w-[92%] break-words rounded-xl rounded-bl-sm border border-line bg-surface px-4 py-2.5">
                   {bubble.text && <MarkdownView className="text-[0.9375rem]">{bubble.text}</MarkdownView>}
                   {visibleResults(bubble.results).map((result, rIndex) => {
                     const key = result.undo ? undoKey(result.undo) : "";
@@ -253,14 +253,14 @@ export function AgentThread({
 
           {/* 이미 흘러온 글자는 남겨 두고 한 줄만 덧붙인다. */}
           {error && (
-            <div className="rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
+            <div className="rounded-md bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
           )}
         </div>
       )}
 
       {/* 빈 화면에서도 오류는 보여야 한다(로그인 만료·사용량 초과). */}
       {bubbles.length === 0 && error && (
-        <div className="mt-4 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
+        <div className="mt-4 rounded-md bg-danger-soft px-4 py-2.5 text-sm text-danger-ink">{error}</div>
       )}
     </div>
   );

@@ -13,7 +13,7 @@ export function PageSkeleton() {
     <div aria-hidden className="animate-pulse">
       {/* 제목 자리 */}
       <div className="mb-6 flex items-center gap-3">
-        <div className="h-12 w-12 shrink-0 rounded-2xl bg-sunken" />
+        <div className="h-12 w-12 shrink-0 rounded-md bg-sunken" />
         <div className="flex flex-col gap-2">
           <div className="h-5 w-32 rounded-full bg-sunken" />
           <div className="h-3 w-44 rounded-full bg-sunken/70" />
@@ -22,7 +22,7 @@ export function PageSkeleton() {
       {/* 카드 자리 */}
       <div className="flex flex-col gap-4">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-3xl border border-line bg-surface p-5">
+          <div key={i} className="rounded-lg border border-line bg-surface p-5">
             <div className="mb-3 h-4 w-28 rounded-full bg-sunken" />
             <div className="flex flex-col gap-2">
               <div className="h-3 w-full rounded-full bg-sunken/70" />

@@ -319,7 +319,7 @@ export function AnniversariesClient({
             </Field>
           </div>
 
-          <div className="flex items-center gap-3 rounded-2xl bg-sunken px-4 py-3">
+          <div className="flex items-center gap-3 rounded-md bg-sunken px-4 py-3">
             <Checkbox
               checked={recurring}
               onChange={setRecurring}

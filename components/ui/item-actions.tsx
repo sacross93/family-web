@@ -106,7 +106,7 @@ export function ItemActions({
       ref={menuRef}
       data-item-menu
       style={{ position: "fixed", top: at.top, right: at.right, minWidth: MIN_WIDTH }}
-      className="z-[60] flex flex-col overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
+      className="z-[60] flex flex-col overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
     >
       {actions.map((a) => (
         <button

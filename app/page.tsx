@@ -179,7 +179,7 @@ function DashCard({
         <div className="flex items-center gap-2.5">
           <span
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-xl text-lg",
+              "flex h-9 w-9 items-center justify-center rounded-md text-lg",
               pal.soft,
             )}
           >
@@ -466,7 +466,7 @@ export default async function HomePage() {
                   <div key={a.id} className="flex items-center gap-3">
                     <span
                       className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-xl text-base",
+                        "flex h-8 w-8 items-center justify-center rounded-md text-base",
                         pal.soft,
                       )}
                     >
@@ -506,7 +506,7 @@ export default async function HomePage() {
               {photos.map((p) => (
                 <div
                   key={p.id}
-                  className="relative aspect-square overflow-hidden rounded-2xl bg-sunken ring-1 ring-line"
+                  className="relative aspect-square overflow-hidden rounded-md bg-sunken ring-1 ring-line"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -534,7 +534,7 @@ export default async function HomePage() {
               {posts.map((p) => {
                 const pal = palette(p.color);
                 return (
-                  <div key={p.id} className={cn("rounded-2xl p-3", pal.soft)}>
+                  <div key={p.id} className={cn("rounded-md p-3", pal.soft)}>
                     <div className="mb-1 flex items-center gap-1.5">
                       <span>{p.emoji}</span>
                       {p.author && (
@@ -558,7 +558,7 @@ export default async function HomePage() {
             <Link href={`/plans/${plan.id}`} className="block">
               <div
                 className={cn(
-                  "rounded-2xl bg-gradient-to-br p-4",
+                  "rounded-md bg-gradient-to-br p-4",
                   palette(plan.color).gradient,
                 )}
               >

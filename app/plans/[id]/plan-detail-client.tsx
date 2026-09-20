@@ -549,7 +549,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         <button
           type="button"
           onClick={openTz}
-          className="mb-6 flex w-full items-center gap-2.5 rounded-2xl border border-dashed border-line-strong bg-surface/60 px-4 py-3 text-left text-sm text-ink-soft transition hover:border-primary hover:text-ink"
+          className="mb-6 flex w-full items-center gap-2.5 rounded-md border border-dashed border-line-strong bg-surface/60 px-4 py-3 text-left text-sm text-ink-soft transition hover:border-primary hover:text-ink"
         >
           <Clock className="h-4 w-4 shrink-0 text-ink-faint" />
           <span className="flex-1">
@@ -592,7 +592,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         onClick={openMemo}
         className="mb-8 flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong"
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-butter-soft text-xl">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-butter-soft text-xl">
           💡
         </span>
         <div className="min-w-0 flex-1">
@@ -1066,7 +1066,7 @@ function ChecklistSection({
         // 접었다 펴는 머리글 — 폰에서 눌리는 높이를 44px 로(DESIGN.md §9).
         className="flex min-h-11 items-center gap-2.5 text-left lg:min-h-0"
       >
-        <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl text-lg", pal.soft)}>
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-md text-lg", pal.soft)}>
           {emoji}
         </span>
         <h3 className="font-display text-lg font-bold text-ink">{title}</h3>

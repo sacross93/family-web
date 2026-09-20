@@ -64,7 +64,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <div
                 key={t.id}
                 className={cn(
-                  "animate-fade-up max-w-md rounded-2xl px-4 py-3 text-sm font-medium shadow-lg",
+                  "animate-fade-up max-w-md rounded-md px-4 py-3 text-sm font-medium shadow-lg",
                   t.tone === "error"
                     ? "bg-danger-soft text-danger-ink ring-1 ring-danger/30"
                     : "bg-ink text-white"

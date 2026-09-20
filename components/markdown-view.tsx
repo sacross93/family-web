@@ -27,7 +27,7 @@ export function MarkdownView({
       {ids.map((id) => (
         <div
           key={id}
-          className="mt-3 overflow-hidden rounded-2xl bg-ink/5"
+          className="mt-3 overflow-hidden rounded-md bg-ink/5"
           style={{ aspectRatio: "16 / 9" }}
         >
           <iframe

@@ -57,7 +57,7 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative z-10 flex max-h-[90dvh] w-full flex-col rounded-t-3xl bg-surface shadow-lg animate-[pop-in_.28s_cubic-bezier(.34,1.56,.64,1)] sm:rounded-3xl",
+          "relative z-10 flex max-h-[90dvh] w-full flex-col rounded-t-xl bg-surface shadow-lg animate-[pop-in_.28s_cubic-bezier(.34,1.56,.64,1)] sm:rounded-xl",
           widths[size]
         )}
       >
@@ -65,7 +65,7 @@ export function Modal({
           <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
             <div className="flex items-center gap-2.5">
               {emoji && (
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sunken text-lg">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-sunken text-lg">
                   {emoji}
                 </span>
               )}

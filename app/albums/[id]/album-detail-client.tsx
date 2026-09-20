@@ -209,7 +209,7 @@ export function AlbumDetailClient({
               key={photo.id}
               type="button"
               onClick={() => setLightbox(i)}
-              className="group relative mb-3 block w-full break-inside-avoid overflow-hidden rounded-2xl bg-sunken ring-1 ring-line transition hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="group relative mb-3 block w-full break-inside-avoid overflow-hidden rounded-md bg-sunken ring-1 ring-line transition hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <img
                 src={photo.url}
@@ -395,13 +395,13 @@ function AddPhotoModal({
             uploadFiles(Array.from(e.dataTransfer.files));
           }}
           className={cn(
-            "flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed px-6 py-10 text-center transition-colors",
+            "flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors",
             dragOver
               ? "border-primary bg-primary-soft/60"
               : "border-line-strong bg-sunken/40"
           )}
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-ink-soft shadow-sm">
+          <span className="flex h-14 w-14 items-center justify-center rounded-md bg-surface text-ink-soft shadow-sm">
             {busy ? <Spinner className="h-6 w-6" /> : <UploadCloud className="h-6 w-6" />}
           </span>
           <div>
@@ -661,7 +661,7 @@ function Lightbox({
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-sunken">
+        <div className="relative flex items-center justify-center overflow-hidden rounded-md bg-sunken">
           <img
             src={photo.url}
             alt={photo.caption ?? "사진"}

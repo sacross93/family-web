@@ -201,7 +201,7 @@ function IconField({
     <Field label={label} hint="이모지를 쓰거나, 원하는 사진을 올려도 돼요">
       <div className="flex items-center gap-3">
         {/* 미리보기 */}
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-sunken text-3xl ring-1 ring-line">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-sunken text-3xl ring-1 ring-line">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt="" className="h-full w-full object-cover" />
@@ -297,7 +297,7 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
         {items.map((it) => {
           const open = editingHref === it.href;
           return (
-            <div key={it.href} className="rounded-2xl border border-line">
+            <div key={it.href} className="rounded-md border border-line">
               <button
                 type="button"
                 onClick={() => setEditingHref(open ? null : it.href)}
@@ -463,7 +463,7 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
                 {list.map((d) => (
-                  <div key={d.id} className="group relative overflow-hidden rounded-2xl border border-line bg-sunken">
+                  <div key={d.id} className="group relative overflow-hidden rounded-md border border-line bg-sunken">
                     <div className="flex aspect-square items-center justify-center p-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img

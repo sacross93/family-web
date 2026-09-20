@@ -108,7 +108,7 @@ export function BabySettingsModal({
             )}
           </div>
         </Field>
-        <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-sunken px-4 py-3">
+        <label className="flex cursor-pointer items-center gap-3 rounded-md bg-sunken px-4 py-3">
           <Checkbox checked={showOnHome} onChange={setShowOnHome} color={color} label="홈에 보여주기" />
           <span className="flex flex-col">
             <span className="text-[0.9375rem] font-semibold text-ink">홈에 보여주기</span>

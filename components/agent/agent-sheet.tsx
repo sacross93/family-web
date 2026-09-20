@@ -309,10 +309,10 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
                     src={attach.preview}
                     loading="lazy"
                     alt="붙인 사진"
-                    className="h-16 w-16 rounded-2xl border border-line object-cover"
+                    className="h-16 w-16 rounded-md border border-line object-cover"
                   />
                   {attaching && (
-                    <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-ink/30">
+                    <span className="absolute inset-0 flex items-center justify-center rounded-md bg-ink/30">
                       <Spinner className="h-5 w-5" />
                     </span>
                   )}
@@ -365,7 +365,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
                 onKeyDown={onInputKeyDown}
                 placeholder="무엇이든 말해보세요"
                 aria-label="포동이에게 보낼 말"
-                className="min-h-11 max-h-[120px] flex-1 rounded-3xl py-2.5"
+                className="min-h-11 max-h-[120px] flex-1 rounded-xl py-2.5"
               />
               {state.running ? (
                 <IconButton

@@ -340,7 +340,7 @@ export function TodosClient({
       </PageHeader>
 
       {notice && (
-        <div className="animate-fade-up mb-5 flex items-center gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-sm font-medium text-primary-ink">
+        <div className="animate-fade-up mb-5 flex items-center gap-2 rounded-md bg-primary-soft px-4 py-3 text-sm font-medium text-primary-ink">
           {notice}
         </div>
       )}
@@ -395,7 +395,7 @@ export function TodosClient({
                 aria-pressed={sel}
                 aria-label={kDate(day)}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-2xl py-2 transition-all",
+                  "flex flex-col items-center gap-1 rounded-md py-2 transition-all",
                   sel
                     ? "bg-primary text-white shadow-sm"
                     : cn("text-ink hover:bg-sunken", today && "ring-2 ring-primary ring-inset")
@@ -591,7 +591,7 @@ export function TodosClient({
             </Field>
           )}
 
-          <div className="rounded-2xl bg-sunken px-4 py-3.5">
+          <div className="rounded-md bg-sunken px-4 py-3.5">
             <Toggle
               checked={form.syncToGoogle}
               onChange={(v) => setForm((f) => ({ ...f, syncToGoogle: v }))}

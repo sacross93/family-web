@@ -159,7 +159,7 @@ export function MarkdownEditor({
   const files = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line-strong bg-surface focus-within:border-primary focus-within:ring-4 focus-within:ring-primary-soft">
+    <div className="overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-4 focus-within:ring-primary-soft">
       {/* 툴바 */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-line px-2 py-1.5">
         <ToolBtn label="굵게 (⌘B)" onClick={() => wrap("**", "**")}><Bold className="h-4 w-4" /></ToolBtn>

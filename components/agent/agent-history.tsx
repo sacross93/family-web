@@ -159,7 +159,7 @@ export function AgentHistory({
               aria-current={current ? "true" : undefined}
               // 오른쪽은 지우기 단추 자리다. 겹치면 지우려다 대화가 열린다.
               className={cn(
-                "flex w-full min-w-0 flex-col items-start gap-0.5 rounded-2xl py-2.5 pl-3.5 pr-12 text-left transition active:scale-[.99]",
+                "flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md py-2.5 pl-3.5 pr-12 text-left transition active:scale-[.99]",
                 current ? "bg-sunken" : "hover:bg-sunken/60",
                 openingId === chat.id && "opacity-60",
               )}

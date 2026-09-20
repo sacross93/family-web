@@ -302,7 +302,7 @@ export function CalendarClient({
           </div>
 
           {/* 날짜 그리드 (항상 6주) */}
-          <div className="grid grid-cols-7 overflow-hidden rounded-2xl border-l border-t border-line bg-surface shadow-sm">
+          <div className="grid grid-cols-7 overflow-hidden rounded-md border-l border-t border-line bg-surface shadow-sm">
             {days.map((day) => {
               const inMonth = isSameMonth(day, cursor);
               const isToday = isSameDay(day, today);
@@ -346,7 +346,7 @@ export function CalendarClient({
                         key={ev.id}
                         title={ev.title}
                         className={cn(
-                          "block truncate rounded-md px-1.5 py-0.5 text-[0.625rem] font-semibold leading-tight sm:text-[0.6875rem]",
+                          "block truncate rounded-sm px-1.5 py-0.5 text-[0.625rem] font-semibold leading-tight sm:text-[0.6875rem]",
                           palette(ev.color).chip,
                           !inMonth && "opacity-60"
                         )}
@@ -457,7 +457,7 @@ export function CalendarClient({
               <li
                 key={ev.id}
                 className={cn(
-                  "group flex items-start gap-3 rounded-2xl p-3",
+                  "group flex items-start gap-3 rounded-md p-3",
                   palette(ev.color).soft
                 )}
               >
