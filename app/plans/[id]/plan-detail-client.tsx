@@ -628,7 +628,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
       ) : (
         <div className="flex flex-col gap-7">
           {groups.map((group) => (
-            <section key={group.key} className="animate-fade-up">
+            <section key={group.key}>
               {/* 날짜줄. 가운뎃점으로 개수를 잇지 않는다(DESIGN §3) — 오른쪽 끝에 놓는다. */}
               <h3 className="mb-3 flex items-baseline gap-2 border-b border-line pb-2">
                 <CalendarDays className="h-4 w-4 shrink-0 self-center text-ink-faint" />

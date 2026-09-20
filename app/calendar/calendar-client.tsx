@@ -270,7 +270,7 @@ export function CalendarClient({
         />
       </div>
 
-      <div className="grid animate-fade-up gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* 달력 */}
         <div className={cn(phoneView === "grid" ? "" : "hidden lg:block")}>
           {/* 월 이동 */}

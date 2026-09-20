@@ -122,10 +122,13 @@
   --shadow-md: 0 4px 16px -4px rgba(120, 70, 95, 0.14), 0 2px 6px -3px rgba(120, 70, 95, 0.08);
   --shadow-lg: 0 14px 34px -10px rgba(120, 70, 95, 0.22), 0 4px 10px -4px rgba(120, 70, 95, 0.1);
 
-  /* ── 모션 ── */
+  /* ── 모션 ──
+     **움직임은 "무엇이 달라졌는지" 를 보여줄 때만.** 이미 와 있는 내용이 들어올 때마다
+     다시 스르륵 올라오면 그건 연출이 아니라 지연이다 — 재 보니 내용이 다 보이기까지
+     캘린더 397ms · 사진첩 408ms · 게시판 447ms 였다(네트워크 없는 로컬에서). 다 걷어냈다.
+     남은 자리는 **무언가 도착할 때**뿐: 토스트, 할일의 알림 줄, 그리고 열리는 판
+     (모달·드로어는 `animate-[pop-in_...]` 으로 제 시간을 직접 쓴다). */
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-pop-in: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  --animate-float: float 6s ease-in-out infinite;
 }
 
 @keyframes fade-up {
@@ -148,15 +151,6 @@
     transform: scale(1);
   }
 }
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-
 /* 손가락이 닿는 넓이를 44px 로 넓힌다 — **보이는 크기는 그대로** 둔다.
    장보기 체크 동그라미는 24px, `…` 는 32px 이라 마트에서 한 손으로 누르기엔 작다.
    동그라미를 키우면 목록이 투박해지니, 보이지 않는 가짜 요소로 눌리는 넓이만 넓힌다.

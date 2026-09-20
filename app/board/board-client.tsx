@@ -321,7 +321,7 @@ function NoteCard({
   return (
     <div
       className={cn(
-        "group relative mb-4 break-inside-avoid rounded-lg border p-5 transition-all duration-300 animate-pop-in",
+        "group relative mb-4 break-inside-avoid rounded-lg border p-5 transition-all duration-300",
         pal.soft,
         // 테두리는 **그 쪽지의 기본색**으로. 채움만으로는 로즈 쪽지가 분홍 페이지에
         // 파묻혔다(ΔE 2.9 — 라벤더 8.4·스카이 11.0·버터 19.2 는 색상이 달라 보이는데

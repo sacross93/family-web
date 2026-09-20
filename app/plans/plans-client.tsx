@@ -131,7 +131,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
               <Link
                 key={plan.id}
                 href={`/plans/${plan.id}`}
-                className="block h-full animate-fade-up"
+                className="block h-full"
               >
                 <Card
                   interactive

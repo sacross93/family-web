@@ -120,7 +120,7 @@ export function AlbumsClient({
               <Link
                 key={album.id}
                 href={`/albums/${album.id}`}
-                className="group block animate-fade-up"
+                className="group block"
               >
                 <Card interactive flush className="h-full overflow-hidden">
                   {/* 커버 */}
