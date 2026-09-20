@@ -180,18 +180,20 @@ export function AgentThread({
       className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 py-4"
     >
       {bubbles.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center gap-4 px-2 text-center">
-          <span className="text-4xl" aria-hidden="true">
-            🌱
-          </span>
-          <p className="text-[0.9375rem] font-semibold text-ink">뭐든 물어보고, 시켜도 돼요</p>
-          <div className="flex w-full flex-col items-center gap-2">
+        /* 시작 화면은 **입력칸 바로 위**에 붙인다(justify-end).
+           화면 한가운데에 띄우면 위아래로 빈 곳이 크게 남고, 무엇보다 눌러야 할 것이
+           엄지에서 멀다. 여기서 할 일은 "고르거나 쓰거나" 둘 중 하나고 둘 다 아래에 있다. */
+        <div className="flex h-full flex-col justify-end gap-3 px-1 pb-1">
+          <p className="font-display text-xl font-bold text-ink">
+            뭐든 물어보고, 시켜도 돼요
+          </p>
+          <div className="flex flex-col items-start gap-2">
             {SUGGESTIONS.map((text) => (
               <button
                 key={text}
                 type="button"
                 onClick={() => onSuggest(text)}
-                className="max-w-full rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-ink-soft shadow-sm transition hover:border-line-strong hover:bg-sunken active:scale-[.98]"
+                className="max-w-full rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-soft transition hover:border-line-strong hover:bg-sunken active:scale-[.98]"
               >
                 {text}
               </button>

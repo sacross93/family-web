@@ -239,28 +239,49 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
         role="dialog"
         aria-label="포동이에게 물어보기"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex h-[85dvh] flex-col overflow-hidden rounded-t-3xl border border-line bg-surface shadow-lg",
+          // 높이는 내용에 맞춘다. 아직 아무 말도 안 했으면 시트가 작게 떠 있고, 대화가 쌓이면
+          // 최대 높이까지 자란다 — 빈 대화창이 화면의 85% 를 흰 여백으로 차지하지 않는다.
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-xl bg-surface shadow-lg",
           "animate-[fade-up_.28s_cubic-bezier(.16,1,.3,1)]",
-          "sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[70vh] sm:w-[380px] sm:rounded-3xl",
+          "sm:inset-auto sm:bottom-5 sm:right-5 sm:max-h-[70vh] sm:w-[380px] sm:rounded-xl",
         )}
       >
-        <div className="flex items-center gap-1 border-b border-line px-3 py-2.5">
-          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-sunken text-lg" aria-hidden="true">
+        {/* 머리글은 사이트의 다른 '틀'(상단바·탭바·사이드바)과 같은 진한 판이다.
+            이 시트는 화면 위에 얹히는 것이라, 아래 내용과 같은 흰색이면 어디까지가
+            시트인지 눈에 안 들어온다. */}
+        <div className="on-chrome flex items-center gap-1 bg-chrome px-3 py-2.5">
+          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-md bg-white/90 text-lg" aria-hidden="true">
             🌱
           </span>
-          <h2 className="ml-1 flex-1 truncate text-base font-bold text-ink">포동이</h2>
-          <IconButton type="button" aria-label="새 대화" onClick={newChat}>
+          <h2 className="ml-1 flex-1 truncate font-display text-lg font-bold text-chrome-ink">
+            포동이
+          </h2>
+          <IconButton
+            type="button"
+            aria-label="새 대화"
+            onClick={newChat}
+            className="text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+          >
             <Plus className="h-5 w-5" />
           </IconButton>
           <IconButton
             type="button"
             aria-label={history ? "대화로 돌아가기" : "지난 대화"}
             onClick={() => setView(history ? "chat" : "history")}
-            className={history ? "bg-sunken text-ink" : undefined}
+            className={
+              history
+                ? "bg-white/15 text-chrome-ink"
+                : "text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+            }
           >
             <Menu className="h-5 w-5" />
           </IconButton>
-          <IconButton type="button" aria-label="닫기" onClick={onClose}>
+          <IconButton
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            className="text-chrome-faint hover:bg-white/10 hover:text-chrome-ink"
+          >
             <X className="h-5 w-5" />
           </IconButton>
         </div>
