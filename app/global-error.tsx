@@ -31,7 +31,7 @@ export default function GlobalError({
             <button
               type="button"
               onClick={() => unstable_retry()}
-              className="flex h-11 items-center rounded-full bg-primary px-5 font-semibold text-white"
+              className="flex h-11 items-center rounded-full bg-primary px-5 font-semibold text-ink"
             >
               다시 불러오기
             </button>

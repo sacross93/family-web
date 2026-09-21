@@ -42,8 +42,11 @@ function NavList({
               // 로즈 위에서 1.09~1.20:1 이라 켜져 있는지 알 수 없었다. 지금 있는 곳은 **흰 판**이
               // 되고, 분류색은 그 안의 이모지 타일로 옮긴다(흰 판 위에서는 제 색이 보인다).
               "group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-200",
+              // 켜진 줄의 글자는 **분류색이 아니라 중립 잉크**다. 분류색 잉크를 쓰면 홈이
+              // 라벤더라 **혼자 보라색**이 되고, 파스텔 팔레트에서 그 한 줄만 튄다.
+              // 색은 옆의 이모지 타일(`pal.soft`)이 나른다 — 그건 파스텔이라 튀지 않는다.
               active
-                ? cn("bg-surface font-semibold", pal.ink)
+                ? "bg-surface font-semibold text-ink"
                 : "text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink",
             )}
           >
@@ -232,7 +235,7 @@ export function AppShell({
             <button
               type="button"
               onClick={() => setAsking(true)}
-              className="flex items-center gap-2.5 rounded-lg bg-primary px-3 py-2.5 font-semibold text-white transition hover:bg-primary-hover active:scale-[0.98]"
+              className="flex items-center gap-2.5 rounded-lg bg-primary px-3 py-2.5 font-semibold text-ink transition hover:bg-primary-hover active:scale-[0.98]"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
                 <MessageCircle className="h-4.5 w-4.5" />
@@ -267,7 +270,7 @@ export function AppShell({
               className={cn(
                 "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition",
                 decorating
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-ink"
                   : "bg-white text-chrome-faint",
               )}
             >

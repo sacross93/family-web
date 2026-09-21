@@ -441,7 +441,7 @@ function HandleBtn({
       className={cn(
         "absolute flex h-7 w-7 items-center justify-center rounded-full shadow-md",
         tone === "primary"
-          ? "bg-primary text-white"
+          ? "bg-primary text-ink"
           : "bg-surface text-primary ring-1 ring-line"
       )}
       style={style}

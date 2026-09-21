@@ -384,7 +384,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
                   // 올리는 중에도 잠근다 — 지금 보내면 사진 없이 나간다(스펙 §19.4).
                   disabled={!draft.trim() || attaching}
                   onClick={submit}
-                  className="shrink-0 bg-primary text-white hover:bg-primary-hover hover:text-white"
+                  className="shrink-0 bg-primary text-ink hover:bg-primary-hover hover:text-ink"
                 >
                   <ArrowUp className="h-5 w-5" />
                 </IconButton>

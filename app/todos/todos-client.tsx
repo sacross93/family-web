@@ -409,14 +409,15 @@ export function TodosClient({
                 className={cn(
                   "flex flex-col items-center gap-1 rounded-md py-2 transition-all",
                   sel
-                    ? "bg-primary text-white shadow-sm"
+                    ? "bg-primary text-ink shadow-sm"
                     : cn("text-ink hover:bg-sunken", today && "ring-2 ring-primary ring-inset")
                 )}
               >
                 <span
                   className={cn(
                     "text-[0.6875rem] font-semibold",
-                    sel ? "text-white" : "text-ink-faint"
+                    // 고른 날의 채움이 **밝은 분홍**이 된 뒤로 흰 글자는 2.2:1 이다.
+                    sel ? "text-ink" : "text-ink-faint"
                   )}
                 >
                   {kWeekday(day)}

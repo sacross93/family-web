@@ -354,7 +354,7 @@ export function CalendarClient({
                     className={cn(
                       "flex h-6 w-6 items-center justify-center rounded-full font-num text-xs font-bold sm:h-7 sm:w-7 sm:text-sm",
                       isToday
-                        ? "bg-primary text-white shadow-sm"
+                        ? "bg-primary text-ink shadow-sm"
                         : !inMonth
                         ? "text-ink-faint"
                         : dow === 0

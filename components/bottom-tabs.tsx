@@ -69,7 +69,9 @@ export function BottomTabs({
                 <span
                   className={cn(
                     "text-[0.625rem] leading-none",
-                    active ? "font-bold text-primary-ink" : "text-chrome-faint",
+                    // 사이드바의 켜진 줄과 같은 말 — **중립 잉크 + 굵게.** 짙은 분홍 글자를
+                    // 쓰면 파스텔 판에서 그 글자만 진해진다. 색은 흰 알약이 나른다.
+                    active ? "font-bold text-ink" : "text-chrome-faint",
                   )}
                 >
                   {item.label}
@@ -86,7 +88,7 @@ export function BottomTabs({
               aria-label="포동이에게 물어보기"
               className="flex h-full w-full flex-col items-center justify-center gap-0.5"
             >
-              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-white">
+              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-ink">
                 <MessageCircle className="h-4 w-4" />
               </span>
               <span className="text-[0.625rem] font-bold leading-none text-chrome-ink">

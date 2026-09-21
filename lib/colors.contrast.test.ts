@@ -146,12 +146,14 @@ describe("글자 대비", () => {
     }
   });
 
-  it("주요 색은 UI 요소 기준(3:1)을 넘는다 — 아이콘·테두리·큰 글씨에 쓴다", () => {
-    // primary 는 흰 판에서 4.9:1 로 AA 를 넘기지만, 들어간 자리(4.2)·틀(3.8) 위에서는
-    // 못 넘는다. 어느 배경에 놓일지 모르는 채로는 쓸 수 없다는 뜻이라, **글자에는
-    // 언제나 primary-ink** 를 쓴다. 브랜드 색이라 값 자체는 건드리지 않는다.
+  it("주요 색 채움이 바탕에서 보인다 — 넓은 면은 명도비가 아니라 ΔE 로 잰다", () => {
+    // primary 를 **밝은 분홍**으로 바꾸면서 이 검사가 떨어졌다(흰 판에서 2.15:1).
+    // 그런데 버튼은 눈에 확 띈다 — 분홍이 밝아서 명도가 비슷할 뿐이다.
+    // 오늘 게시판 쪽지에서 배운 것과 같다: **넓은 면끼리는 대비가 답을 못 준다.**
+    // 글자는 여전히 대비로 잰다(아래 `잉크 글자` 검사).
     for (const bg of BACKGROUNDS) {
-      expect(contrast(token("primary"), token(bg))).toBeGreaterThanOrEqual(3);
+      const d = deltaE(token("primary"), token(bg));
+      expect(d, `primary on ${bg} = ΔE ${d.toFixed(1)}`).toBeGreaterThanOrEqual(7);
     }
     // 그 primary-ink 는 네 배경 어디에 놓여도 AA 를 넘어야 한다 — 위 문장의 근거다.
     for (const bg of [...BACKGROUNDS, "sunken", "chrome"]) {
@@ -200,10 +202,17 @@ describe("글자 대비", () => {
     expect(apart, `danger-ink vs primary-ink = ${apart.toFixed(0)}도`).toBeGreaterThanOrEqual(20);
   });
 
-  it("주요 버튼의 흰 글자가 AA 를 넘는다", () => {
-    // 예전 primary(#7a6cf0)는 4.01:1 이라 버튼 글씨가 기준에 못 미쳤다.
-    expect(contrast("#ffffff", token("primary"))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast("#ffffff", token("primary-hover"))).toBeGreaterThanOrEqual(4.5);
+  it("주요 버튼 글자는 **잉크**다 — 밝은 분홍 위에서 흰 글자는 안 읽힌다", () => {
+    // 재 보면 죽은 구간이 있다: `#be4571`(흰 글자 4.9) 과 `#ef82ab`(잉크 5.1) 사이는
+    // 흰 글자도 잉크도 4.5 에 못 미친다. 밝게 가려면 **밝은 분홍 + 잉크**뿐이다.
+    for (const key of ["primary", "primary-hover"]) {
+      const ink = contrast(token("ink"), token(key));
+      expect(ink, `잉크 on ${key} = ${ink.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // 그리고 **흰 글자를 얹지 못하게** 못박는다 — 밝게 만든 날 흰 글자가 남아 있으면
+    // 버튼 글씨가 2.2:1 로 사라진다(실제로 여섯 곳에 남아 있었다).
+    const white = contrast("#ffffff", token("primary"));
+    expect(white, `흰 글자 on primary = ${white.toFixed(2)}`).toBeLessThan(4.5);
   });
 
   it("강조색: 그래픽은 accent, 글자는 accent-ink", () => {
