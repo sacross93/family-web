@@ -368,13 +368,21 @@ const rows = [];
     const r = await page.request.get(href).catch(() => null);
     if (!r || !r.ok()) dead.push(`${href.replace(/^.*\/\//, "")} → ${r ? r.status() : "없음"}`);
   }
-  // 토큰이 실제로 먹었는지 — 바탕이 흰색이면 CSS 가 안 붙은 것이다(paper 는 연분홍).
-  const paper = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  // 토큰이 실제로 먹었는지 — **색깔로 판정하지 않는다.** 처음엔 "바탕이 흰색이면 CSS 가
+  // 안 붙은 것"으로 썼는데, 바탕을 흰색으로 바꾼 날 이 장치가 통째로 거짓 양성이 됐다.
+  // 팔레트가 또 바뀌어도 안 흔들리게 **토큰이 값을 내놓는지**만 본다.
+  const probe = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      chrome: root.getPropertyValue("--color-chrome").trim(),
+      ink: root.getPropertyValue("--color-ink").trim(),
+    };
+  });
   await page.close();
-  if (dead.length || paper === "rgba(0, 0, 0, 0)" || paper === "rgb(255, 255, 255)") {
+  if (dead.length || !probe.chrome || !probe.ink) {
     console.error("스타일이 안 먹은 화면입니다 — 잰 값이 전부 거짓이 되므로 멈춥니다.");
     if (dead.length) console.error("  못 받은 스타일시트: " + dead.join(", "));
-    console.error(`  body 배경: ${paper}`);
+    console.error(`  토큰: --color-chrome="${probe.chrome}" --color-ink="${probe.ink}" (비어 있으면 CSS 가 안 붙은 것)`);
     console.error("  옛 서버가 포트를 잡고 있는지 보세요:  lsof -nP -iTCP:3000 -sTCP:LISTEN");
     console.error("  그 다음:  npm run build && npm start");
     process.exit(1);
