@@ -16,7 +16,8 @@
 - 숫자·모델명은 `lib/agent/config.ts`(환경변수)에서만. 코드에 박지 않는다. 목록은 `.env.example`.
 - LLM 와이어 포맷은 `lib/agent/llm/codex.ts` 안에서만 다룬다. 루프는 정규화 이벤트만 안다.
 - `read_url` 의 사설·내부망 차단은 **도구 층에만** 둔다 — `lib/url.ts` 는 아기 참고 사이트 카드가 공유하므로 거기를 조이면 무관한 기능이 깨진다.
-- 테스트는 `llm/fake.ts` 로 네트워크 없이 돈다. 스펙: `docs/superpowers/specs/2026-09-17-site-agent-design.md`(§16에 실측/미확인 구분).
+- 테스트는 `llm/fake.ts` 로 네트워크 없이 돈다.
+- **`npm run agent:smoke` — 모델 없이 끝까지 한 번 돌려 본다.** 모델 자리에만 대본 재생기를 끼우고 나머지는 전부 진짜다(리소스 17종·DB·API 라우트·세션 쿠키). 단위 시험은 가짜 리소스로 도니 **여기서만 걸리는 것**이 있다: 진짜 `toBody` 가 던지거나, 진짜 목차 쿼리가 깨지거나, 라우트가 400 을 주는 것. **로컬 전용**(항목을 만들고 지운다). 만든 것을 못 지우면 큰 소리로 알린다 — 조용히 남기는 것이 제일 나쁘다. 스펙: `docs/superpowers/specs/2026-09-17-site-agent-design.md`(§16에 실측/미확인 구분).
 - 토큰은 `AgentAuth` 에 암호화 저장. 재발급은 `npm run agent:login`(브라우저 로그인 → DB 직행, 평문 파일 없음), 파일이 있으면 `npm run agent:auth -- <경로>`. **`AUTH_SECRET` 또는 `crypto.ts` 의 `KEY_DOMAIN` 이 바뀌면 기존 토큰을 못 읽는다** — 배포 전 [DEPLOY.md](DEPLOY.md) 6절 필독.
 - **2단계(라우트·UI)**: 화면은 `components/agent/*`(fab·sheet·thread·history·use-agent-chat·agent-stream), 라우트는 `app/api/agent/*`(대화 SSE·chats·undo). 대화 읽기·쓰기는 `lib/agent/chat-store.ts` 를 통한다 — 다만 `chats/[id]` 는 404 판정 때문에 `prisma` 를 직접 한 번 부른다(유일한 예외. 늘리지 말 것).
 - **2단계가 지킨 것** — 엔진이 강제하지 못하니 고칠 때 깨뜨리지 말 것.
