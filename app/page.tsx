@@ -180,17 +180,15 @@ function DashCard({
 }) {
   const pal = palette(color);
   return (
-    <Card className={cn("flex flex-col gap-4", className)}>
-      <div className="flex items-center justify-between">
+    // 머리줄은 **그 칸의 파스텔로 꽉 채운다.** 바탕이 흰색이 된 뒤로 카드가 실선 한 줄로만
+    // 구분돼서, 홈이 흰 판 여러 장이 쌓인 모습이 됐다 — "흰 바탕에 분홍을 올린다" 는 원칙은
+    // 맞는데 본문에 올린 게 이모지 동그라미 하나뿐이었다.
+    // 색은 메뉴가 이미 쥐고 있는 분류색이다(장보기=민트·캘린더=피치·기념일=버터…).
+    // 장식이면서 **어느 칸인지 한눈에** 알려 준다. `flush` 로 여백을 없애고 줄마다 직접 준다.
+    <Card flush className={cn("flex flex-col overflow-hidden", className)}>
+      <div className={cn("flex items-center justify-between px-5 py-3", pal.soft)}>
         <div className="flex items-center gap-2.5">
-          <span
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-md text-lg",
-              pal.soft,
-            )}
-          >
-            {emoji}
-          </span>
+          <span className="text-lg">{emoji}</span>
           <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
         </div>
         {/* -my-2 로 자리는 그대로 두고 누를 수 있는 높이만 키운다 — 16px 짜리 글자
@@ -203,7 +201,7 @@ function DashCard({
           <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 px-5 pb-5 pt-4">{children}</div>
     </Card>
   );
 }
