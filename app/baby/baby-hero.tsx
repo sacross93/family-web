@@ -65,7 +65,7 @@ export function BabyHero({
 
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-xl">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xl">
             {baby.emoji}
           </span>
           {/* 이 화면의 `h1`. 다른 화면은 `PageHeader` 가 만들어 주는데 여기는 자체 히어로라

@@ -46,7 +46,7 @@ export default function Error({
 
   return (
     <Card className="flex flex-col items-center gap-4 py-12 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-md bg-sunken text-3xl">
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-sunken text-3xl">
         {offline ? "📴" : "🫖"}
       </span>
       <div>

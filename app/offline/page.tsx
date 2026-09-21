@@ -16,7 +16,7 @@ export const metadata = { title: "연결 없음" };
 export default function OfflinePage() {
   return (
     <Card className="mx-auto flex max-w-md flex-col items-center gap-4 py-12 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-md bg-sunken text-ink-soft">
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-sunken text-ink-soft">
         <WifiOff className="h-7 w-7" />
       </span>
       <div>

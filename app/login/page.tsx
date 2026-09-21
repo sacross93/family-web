@@ -19,7 +19,7 @@ export default async function LoginPage() {
     <div className="on-chrome flex min-h-dvh items-center justify-center bg-chrome px-4">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center gap-2 text-center">
-          <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md bg-white text-3xl">
+          <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-white text-3xl">
             {site.brandImageUrl ? (
               <img src={site.brandImageUrl} alt="" className="h-full w-full object-cover" />
             ) : (

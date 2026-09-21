@@ -206,7 +206,7 @@ function IconField({
     <Field label={label} hint="이모지를 쓰거나, 원하는 사진을 올려도 돼요">
       <div className="flex items-center gap-3">
         {/* 미리보기 */}
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-sunken text-3xl ring-1 ring-line">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-3xl ring-1 ring-line">
           {imageUrl ? (
             <img src={imageUrl} alt="" className="h-full w-full object-cover" />
           ) : (

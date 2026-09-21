@@ -283,7 +283,7 @@ function ToolBtn({
       // 이 툴바는 접힌 작성칸 안에 있어서 **검사에 한 번도 안 잡혔다** — 모달·작성칸을
       // 열어 보게 하고서야 드러났다.
       className={cn(
-        "h-10 w-10 items-center justify-center rounded-md text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40 lg:h-8 lg:w-8",
+        "h-10 w-10 items-center justify-center rounded-full text-ink-soft transition hover:bg-sunken hover:text-ink disabled:opacity-40 lg:h-8 lg:w-8",
         desktopOnly ? "hidden lg:flex" : "flex",
       )}
     >

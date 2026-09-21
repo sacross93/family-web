@@ -88,3 +88,60 @@ describe("DESIGN.md 의 색이 실제 토큰과 같은가", () => {
     }
   });
 });
+
+/**
+ * 모서리도 같은 이유로 잰다.
+ *
+ * 색 표는 두 번 어긋나 봐서 검사가 붙었는데 **모서리 표는 안 붙어 있었다** — 그래서
+ * `md`·`lg`·`xl` 을 한 칸씩 키운 뒤에도 문서는 옛 값(16/20/28px)을 말하고 있었고,
+ * 부록의 "지금 짝" 줄까지 같이 낡아 있었다. 문서의 규칙("토큰을 바꾸면 그 이름을
+ * 쓰는 자리를 전부 훑는다")을 정작 문서 자신이 못 지킨 것이다.
+ *
+ * 문서가 모서리를 적는 꼴은 두 가지다. 표의 `| \`rounded-md\` | 20px | … |` 와
+ * 산문의 `` `md`(20px) ``. 둘 다 걷는다.
+ */
+function radius(name: string): number | null {
+  const m = css.match(new RegExp(`--radius-${name}:\\s*([0-9.]+)rem`));
+  return m ? Math.round(parseFloat(m[1]) * 16) : null;
+}
+
+function documentedRadii(): { name: string; px: number; line: number }[] {
+  const out: { name: string; px: number; line: number }[] = [];
+  doc.split("\n").forEach((line, i) => {
+    // 표 한 줄: 칸이 딱 셋(토큰·값·무엇)일 때만. 부록의 옛 값 표는 칸이 넷이라 안 걸린다.
+    const cells = line.split("|");
+    if (cells.length === 5) {
+      const n = cells[1].match(/`rounded-(sm|md|lg|xl)`/);
+      const v = cells[2].match(/^\s*(\d+)px\s*$/);
+      if (n && v) out.push({ name: n[1], px: Number(v[1]), line: i + 1 });
+    }
+    // 산문: `md`(20px)
+    for (const m of line.matchAll(/`(sm|md|lg|xl)`\((\d+)px\)/g)) {
+      out.push({ name: m[1], px: Number(m[2]), line: i + 1 });
+    }
+  });
+  return out;
+}
+
+describe("DESIGN.md 의 모서리가 실제 토큰과 같은가", () => {
+  it("문서에서 모서리 값을 여럿 찾는다 — 못 찾으면 이 검사가 헛돈다", () => {
+    // 표 4줄 + 부록 "지금 짝" 4개.
+    expect(documentedRadii().length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("문서에 적힌 모서리가 전부 globals.css 와 같다", () => {
+    for (const { name, px, line } of documentedRadii()) {
+      expect(px, `DESIGN.md:${line} 의 ${name} = ${px}px, 실제는 ${radius(name)}px`).toBe(
+        radius(name)
+      );
+    }
+  });
+
+  it("작은 조각과 큰 판은 값이 다르다 — 같아지면 말풍선 꼬리가 사라진다", () => {
+    // 1회차에 실제로 사라졌다(부록). `sm` 은 판 이름들과 붙어 있으면 안 된다.
+    const sm = radius("sm")!;
+    for (const big of ["md", "lg", "xl"] as const) {
+      expect(radius(big)! - sm, `--radius-${big} 가 --radius-sm 과 너무 가깝습니다`).toBeGreaterThanOrEqual(8);
+    }
+  });
+});

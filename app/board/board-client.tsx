@@ -166,7 +166,7 @@ export function BoardClient({
           onClick={() => setComposing(true)}
           className="mb-5 flex w-full items-center gap-3 rounded-lg border border-dashed border-line-strong bg-surface px-5 py-4 text-left transition hover:border-primary hover:bg-primary-soft/30"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-butter-soft text-lg">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-butter-soft text-lg">
             💛
           </span>
           <span className="text-[0.9375rem] text-ink-faint">가족에게 한마디 남기기…</span>

@@ -29,11 +29,31 @@
 // playwright 는 이 저장소의 의존성이 아니다(브라우저 내려받기가 무겁다).
 // 이미 깔린 것을 찾아 쓰고, 없으면 `npx playwright install chromium` 을 알려 준다.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
 const BASE = process.argv[2] || "http://localhost:3000";
+
+// 이 저장소가 지금 말하는 값. 화면이 이것과 다르면 **옛 빌드를 재고 있는 것**이다.
+// 색만으로는 못 잡는다(팔레트는 그대로 두고 모서리만 바꾼 날이 있었다) — 둘 다 본다.
+// 같은 값을 서로 다르게 적는 두 가지를 맞춰 준다: `0.625rem`↔`.625rem`, `#ffffff`↔`#fff`
+// (둘 다 실제로 어긋났다 — 화면에 오는 CSS 는 줄여 쓰여 있다).
+const norm = (v) =>
+  v.trim().toLowerCase()
+    .replace(/^([0-9.]+)rem$/, (_, n) => `${parseFloat(n)}rem`)
+    .replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/, (_, r, g, b) => `#${r}${r}${g}${g}${b}${b}`);
+const WANT = (() => {
+  const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+  const out = {};
+  for (const [, name, value] of css.matchAll(/(--(?:color|radius)-[a-z-]+):\s*([^;]+);/g)) {
+    const v = norm(value);
+    // 브라우저가 사용자 정의 속성을 **적힌 그대로** 돌려주는 꼴만 고른다.
+    // (`0.625rem` 은 `.625rem` 으로 돌아오므로 `norm` 이 맞춰 준다.)
+    if (/^(#[0-9a-f]{6}|[0-9.]+rem)$/.test(v)) out[name] = v;
+  }
+  return out;
+})();
 const USER = process.argv[3] || process.env.AUDIT_USER;
 const PASS = process.argv[4] || process.env.AUDIT_PASS;
 
@@ -400,20 +420,32 @@ const rows = [];
   // 토큰이 실제로 먹었는지 — **색깔로 판정하지 않는다.** 처음엔 "바탕이 흰색이면 CSS 가
   // 안 붙은 것"으로 썼는데, 바탕을 흰색으로 바꾼 날 이 장치가 통째로 거짓 양성이 됐다.
   // 팔레트가 또 바뀌어도 안 흔들리게 **토큰이 값을 내놓는지**만 본다.
-  const probe = await page.evaluate(() => {
+  const probe = await page.evaluate((names) => {
     const root = getComputedStyle(document.documentElement);
-    return {
-      chrome: root.getPropertyValue("--color-chrome").trim(),
-      ink: root.getPropertyValue("--color-ink").trim(),
-    };
-  });
+    const got = {};
+    for (const n of names) got[n] = root.getPropertyValue(n).trim();
+    return got;
+  }, ["--color-chrome", "--color-ink", ...Object.keys(WANT)]);
   await page.close();
-  if (dead.length || !probe.chrome || !probe.ink) {
+
+  // **붙었는가**(비어 있지 않은가)와 **이 저장소의 값인가**는 다른 질문이다.
+  // 오늘 모서리를 키운 뒤 옛 서버(포트 3000)를 재면서 "말풍선 꼬리가 멀쩡하다" 는
+  // 결론을 낼 뻔했다 — 색 토큰은 멀쩡히 값을 내놓고 있었기 때문이다. 그래서
+  // 값을 **globals.css 에서 읽어** 대조한다(상수로 박지 않는다 — 박으면 다음 판에 썩는다).
+  const stale = Object.entries(WANT).filter(([n, want]) => probe[n] && norm(probe[n]) !== want);
+  if (dead.length || !probe["--color-chrome"] || !probe["--color-ink"]) {
     console.error("스타일이 안 먹은 화면입니다 — 잰 값이 전부 거짓이 되므로 멈춥니다.");
     if (dead.length) console.error("  못 받은 스타일시트: " + dead.join(", "));
-    console.error(`  토큰: --color-chrome="${probe.chrome}" --color-ink="${probe.ink}" (비어 있으면 CSS 가 안 붙은 것)`);
+    console.error(`  토큰: --color-chrome="${probe["--color-chrome"]}" --color-ink="${probe["--color-ink"]}" (비어 있으면 CSS 가 안 붙은 것)`);
     console.error("  옛 서버가 포트를 잡고 있는지 보세요:  lsof -nP -iTCP:3000 -sTCP:LISTEN");
     console.error("  그 다음:  npm run build && npm start");
+    process.exit(1);
+  }
+  if (stale.length) {
+    console.error(`${BASE} 는 **옛 빌드**입니다 — 고친 것이 아직 안 올라가 있어 재 봐야 소용없습니다.`);
+    for (const [n, want] of stale) console.error(`  ${n}: 화면 "${probe[n]}" ≠ globals.css "${want}"`);
+    console.error("  옛 서버가 포트를 잡고 있는지 보세요:  lsof -nP -iTCP:3000 -sTCP:LISTEN");
+    console.error("  운영을 재는 중이면 배포가 끝났는지 먼저 보세요.");
     process.exit(1);
   }
 }

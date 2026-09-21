@@ -250,7 +250,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             이 시트는 화면 위에 얹히는 것이라, 아래 내용과 같은 흰색이면 어디까지가
             시트인지 눈에 안 들어온다. */}
         <div className="on-chrome flex items-center gap-1 bg-chrome px-3 py-2.5">
-          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-md bg-white text-lg" aria-hidden="true">
+          <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg" aria-hidden="true">
             🌱
           </span>
           <h2 className="ml-1 flex-1 truncate font-display text-lg font-bold text-chrome-ink">

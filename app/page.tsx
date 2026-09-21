@@ -489,7 +489,7 @@ export default async function HomePage() {
                   <div key={a.id} className="flex items-center gap-3">
                     <span
                       className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-md text-base",
+                        "flex h-8 w-8 items-center justify-center rounded-full text-base",
                         pal.soft,
                       )}
                     >

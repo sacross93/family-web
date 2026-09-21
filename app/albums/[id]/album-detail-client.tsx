@@ -148,7 +148,7 @@ export function AlbumDetailClient({
         )}
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-2xl">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-2xl">
               {album.emoji}
             </span>
             <div className="min-w-0">
@@ -403,7 +403,7 @@ function AddPhotoModal({
               : "border-line-strong bg-sunken/40"
           )}
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-md bg-surface text-ink-soft shadow-sm">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface text-ink-soft shadow-sm">
             {busy ? <Spinner className="h-6 w-6" /> : <UploadCloud className="h-6 w-6" />}
           </span>
           <div>

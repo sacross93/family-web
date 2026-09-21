@@ -425,7 +425,7 @@ function FeaturedCard({
       <CardActions onEdit={onEdit} onRemove={onRemove} />
 
       <div className="flex items-center gap-2.5 pr-10">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-xl">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xl">
           {item.emoji}
         </span>
         <p className="min-w-0 truncate font-display text-lg font-bold text-chrome-ink">
@@ -493,7 +493,7 @@ function AnniversaryRow({
         isToday && pal.soft
       )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-sunken text-xl">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-xl">
         {item.emoji}
       </span>
       {/* 잘라내지 않고 접는다. 글자를 1.5배로 키우면 `truncate` 는 "3월 21일 (일) 올…"

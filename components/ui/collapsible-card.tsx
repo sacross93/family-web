@@ -46,7 +46,7 @@ export function CollapsibleCard({
       >
         <span
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg",
             emojiClassName ?? "bg-sunken"
           )}
         >

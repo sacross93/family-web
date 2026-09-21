@@ -52,7 +52,7 @@ function NavList({
           >
             <span
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg",
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg",
                 active ? pal.soft : "bg-white",
               )}
             >
@@ -79,7 +79,7 @@ function NavList({
 function Brand({ site }: { site: SiteConfigData }) {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-1 py-1">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-lavender-soft to-peach-soft text-2xl">
         {site.brandImageUrl ? (
           <img
             src={site.brandImageUrl}
@@ -237,7 +237,7 @@ export function AppShell({
               onClick={() => setAsking(true)}
               className="flex items-center gap-2.5 rounded-lg bg-primary px-3 py-2.5 font-semibold text-ink transition hover:bg-primary-hover active:scale-[0.98]"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
                 <MessageCircle className="h-4.5 w-4.5" />
               </span>
               <span className="text-[0.9375rem]">포동이에게 물어보기</span>
@@ -303,7 +303,7 @@ export function AppShell({
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="메뉴 닫기"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-chrome-ink"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-chrome-ink"
                 >
                   <X className="h-5 w-5" />
                 </button>

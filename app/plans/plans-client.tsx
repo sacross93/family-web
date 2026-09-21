@@ -234,7 +234,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
                 onClick={() => setEmoji(e)}
                 aria-label={`이모지 ${e}`}
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-md text-lg transition hover:bg-sunken",
+                  "flex h-9 w-9 items-center justify-center rounded-full text-lg transition hover:bg-sunken",
                   emoji === e && "bg-sunken ring-2 ring-primary"
                 )}
               >

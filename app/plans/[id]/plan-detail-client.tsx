@@ -463,7 +463,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           진한 판으로 바꾸고 **준비 진행**을 여기로 올린다 — 열자마자 알고 싶은 것이 그거다. */}
       <section className="on-chrome relative mb-6 rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-5 sm:p-6">
         <div className="flex items-start gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-white text-2xl">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-2xl">
             {plan.emoji}
           </span>
           <div className="min-w-0 flex-1 pr-10">
@@ -592,7 +592,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         onClick={openMemo}
         className="mb-8 flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong"
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-butter-soft text-xl">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-butter-soft text-xl">
           💡
         </span>
         <div className="min-w-0 flex-1">
@@ -1068,7 +1068,7 @@ function ChecklistSection({
         // 접었다 펴는 머리글 — 폰에서 눌리는 높이를 44px 로(DESIGN.md §9).
         className="flex min-h-11 items-center gap-2.5 text-left lg:min-h-0"
       >
-        <span className={cn("flex h-9 w-9 items-center justify-center rounded-md text-lg", pal.soft)}>
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-lg", pal.soft)}>
           {emoji}
         </span>
         <h3 className="font-display text-lg font-bold text-ink">{title}</h3>

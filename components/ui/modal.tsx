@@ -68,7 +68,7 @@ export function Modal({
           <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
             <div className="flex items-center gap-2.5">
               {emoji && (
-                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-sunken text-lg">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sunken text-lg">
                   {emoji}
                 </span>
               )}

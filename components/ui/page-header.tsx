@@ -52,7 +52,7 @@ export function PageHeader({
         )}
       >
         {emoji && (
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-surface text-2xl shadow-sm ring-1 ring-line">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface text-2xl shadow-sm ring-1 ring-line">
             {emoji}
           </span>
         )}

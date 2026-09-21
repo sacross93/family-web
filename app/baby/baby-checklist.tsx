@@ -44,7 +44,7 @@ export function BabyChecklist({
         // 접었다 펴는 머리글 — 폰에서 눌리는 높이를 44px 로(DESIGN.md §9).
         className="flex min-h-11 w-full items-center gap-2.5 text-left lg:min-h-0 lg:pointer-events-none"
       >
-        <span className={cn("flex h-9 w-9 items-center justify-center rounded-md text-lg", pal.soft)}>✅</span>
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-lg", pal.soft)}>✅</span>
         <h3 className="font-display text-lg font-bold text-ink">준비 체크리스트</h3>
         {items.length > 0 && (
           <Tag color={color} className="font-num ml-auto">
