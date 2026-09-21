@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { appendMessages, chatExists, createChat, loadHistory } from "@/lib/agent/chat-store";
 import { agentConfig } from "@/lib/agent/config";
+import { GENERIC_ERROR, humanError } from "@/lib/agent/errors";
 import { createCodexProvider } from "@/lib/agent/llm/codex";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import { runAgent } from "@/lib/agent/loop";
@@ -26,14 +27,6 @@ import { RESOURCES } from "@/lib/agent/resources";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const GENERIC_ERROR = "잠깐 문제가 생겼어요. 다시 해볼까요?";
-
-/** 공급자 오류 → 화면 문장. 상태코드도 원문도 문장에 넣지 않습니다. */
-function humanError(status?: number): string {
-  if (status === 429) return "오늘 사용량을 다 썼어요. 잠시 뒤에 다시 해볼까요?";
-  if (status === 401) return "로그인이 풀렸어요. 새로고침해 주세요.";
-  return GENERIC_ERROR;
-}
 
 /**
  * 이벤트를 보며 이번 턴의 대화 기록을 되짚습니다.
