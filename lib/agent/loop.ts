@@ -117,9 +117,16 @@ export function screenLine(path: string | undefined, resources: AgentResource[])
   const resource = findResource(hit.key, resources);
   if (!resource) return null;
   // 상세 화면이면 **어느 항목인지**까지 준다 — 그래야 모델이 되묻지 않고 바로 열어 본다.
+  //
+  // 셋을 가른다. 안내문을 통째로 읽어 보고서야 `/baby` 가 "아기 목록" 으로 나가는 것을 봤다 —
+  // 아기는 **하나**뿐이라 목록이 아니다. 판별 규칙은 `openPage` 가 쓰는 것과 같다:
+  // 상세가 있는데 경로에 id 가 없는 리소스(`detail` 있고 `detailPattern` 없음)가 단일 리소스다.
+  const single = Boolean(resource.detail) && !resource.detailPattern;
   const where = hit.id
     ? `${resource.label} 하나를 연 화면 (open_page 로 열어 볼 수 있습니다)`
-    : `${resource.label} 목록`;
+    : single
+      ? `${resource.label} 화면 (open_page 로 자세히 볼 수 있습니다)`
+      : `${resource.label} 목록`;
   return `가족은 지금 \`${path}\` — ${where} — 을 보고 있습니다. "여기", "이거", "이 글" 은 이 화면을 가리킬 때가 많습니다.`;
 }
 

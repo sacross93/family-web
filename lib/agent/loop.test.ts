@@ -551,6 +551,23 @@ describe("지금 보고 있는 화면", () => {
     expect(screenLine("/plans/p1", FAKE)).toContain("open_page");
   });
 
+  it("항목이 하나뿐인 리소스는 '목록' 이라고 하지 않는다", async () => {
+    // 안내문을 통째로 읽어 보고서야 `/baby` 가 "아기 목록" 으로 나가는 것을 봤다.
+    // 아기는 하나뿐이라 목록이 아니고, 그렇게 말하면 모델이 "아기가 여럿" 으로 읽는다.
+    const SINGLE: AgentResource[] = [{
+      key: "baby", label: "아기", listPath: "/baby",
+      catalog: async () => [], detail: async () => ({ name: "콩이" }),
+    }];
+    const line = screenLine("/baby", SINGLE)!;
+    expect(line).not.toContain("목록");
+    expect(line).toContain("open_page");
+
+    // 실제 리소스로도 확인한다 — 가짜만 보면 진짜가 달라도 모른다.
+    const { RESOURCES } = await import("@/lib/agent/resources");
+    expect(screenLine("/baby", RESOURCES)).not.toContain("목록");
+    expect(screenLine("/todos", RESOURCES)).toContain("목록");
+  });
+
   it("등록되지 않은 경로는 버린다", () => {
     // 이 값은 **안내문에 글로 실린다.** 임의 문자열이 새면 거기 적힌 문장이 지시로 읽힌다.
     expect(screenLine("/admin", FAKE)).toBeNull();
