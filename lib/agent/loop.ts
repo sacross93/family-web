@@ -25,6 +25,15 @@ export interface RunInput {
   history?: AgentMessage[];
   /** 없으면 이 자리에서 만든다(라우트가 미리 만들어 두면 그걸 쓴다). */
   catalog?: string;
+  /**
+   * 가족이 **지금 보고 있는 화면**의 경로. 라우트가 이미 걸러서 넘긴다(등록된 경로만).
+   *
+   * 도구가 아니라 안내문으로 주는 이유: "여기에 적어 줘" 의 '여기' 는 물어서 알 것이
+   * 아니라 **처음부터 알고 있어야 하는 것**이다. 도구로 두면 모델이 그걸 부르는 데
+   * 여섯 걸음 중 한 걸음을 쓴다(그 자리에 있던 `view_screen` 은 언제나 "지원 안 함" 만
+   * 돌려주고 있었다 — 걸음만 먹는 도구였다).
+   */
+  screen?: string;
   maxSteps?: number;
 }
 
@@ -81,10 +90,35 @@ const RULES = [
   "한국어 존댓말로 짧게 답하세요. 목록은 짧은 줄로, 군더더기 없이.",
 ];
 
-export function buildSystemPrompt(catalog: string): string {
+/**
+ * 지금 보고 있는 화면을 한 줄로. 경로만 주면 모델이 그게 뭔지 모르므로 **이름까지** 붙인다.
+ *
+ * 등록되지 않은 경로는 여기서 조용히 버린다 — 라우트가 이미 거르지만, 이 함수만 보고도
+ * 안전한 것이 낫다(안내문에 들어가는 글이라 임의 문자열이 새면 지시로 읽힐 수 있다).
+ */
+export function screenLine(path: string | undefined, resources: AgentResource[]): string | null {
+  if (!path) return null;
+  // 홈은 리소스가 아니다(한 종류가 아니라 여러 종류를 모아 보여 주는 자리). 그런데 가족이
+  // 가장 오래 머무는 화면이고 "오늘 뭐 해야 돼?" 를 여기서 묻는다. 그래서 한 줄만 따로 둔다.
+  if (path === "/") {
+    return "가족은 지금 홈 화면(`/`)을 보고 있습니다 — 오늘 일정·할일·아기 소식이 모여 있는 첫 화면입니다.";
+  }
+  const hit = resolvePath(path, resources);
+  if (!hit) return null;
+  const resource = findResource(hit.key, resources);
+  if (!resource) return null;
+  // 상세 화면이면 **어느 항목인지**까지 준다 — 그래야 모델이 되묻지 않고 바로 열어 본다.
+  const where = hit.id
+    ? `${resource.label} 하나를 연 화면 (open_page 로 열어 볼 수 있습니다)`
+    : `${resource.label} 목록`;
+  return `가족은 지금 \`${path}\` — ${where} — 을 보고 있습니다. "여기", "이거", "이 글" 은 이 화면을 가리킬 때가 많습니다.`;
+}
+
+export function buildSystemPrompt(catalog: string, screen?: string | null): string {
   return [
     INTRO,
     "",
+    ...(screen ? ["[지금 보고 있는 화면]", screen, ""] : []),
     "[사이트 목차]",
     catalog.trim() || "(지금은 목차를 만들지 못했습니다. 도구로 직접 확인하세요.)",
     "",
@@ -148,7 +182,6 @@ const PHRASES = new Map<string, Phrase>([
   ["list_resource", (args, resources) => `${withJosa(keySubject(args, resources, "목록"), "을", "를")} 살펴보는 중…`],
   ["create_item", (args, resources) => `${withJosa(keySubject(args, resources, "항목"), "을", "를")} 추가하는 중…`],
   ["read_url", (args) => `${withJosa(clip(displayDomain(str(args.url))) || "링크", "을", "를")} 읽는 중…`],
-  ["view_screen", () => "화면을 보는 중…"],
 ]);
 
 /**
@@ -224,7 +257,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
   const config = agentConfig();
   const resources = ctx.resources ?? RESOURCES;
   const catalog = input.catalog ?? (await buildCatalog(resources));
-  const system = buildSystemPrompt(catalog);
+  const system = buildSystemPrompt(catalog, screenLine(input.screen, resources));
   const tools = toolSchemas(resources);
   // 0 은 nullish 가 아니라 그냥 통과한다 — 그러면 한 번도 묻지 않고 빈 답으로 끝난다.
   // 라우트가 남은 예산 따위를 계산해 넘길 수 있으므로 여기서 바닥을 받쳐 둔다.

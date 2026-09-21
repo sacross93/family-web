@@ -178,6 +178,11 @@ export function useAgentChat(): AgentChatState {
             message: text,
             imageUrl: image?.url,
             imageData: image?.data,
+            // 지금 보고 있는 화면. "여기에 적어 줘" 의 '여기' 를 포동이가 알게 하는 유일한 통로다.
+            // `usePathname()` 이 아니라 여기서 읽는 이유: 시트는 화면을 옮겨 다니며 열려 있고,
+            // 중요한 것은 **보낸 순간** 어디였는가다(훅이 다시 그려지는 시점이 아니라).
+            // 서버가 등록된 경로만 통과시키므로 여기서 또 거르지 않는다.
+            path: typeof window === "undefined" ? undefined : window.location.pathname,
           }),
           signal: controller.signal,
         });

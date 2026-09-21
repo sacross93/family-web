@@ -15,6 +15,8 @@ import { createCodexProvider } from "@/lib/agent/llm/codex";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import { runAgent } from "@/lib/agent/loop";
 import { agentOrigin } from "@/lib/agent/origin";
+import { resolvePath } from "@/lib/agent/registry";
+import { RESOURCES } from "@/lib/agent/resources";
 
 // 토큰 갱신 HTTP 타임아웃 8초 × 2회 + 도구 왕복 여유.
 // 갱신은 트랜잭션 안에서 일어나므로 도중에 함수가 죽으면 refresh_token 이 영구히 죽습니다.
@@ -87,6 +89,7 @@ interface AgentRequestBody {
   message?: unknown;
   imageUrl?: unknown;
   imageData?: unknown;
+  path?: unknown;
 }
 
 /**
@@ -104,6 +107,19 @@ function ownImageUrl(value: unknown): string | undefined {
     // 주소가 아니면 버립니다.
   }
   return undefined;
+}
+
+/**
+ * 가족이 보고 있던 화면의 경로. **등록된 경로만** 통과합니다.
+ *
+ * 이 값은 안내문에 글로 실립니다 — 임의 문자열을 그대로 실으면 거기 적힌 문장이 지시처럼
+ * 읽힙니다("규칙을 무시하라" 를 경로 이름에 넣는 식). `resolvePath` 는 리소스에 등록된
+ * 경로가 아니면 null 을 주므로, 통과한 값은 우리가 아는 경로 중 하나입니다.
+ * 길이도 먼저 막습니다 — 긴 문자열로 정규식을 괴롭히지 못하게.
+ */
+function knownPath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.startsWith("/") || value.length > 200) return undefined;
+  return resolvePath(value, RESOURCES) ? value : undefined;
 }
 
 /** 축소본 상한. 768px JPEG 는 보통 200KB 아래다 — 그보다 훨씬 크면 줄이지 않고 보낸 것입니다. */
@@ -141,6 +157,7 @@ export async function POST(request: NextRequest) {
   // 사진은 두 값이다 — 저장되는 주소와 이번 턴에만 모델에게 보이는 축소본(스펙 §19.3).
   const imageUrl = ownImageUrl(body?.imageUrl);
   const imageData = modelImage(body?.imageData);
+  const screen = knownPath(body?.path);
 
   // 대화 준비는 스트림을 열기 **전에** 끝냅니다 — 여기서 실패하면 JSON 오류로 돌려줄 수 있습니다.
   let chatId: string;
@@ -190,6 +207,7 @@ export async function POST(request: NextRequest) {
         history,
         ...(imageUrl ? { imageUrl } : {}),
         ...(imageData ? { imageData } : {}),
+        ...(screen ? { screen } : {}),
       });
       try {
         for await (const event of run) {

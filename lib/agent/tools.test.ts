@@ -30,9 +30,12 @@ afterEach(() => {
 });
 
 describe("toolSchemas", () => {
-  it("도구는 5개 고정이다", () => {
+  it("도구는 4개 고정이다", () => {
+    // 다섯째였던 `view_screen` 은 **언제나 "지원 안 함"** 만 돌려주던 껍데기였다.
+    // 모델이 그걸 한 번 부르면 여섯 걸음 중 한 걸음이 사라진다. 화면 위치는 이제
+    // 안내문으로 준다(loop.ts 의 `screenLine`) — 물어서 알 것이 아니라 아는 것이다.
     expect(toolSchemas(FAKE).map((t) => t.name).sort()).toEqual(
-      ["create_item", "list_resource", "open_page", "read_url", "view_screen"]
+      ["create_item", "list_resource", "open_page", "read_url"]
     );
   });
   it("create_item 의 resource enum 은 추가 가능한 리소스만 담는다", () => {
@@ -99,11 +102,13 @@ describe("read_url", () => {
   });
 });
 
-describe("view_screen", () => {
-  it("아직 지원하지 않는다고 답한다", async () => {
+describe("없앤 도구", () => {
+  it("view_screen 을 부르면 '없는 도구' 로 답한다 — 조용히 성공하지 않는다", async () => {
+    // 껍데기를 걷어냈다는 것은 **모델이 그 이름을 부르면 알게 된다**는 뜻이다.
+    // 히스토리에 남은 옛 호출을 모델이 흉내 낼 수 있으므로 이 갈래가 실제로 돈다.
     const r = await executeTool("view_screen", {}, ctx());
-    expect(r.ok).toBe(true);
-    expect((r as { data: { available: boolean } }).data.available).toBe(false);
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("view_screen");
   });
 });
 
@@ -172,7 +177,7 @@ const jsonFetch = (status: number, body: unknown) =>
 describe("toolSchemas 생성 규칙", () => {
   it("리소스를 더해도 도구 수는 그대로고 enum 만 늘어난다", () => {
     const schemas = toolSchemas([...FAKE, MEMO]);
-    expect(schemas).toHaveLength(5);
+    expect(schemas).toHaveLength(4);
     const create = schemas.find((t) => t.name === "create_item")!;
     expect(create.parameters.properties.resource.enum).toEqual(["link", "memo"]);
     const list = schemas.find((t) => t.name === "list_resource")!;

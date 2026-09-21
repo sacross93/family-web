@@ -160,11 +160,6 @@ export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[
         ["url"]
       ),
     },
-    {
-      name: "view_screen",
-      description: "사용자가 보고 있는 화면을 본다. 아직 지원하지 않는다.",
-      parameters: objectSchema({}),
-    },
   ];
 }
 
@@ -935,8 +930,6 @@ export async function executeTool(
         return await createItem(input, resources, ctx);
       case "read_url":
         return await readUrl(input, ctx);
-      case "view_screen":
-        return { ok: true, data: { available: false, reason: "아직 지원하지 않습니다" } };
       default:
         return fail(`"${name}" 이라는 도구는 없어요. 쓸 수 있는 도구: ${toolSchemas(resources).map((t) => t.name).join(" · ")}`);
     }

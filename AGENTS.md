@@ -66,7 +66,8 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 ## 사이트 에이전트 (`lib/agent/`, 1단계=엔진)
 - **글이 본체인 리소스는 `CatalogEntry.body` 에 본문을 싣는다**(아기 기록·게시판 글·일정 메모·기념일 메모). **목차(`catalog.ts`)는 body 를 쓰지 않는다** — 16종이 4,000자 안에 다 들어가야 하는 자리라 본문을 넣으면 한 종류가 다른 종류를 밀어낸다. 본문은 `list_resource` 로 한 종류를 펼칠 때만 나간다. 이 경계가 "훑어보기"와 "읽기"를 가른다.
 - 리소스는 `lib/agent/resources.ts` 의 `RESOURCES` 한 곳에만 선언한다(현재 16종). 목차·도구·경로해석·추가·되돌리기가 전부 거기서 파생 — **리소스별 if/else 금지**. 타입과 경로 해석기는 `registry.ts`.
-- 도구는 5개 고정(`open_page`·`list_resource`·`create_item`·`read_url`·`view_screen`). 새 기능이 생기면 도구가 아니라 **리소스를 추가**한다.
+- 도구는 4개 고정(`open_page`·`list_resource`·`create_item`·`read_url`). 새 기능이 생기면 도구가 아니라 **리소스를 추가**한다.
+- **문맥은 도구로 묻게 하지 않는다 — 안내문으로 준다.** 다섯째 도구였던 `view_screen` 은 언제나 "아직 지원하지 않습니다" 만 돌려주는 껍데기였고, 모델이 그걸 한 번 부르면 `maxSteps` 6걸음 중 한 걸음이 그냥 사라졌다. 지금 보고 있는 화면은 `loop.ts` 의 `screenLine()` 이 안내문 맨 앞에 한 줄로 싣는다(모델 호출 0회). **경로는 `resolvePath` 를 통과한 것만** 싣는다 — 안내문에 글로 들어가는 자리라 임의 문자열이 새면 거기 적힌 문장이 지시로 읽힌다. 라우트(`knownPath`)와 `screenLine` 이 **두 번** 거르는 것은 중복이 아니라 그 이유다. 홈(`/`)은 리소스가 아니라 특례 한 줄이다. 메뉴가 늘면 `loop.test.ts` 가 "그 화면을 못 알아본다" 고 걸어 준다.
 - **추가 전용**: 수정·삭제 도구를 만들지 않는다. 되돌리기는 `create.undoApi` 화이트리스트로 서버만 실행.
 - 추가는 기존 API 라우트를 HTTP로 호출한다(검증 중복 금지).
 - 숫자·모델명은 `lib/agent/config.ts`(환경변수)에서만. 코드에 박지 않는다. 목록은 `.env.example`.
