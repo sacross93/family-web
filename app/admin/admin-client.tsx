@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Sparkles,
   ChevronRight,
@@ -11,11 +11,12 @@ import {
   ExternalLink,
   Save,
   ImagePlus,
+  Plus,
   X,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import type { Decoration } from "@prisma/client";
+import type { Decoration, FamilyMember as FamilyMemberRow } from "@prisma/client";
 import {
   PageHeader,
   Card,
@@ -27,6 +28,8 @@ import {
   ColorDot,
   CollapsibleCard,
   IconButton,
+  useConfirm,
+  useToast,
 } from "@/components/ui";
 import { NAV, TAB_COUNT, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
@@ -72,6 +75,7 @@ export function AdminClient({
       <SiteSettingsCard site={site} onSaved={() => router.refresh()} />
       <NavEditorCard nav={nav} onSaved={() => router.refresh()} />
       <DecorationManager decorations={decorations} />
+      <FamilyCard />
       {/* 기억 목록은 메뉴에 없다 — 매일 여는 화면이 아니라 한 번씩 확인하고 지우는 자리다.
           그래도 **길은 있어야 한다**: 포동이에게 물어본 적이 없으면 이 화면이 있는 줄도 모른다. */}
       <Link
@@ -553,6 +557,130 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
           ))}
         </div>
       )}
+    </CollapsibleCard>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   4) 가족 — 이름을 넣는 유일한 자리
+   ═══════════════════════════════════════════ */
+
+/**
+ * 가족을 넣을 길이 **어디에도 없었다.** `prisma/seed.ts` 뿐이었고 그건 콘텐츠 표를 지우고
+ * 다시 넣는 것이라 운영에서는 못 쓴다. 그래서 배포된 사이트는 가족 0명이었고, 할일 담당자·
+ * 게시판 글쓴이·아기 기록 작성자·포동이의 "나는 ___" 이 전부 고를 사람이 없었다.
+ *
+ * 지우기는 **글을 같이 지우지 않는다** — 스키마의 관계가 전부 `onDelete: SetNull` 이라
+ * 그 사람이 쓴 것은 남고 이름만 빈다. 그래도 물어보고 지운다(되돌릴 수 없다).
+ */
+function FamilyCard() {
+  const { say } = useToast();
+  const { confirm, dialog } = useConfirm();
+  const [rows, setRows] = useState<FamilyMemberRow[] | null>(null);
+  const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState("🙂");
+  const [role, setRole] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // 서버에서 한 번 받아 온다. 관리자 화면에서만 쓰는 목록이라 페이지 데이터에 싣지 않았다.
+  useEffect(() => {
+    fetch("/api/family")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([]));
+  }, []);
+
+  async function add() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/family", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, emoji, role }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        say(data?.error ?? "추가하지 못했어요.", "error");
+        return;
+      }
+      setRows((prev) => [...(prev ?? []), data]);
+      setName("");
+      setRole("");
+      setEmoji("🙂");
+    } catch {
+      say("연결을 확인해 주세요.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(row: FamilyMemberRow) {
+    const ok = await confirm({
+      title: `${row.name} 님을 지울까요?`,
+      description: "이 사람이 쓴 글과 할일은 그대로 남고, 이름만 비워져요.",
+    });
+    if (!ok) return;
+    const before = rows ?? [];
+    setRows(before.filter((r) => r.id !== row.id));
+    const res = await fetch(`/api/family/${row.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      setRows(before);
+      say("못 지웠어요.", "error");
+    }
+  }
+
+  return (
+    <CollapsibleCard emoji="👨‍👩‍👧‍👦" emojiClassName="bg-mint-soft" title="가족" className="gap-5">
+      <p className="rounded-md bg-sunken px-3 py-2 text-xs text-ink-soft">
+        여기 넣은 이름이 <b className="text-ink">할일 담당자 · 글쓴이 · 아기 기록 작성자</b>와
+        포동이의 <b className="text-ink">&ldquo;나는 ___&rdquo;</b>에 나와요.
+      </p>
+
+      {rows === null ? (
+        <p className="text-sm text-ink-faint">불러오는 중…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-ink-soft">아직 아무도 없어요. 아래에서 한 명씩 더해 주세요.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2">
+              <span className="text-xl">{row.emoji}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-ink">{row.name}</span>
+                {row.role && <span className="block text-xs text-ink-faint">{row.role}</span>}
+              </span>
+              <IconButton aria-label={`${row.name} 지우기`} variant="danger" onClick={() => remove(row)}>
+                <Trash2 className="h-4 w-4" />
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 border-t border-line pt-4">
+        <div className="grid grid-cols-[4.5rem_1fr] gap-2">
+          <Field label="이모지">
+            <Input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={4} className="text-center text-lg" />
+          </Field>
+          <Field label="이름">
+            <Input
+              placeholder="예: 엄마"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+            />
+          </Field>
+        </div>
+        <Field label="역할" hint="선택 사항이에요. 예: 첫째">
+          <Input placeholder="예: 엄마" value={role} onChange={(e) => setRole(e.target.value)} />
+        </Field>
+        <Button onClick={add} disabled={!name.trim() || busy} className="self-start">
+          <Plus className="h-4 w-4" /> 가족 더하기
+        </Button>
+      </div>
+      {dialog}
     </CollapsibleCard>
   );
 }
