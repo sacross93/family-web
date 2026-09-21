@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Decoration } from "@prisma/client";
 import { cn } from "@/lib/utils";
+import { sized, sizedSrcSet } from "@/lib/img";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 import { Button } from "@/components/ui";
 
@@ -261,7 +262,12 @@ export function DecorationSurface({
         }}
       >
         <img
-          src={d.url}
+          // **줄여서 받는다.** 홈 스티커 한 장이 2,208KB 였다(운영 실측) — 폰으로 홈을
+          // 열 때마다 그만큼을 내려받았다. 원본은 저장소에 그대로 있고 화면에만 줄인 것이 온다.
+          // 편집 중에는 원본을 쓴다: 크기를 키우는 중에 주소가 계속 바뀌면 그때마다 다시
+          // 받느라 깜빡이고, 어차피 편집은 한 사람이 잠깐 하는 일이다.
+          src={editing ? d.url : sized(d.url, d.width)}
+          srcSet={editing ? undefined : sizedSrcSet(d.url, d.width)}
           alt=""
           draggable={false}
           onPointerDown={(e) => startDrag(e, d, "move")}

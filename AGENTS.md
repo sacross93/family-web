@@ -19,6 +19,10 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 데이터 패턴: `app/<기능>/page.tsx`(서버, prisma로 read, `export const dynamic="force-dynamic"`) → `<기능>-client.tsx`("use client", 낙관적 업데이트 + `/api/...` fetch). 예시: `app/shopping/*`.
 - **Next 16 동적 라우트 params는 Promise**: `{ params }: { params: Promise<{ id: string }> }` → `await params`.
 - 사진은 `<img loading="lazy">` (eslint 허용). 업로드는 `public/uploads/`(git 제외).
+- **큰 사진은 줄여서 보낸다** — `lib/img.ts` 의 `sized()`·`sizedSrcSet()`. 홈 스티커 한 장이 **2,208KB** 였다(운영에서 폰 폭으로 실측. 홈이 받는 이미지가 그것 하나뿐이었다). 원본은 저장소에 그대로 두고 화면에만 줄인 것이 간다. `next/image` **컴포넌트는 안 쓴다** — 스티커는 DB 에 가로 px 만 있고 세로는 사진 비율을 따르는데 `next/image` 는 width+height 를 요구하고 감싸는 요소가 하나 더 생겨 드래그 좌표가 어긋난다. 그래서 `<img>` 는 그대로 두고 **주소만** 최적화 주소로 바꾼다.
+  - 허용 크기·허용 호스트는 `lib/img.ts` 한 곳에서 오고 `next.config.ts` 가 그것을 가져다 쓴다. **어긋나면 사진이 400 으로 안 뜬다**(실측: 허용 밖 `w` 도, 등록 안 된 호스트도 400).
+  - 못 태우는 주소(남의 서버·`data:`)는 **있는 그대로** 내보낸다. 줄이려다 사진이 안 뜨는 쪽이 훨씬 나쁘다.
+  - **꾸미기 편집 중에는 원본을 쓴다.** 크기를 끄는 동안 주소가 계속 바뀌면 그때마다 다시 받느라 깜빡인다.
 - UI 언어 한국어, 존댓말·따뜻·간결. 이모지는 양념.
 - **모바일 우선**: 반드시 폰 폭(≈390px)에서 검증. hover로만 뜨는 액션 금지 — 모바일엔 항상 보이게(`opacity-100 lg:opacity-0 lg:group-hover:opacity-100`). 탭 타깃 넉넉히, 가로 스크롤 금지(body `overflow-x:hidden`).
 - **폰 네비게이션은 하단 탭바**(`components/bottom-tabs.tsx`) — `getNav()` 앞 `TAB_COUNT`개 + `더보기`(드로어). 탭 목록을 따로 만들지 말 것: `NavItem` DB 오버라이드도 꾸미기 표면도 NAV href 로 돈다.
