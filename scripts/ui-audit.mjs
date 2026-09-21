@@ -461,6 +461,12 @@ await Promise.all(
   const paths = [...PATHS, ...(USER && PASS ? await detailPaths(page) : [])];
 
   for (const path of paths) {
+    // **화면 하나가 실패해도 나머지는 돈다.** 운영에 대고 돌렸더니 한 화면에서
+    // "Execution context was destroyed"(재는 중에 화면이 옮겨갔다)가 나면서
+    // **감사 전체가 죽었다** — 그러고는 아무것도 못 본 채 끝났다.
+    // 이 파일이 위에서 스스로 경계한 바로 그 모양이다: "한 가지 고장이 눈 전체를 가렸다".
+    // 실패는 **오류로 올리고** 다음 화면으로 간다.
+    try {
     await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
     await page.waitForTimeout(250);
 
@@ -555,6 +561,9 @@ await Promise.all(
           problems.push(`${tag} ${path}: \`…\` 메뉴가 바깥을 눌러도 닫히지 않음`);
         }
       }
+    }
+    } catch (e) {
+      problems.push(`${tag} ${path}: 재다가 멈췄습니다 — ${String(e).split("\n")[0].slice(0, 90)}`);
     }
   }
   await ctx.close();
