@@ -9,6 +9,7 @@ import { buildSystemPrompt, memoryLines, screenLine, speakerLine } from "../lib/
 import { agentConfig } from "../lib/agent/config";
 import { RESOURCES } from "../lib/agent/resources";
 import { toolSchemas } from "../lib/agent/tools";
+import { createCodexProvider } from "../lib/agent/llm/codex";
 import { prisma } from "../lib/prisma";
 
 async function main() {
@@ -38,6 +39,37 @@ async function main() {
     `도구 ${toolTotal.toLocaleString("ko-KR")}자 + 안내문 ${full.length.toLocaleString("ko-KR")}자 = ` +
       `왕복마다 ${(toolTotal + full.length).toLocaleString("ko-KR")}자 (한 턴 최대 ${c.maxSteps}왕복)`
   );
+
+  // **공급자에게 실제로 나가는 본문.** fetch 를 갈아 끼워 본문만 붙잡고 빈 스트림을 돌려준다 —
+  // 네트워크를 타지 않으므로 가족의 ChatGPT 사용량이 들지 않는다.
+  // 여기서만 보이는 것들이 있다: `store` 가 정말 false 인지, `web_search` 가 정말 붙는지,
+  // 어느 도구 모드로 굳었는지. 설정과 실제가 어긋나면 이 줄에서 드러난다.
+  let body: Record<string, unknown> | null = null;
+  const spy: typeof fetch = async (_u, init) => {
+    body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+    return new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  try {
+    const probe = createCodexProvider({ fetchImpl: spy });
+    for await (const _ of probe.sendTurn({ system: full, messages: [{ role: "user", content: "." }], tools })) {
+      /* 이벤트는 보지 않는다 — 본문만 붙잡으면 된다 */
+    }
+  } catch {
+    /* 로그인 토큰이 없으면 여기서 멈춘다. 그래도 본문은 이미 잡혔을 수 있다. */
+  }
+  if (body) {
+    const b = body as Record<string, unknown>;
+    const wireTools = (b.tools as { name?: string; type?: string }[] | undefined) ?? [];
+    console.log(
+      `\n나가는 본문 ${JSON.stringify(b).length.toLocaleString("ko-KR")}자 · ` +
+        `model=${String(b.model)} · store=${String(b.store)}\n도구: ${wireTools.map((t) => t.name ?? t.type).join(" · ")}`
+    );
+  } else {
+    console.log("\n(나가는 본문을 못 잡았습니다 — 로그인 토큰이 없으면 그 전에 멈춥니다)");
+  }
 }
 
 main()
