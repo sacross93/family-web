@@ -721,3 +721,28 @@ describe("codex 공급자 — 내장 웹검색", () => {
     expect((bodyOf(f, 0).tools as { type: string }[]).map((t) => t.type)).toEqual(["web_search"]);
   });
 });
+
+describe("토큰을 못 읽었을 때", () => {
+  // 화면 문구는 라우트가 **상태코드로** 고른다. 상태를 안 올리면 "잠깐 문제가 생겼어요" 가
+  // 떠서 가족이 영영 다시 시도만 한다 — 새로고침으로 안 고쳐지는 일이다.
+  // 그리고 auth.ts 의 메시지에는 `npm run agent:auth` 같은 명령어가 들어 있어
+  // 그대로 화면에 띄우면 안 된다(가족은 터미널을 쓰지 않는다).
+  it("401 을 함께 올려 라우트가 '연결이 풀렸어요' 를 고르게 한다", async () => {
+    const provider = createCodexProvider({
+      // 토큰을 읽는 자리가 던진다 — 토큰이 없거나 AUTH_SECRET 이 바뀐 상황.
+      token: async () => {
+        throw new Error("에이전트 토큰이 사라졌어요. `npm run agent:auth` 로 다시 넣어 주세요.");
+      },
+      fetchImpl: (async () => {
+        throw new Error("여기까지 오면 안 된다 — 토큰 단계에서 멈춰야 한다");
+      }) as unknown as typeof fetch,
+    });
+    const events = [];
+    for await (const e of provider.sendTurn({ system: "s", messages: [{ role: "user", content: "q" }], tools: [] })) {
+      events.push(e);
+    }
+    const err = events.find((e) => e.type === "error") as { status?: number; message: string } | undefined;
+    expect(err, "오류 이벤트가 나와야 한다").toBeDefined();
+    expect(err!.status, "상태가 없으면 라우트가 일반 문구를 고른다").toBe(401);
+  });
+});

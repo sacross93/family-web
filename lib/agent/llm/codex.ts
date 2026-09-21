@@ -754,8 +754,13 @@ export function createCodexProvider(opts: CodexProviderOptions = {}): LlmProvide
         force = false; // 강제 갱신은 401 직후 한 번만. json 강등 재시도까지 끌고 가지 않습니다.
       } catch (error) {
         // auth.ts 의 메시지는 사용자용 한국어이고 토큰 값을 담지 않습니다.
+        // 다만 그 안에는 `npm run agent:auth` 같은 **명령어**가 들어 있어 화면에 그대로
+        // 띄우면 안 된다(가족은 터미널을 쓰지 않는다). 라우트가 상태코드로 문구를 고르므로
+        // **401 을 함께 올린다** — 토큰을 못 읽은 것도 결국 인증이 끊긴 것이고,
+        // 그래야 "연결이 풀렸어요" 가 뜬다. 안 올리면 "잠깐 문제가 생겼어요" 가 떠서
+        // 가족이 영영 다시 시도만 하게 된다. 원문은 서버 로그에만 남는다.
         const message = error instanceof Error ? error.message : "에이전트 토큰을 읽지 못했어요.";
-        yield { type: "error", message };
+        yield { type: "error", message, status: 401 };
         return;
       }
 
