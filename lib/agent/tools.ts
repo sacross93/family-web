@@ -898,7 +898,7 @@ async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise
   const target = externalUrl(rewriteKnownShell(requested ?? ""));
   if (!target) return fail(BLOCKED_MESSAGE); // 요청을 보내기 전에 막는다
 
-  // 유튜브는 읽는 방법이 다르다. 새 도구가 아니라 여기서 갈라진다(도구는 5개 고정).
+  // 유튜브는 읽는 방법이 다르다. 새 도구가 아니라 여기서 갈라진다(도구 수는 고정 — 지금 4개).
   const videoId = youtubeId(target);
   if (videoId) return await readYoutube(videoId, ctx);
 
