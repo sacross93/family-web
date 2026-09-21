@@ -5,7 +5,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { kindMeta } from "@/app/baby/baby-meta";
-import { dday, kDateShort, kTime, startOfDay } from "@/lib/date";
+// 날짜는 `kDateShortYear` 로. 다른 해면 해를 밝힌다 — 포동이가 "내일" 을 2020년으로
+// 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
+import { dday, kDateShortYear, kTime, startOfDay } from "@/lib/date";
 import { NAV } from "@/lib/nav";
 import type { AgentResource, CatalogEntry } from "./registry";
 
@@ -167,7 +169,7 @@ export const RESOURCES: AgentResource[] = [
       return rows.map((a) => ({
         id: a.id,
         title: a.title,
-        hint: [a.takenOn ? kDateShort(a.takenOn) : null, `사진 ${a._count.photos}`]
+        hint: [a.takenOn ? kDateShortYear(a.takenOn) : null, `사진 ${a._count.photos}`]
           .filter(Boolean)
           .join(" · "),
       }));
@@ -260,7 +262,7 @@ export const RESOURCES: AgentResource[] = [
           title: p.title,
           hint: hintOf([
             p.type,
-            p.startDate ? `${kDateShort(p.startDate)}${p.endDate ? `~${kDateShort(p.endDate)}` : ""}` : null,
+            p.startDate ? `${kDateShortYear(p.startDate)}${p.endDate ? `~${kDateShortYear(p.endDate)}` : ""}` : null,
             `일정 ${p._count.items}`,
           ]),
         })),
@@ -407,7 +409,7 @@ export const RESOURCES: AgentResource[] = [
         prisma.todo.count({ where: { done: true } }),
       ]);
       const entries: CatalogEntry[] = capped(
-        rows.map((t) => ({ id: t.id, title: t.title, hint: kDateShort(t.date) })),
+        rows.map((t) => ({ id: t.id, title: t.title, hint: kDateShortYear(t.date) })),
         LIST_TAKE
       );
       if (doneCount) entries.push({ title: `완료한 할일 ${doneCount}개` });
@@ -475,7 +477,7 @@ export const RESOURCES: AgentResource[] = [
           title: e.title,
           hint: hintOf([
             past ? "지난 일정" : null,
-            kDateShort(e.start),
+            kDateShortYear(e.start),
             e.allDay ? "하루 종일" : kTime(e.start),
             e.location,
           ]),
@@ -542,7 +544,7 @@ export const RESOURCES: AgentResource[] = [
           title: a.title,
           hint: hintOf([
             a.d.days < 0 ? "지난 기념일" : null,
-            kDateShort(a.d.nextDate),
+            kDateShortYear(a.d.nextDate),
             a.d.label,
             a.recurring ? "매년" : null,
           ]),
@@ -600,7 +602,7 @@ export const RESOURCES: AgentResource[] = [
         rows.map((p) => ({
           id: p.id,
           title: firstLine(p.content),
-          hint: hintOf([kDateShort(p.createdAt), p.author?.name, p.pinned ? "고정" : null]),
+          hint: hintOf([kDateShortYear(p.createdAt), p.author?.name, p.pinned ? "고정" : null]),
           body: p.content,
         })),
         LIST_TAKE
@@ -690,7 +692,7 @@ export const RESOURCES: AgentResource[] = [
       return [{
         title: baby.nickname,
         hint: [
-          baby.birthDate ? `출생 ${kDateShort(baby.birthDate)}` : `예정일 ${kDateShort(baby.dueDate)}`,
+          baby.birthDate ? `출생 ${kDateShortYear(baby.birthDate)}` : `예정일 ${kDateShortYear(baby.dueDate)}`,
           `기록 ${baby._count.entries}`,
         ].join(" · "),
       }];
@@ -728,7 +730,7 @@ export const RESOURCES: AgentResource[] = [
         rows.map((e) => ({
           id: e.id,
           title: firstLine(e.content),
-          hint: hintOf([kindMeta(e.kind).label, kDateShort(e.date), e.author?.name, e.mood]),
+          hint: hintOf([kindMeta(e.kind).label, kDateShortYear(e.date), e.author?.name, e.mood]),
           body: e.content,
         })),
         LIST_TAKE
@@ -892,7 +894,7 @@ export const RESOURCES: AgentResource[] = [
           title: m.text,
           // 누가 적었는지를 **반드시** 붙인다 — 포동이가 짐작해 적은 것과 가족이 말해 준 것이
           // 같아 보이면, 잘못 짐작한 기억이 사실처럼 굳는다.
-          hint: hintOf([m.by, kDateShort(m.createdAt)]),
+          hint: hintOf([m.by, kDateShortYear(m.createdAt)]),
         })),
         MEMORY_TAKE
       );

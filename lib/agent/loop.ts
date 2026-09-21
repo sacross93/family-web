@@ -12,6 +12,7 @@ import { MORE_TITLE, RESOURCES } from "./resources";
 import { executeTool, toolSchemas } from "./tools";
 import type { ToolContext, ToolResult } from "./tools";
 import { displayDomain } from "@/lib/url";
+import { kDate } from "@/lib/date";
 
 export interface RunInput {
   question: string;
@@ -176,6 +177,21 @@ export async function memoryLines(
 }
 
 /**
+ * **오늘이 며칠인지.** 없으면 "내일"·"이번 주말"·"다음 달" 을 풀 수가 없다.
+ *
+ * 없어서 실제로 틀렸다: 2026-09-18 에 "내일 우유 사기 할일 추가해줘" 를 시켰더니
+ * 날짜를 **2020-09-19** 로 적고는 "내일 할 일로 추가해 두었습니다" 라고 답했다.
+ * 여섯 해가 틀렸는데 아무도 못 알아챘다 — 되읽기 장치도 `kDateShort` 로 "9월 19일 (토)"
+ * 만 보고 멀쩡하다고 판단했다(그래서 `kDateShortYear` 도 같이 만들었다).
+ *
+ * 서버 시계를 그대로 쓴다. 배포는 UTC 지만 `lib/date.ts` 가 전 사이트에서 쓰는 것과
+ * **같은 함수**라, 여기만 다른 시간대를 쓰면 목차의 날짜와 어긋나 더 나쁘다.
+ */
+export function todayLine(now: Date = new Date()): string {
+  return `오늘은 ${kDate(now)} 입니다. "내일"·"이번 주말"·"다음 달" 같은 말은 이 날짜를 기준으로 계산하세요. 날짜를 적을 때는 yyyy-MM-dd 로, **해를 빠뜨리지 마세요.**`;
+}
+
+/**
  * "지금 누가 말하고 있나" 한 줄. **짐작이라는 말이 이 줄의 절반이다.**
  *
  * 이름을 그냥 주면 모델은 그것을 사실로 쓴다 — 아빠 폰을 엄마가 들었을 때
@@ -200,6 +216,9 @@ export function buildSystemPrompt(
 ): string {
   return [
     INTRO,
+    "",
+    "[오늘]",
+    todayLine(),
     "",
     ...(speaker ? ["[지금 말하는 사람 — 짐작입니다]", speaker, ""] : []),
     ...(screen ? ["[지금 보고 있는 화면]", screen, ""] : []),

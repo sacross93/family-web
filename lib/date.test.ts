@@ -9,6 +9,8 @@ import {
   fromDateInput,
   parseDateInput,
   kDateRelative,
+  kDateShort,
+  kDateShortYear,
 } from "@/lib/date";
 
 // 예정일 2027-05-20 고정. daysBefore(n) = 예정일 n일 전.
@@ -155,5 +157,26 @@ describe("kDateRelative", () => {
   it("지난 날은 상대말로 바꾸지 않는다 — 언제였는지가 궁금한 자리다", () => {
     expect(at("2026-09-19T09:00:00")).toBe("9월 19일 (토)");
     expect(at("2026-09-13T09:00:00")).toBe("9월 13일 (일)");
+  });
+});
+
+describe("다른 해면 해를 밝힌다", () => {
+  // 포동이가 "내일" 을 2020년으로 적었는데 `kDateShort` 로는 2026년 것과 **글자가 같아**
+  // 되읽어 확인하는 장치도 멀쩡하다고 판단했다. 여섯 해가 틀렸는데 아무도 못 알아챘다.
+  const today = new Date("2026-09-21T09:00:00+09:00");
+
+  it("같은 해에는 글자가 하나도 늘지 않는다 — 목차 예산에 영향이 없게", () => {
+    const d = new Date("2026-09-19T00:00:00+09:00");
+    expect(kDateShortYear(d, today)).toBe(kDateShort(d));
+  });
+
+  it("다른 해면 해를 붙인다", () => {
+    const old = new Date("2020-09-19T00:00:00+09:00");
+    expect(kDateShortYear(old, today)).toContain("2020년");
+    expect(kDateShortYear(old, today)).not.toBe(kDateShort(old));
+  });
+
+  it("앞으로의 해도 밝힌다 — 예정일·기념일이 내년일 수 있다", () => {
+    expect(kDateShortYear(new Date("2027-05-03T00:00:00+09:00"), today)).toContain("2027년");
   });
 });

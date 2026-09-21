@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult, speakerLine } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult, speakerLine, todayLine } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -775,5 +775,34 @@ describe("지금 누가 말하는지 — 짐작이라는 것까지", () => {
     const p2 = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
     await drain(runAgent({ question: "일기 써줘", provider: p2, ctx, catalog: "" }));
     expect(p2.calls[0].system).not.toContain("[지금 말하는 사람");
+  });
+});
+
+describe("오늘이 며칠인지 안다", () => {
+  // 없어서 실제로 틀렸다(저장된 대화에 남아 있다): 2026-09-18 에 "내일 우유 사기 할일
+  // 추가해줘" 를 시켰더니 날짜를 **2020-09-19** 로 적고 "내일 할 일로 추가해 두었습니다"
+  // 라고 답했다. 여섯 해가 틀렸는데 아무도 못 알아챘다.
+  it("날짜를 해까지 말하고, 상대 표현의 기준이라고 못 박는다", () => {
+    const line = todayLine(new Date("2026-09-21T09:00:00+09:00"));
+    expect(line).toContain("2026년");
+    expect(line).toContain("9월 21일");
+    expect(line).toContain("내일");
+  });
+
+  it("해를 빠뜨리지 말라고 이른다 — 틀린 것이 해였다", () => {
+    expect(todayLine(new Date("2026-09-21T09:00:00+09:00"))).toContain("해를 빠뜨리지");
+  });
+
+  it("안내문 맨 앞에 온다 — 다른 칸이 없어도 늘 있다", () => {
+    const sys = buildSystemPrompt("계획(1): 발리");
+    expect(sys).toContain("[오늘]");
+    expect(sys.indexOf("[오늘]")).toBeLessThan(sys.indexOf("[사이트 목차]"));
+  });
+
+  it("**루프가 실제로 싣는다**", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({ question: "내일 뭐 있어?", provider: p, ctx, catalog: "" }));
+    expect(p.calls[0].system).toContain("[오늘]");
+    expect(p.calls[0].system).toContain(String(new Date().getFullYear()));
   });
 });

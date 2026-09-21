@@ -19,6 +19,22 @@ export function kDateShort(d: Date | string) {
   return format(new Date(d), "M월 d일 (EEE)", { locale: ko });
 }
 
+/**
+ * 올해면 `7월 21일 (화)`, 다른 해면 `2020년 9월 19일 (토)`.
+ *
+ * **해가 다른데 같아 보이면 안 되는 자리**가 있다. 포동이에게 "내일 우유 사기" 를 시켰더니
+ * 날짜를 **2020년** 9월 19일로 적었는데(오늘이 몇 일인지 몰랐다), 되읽어 확인하는 장치는
+ * `kDateShort` 로 "9월 19일 (토)" 를 보고 멀쩡하다고 판단했다 — 2026년 것과 글자가 같았다.
+ * 여섯 해가 틀렸는데 사람도 기계도 못 알아챈 것이다.
+ *
+ * 그래서 **다를 때만** 해를 붙인다. 같은 해에는 글자가 하나도 늘지 않으므로
+ * 목차 예산에도 영향이 없다.
+ */
+export function kDateShortYear(d: Date | string, today: Date = new Date()) {
+  const date = new Date(d);
+  return date.getFullYear() === today.getFullYear() ? kDateShort(date) : kDate(date);
+}
+
 /** 오후 3:00 */
 export function kTime(d: Date | string) {
   return format(new Date(d), "a h:mm", { locale: ko });
