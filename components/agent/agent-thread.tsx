@@ -194,7 +194,11 @@ export function AgentThread({
                 key={text}
                 type="button"
                 onClick={() => onSuggest(text)}
-                className="max-w-full rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-soft transition hover:border-line-strong hover:bg-sunken active:scale-[.98]"
+                // **흰 알약이 아니라 분홍 알약.** 대화 바탕이 흰색이 된 뒤로 흰 알약은
+                // 테두리 한 줄로만 버티느라 조용했다 — 눌러 보라고 놓은 것인데 눌릴 것처럼
+                // 안 보이면 뜻이 없다. 바탕을 분홍으로 되돌리는 대신 **알약을 분홍으로** 한다
+                // (흰 바탕 위에 분홍을 올린다 — 이 사이트의 원칙 그대로).
+                className="max-w-full rounded-full bg-primary-soft px-4 py-2.5 text-left text-sm text-primary-ink transition hover:brightness-[.97] active:scale-[.98]"
               >
                 {text}
               </button>
