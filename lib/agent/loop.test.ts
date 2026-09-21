@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, inWaves, readBudget, runAgent, screenLine, serializeResult } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -645,5 +645,82 @@ describe("도구 결과가 대화를 먹지 않게 — 마지막 안전장치", 
     } finally {
       delete process.env.AGENT_TOOL_RESULT_MAX_CHARS;
     }
+  });
+});
+
+describe("대화를 넘어 기억한다", () => {
+  const mem = (rows: { title: string; hint?: string }[]): AgentResource[] => [
+    ...FAKE,
+    {
+      key: "memory", label: "기억", listPath: "/memories", inCatalog: false,
+      catalog: async () => rows.map((r, i) => ({ id: `m${i}`, ...r })),
+    },
+  ];
+
+  it("적어 둔 것을 줄로 만든다 — 누가 적었는지까지", async () => {
+    const out = (await memoryLines(mem([{ title: "예정일은 5월 3일", hint: "가족 · 9월 21일" }]), 600))!;
+    expect(out).toContain("예정일은 5월 3일");
+    expect(out).toContain("가족");
+  });
+
+  it("기억이 없으면 칸이 없다", async () => {
+    expect(await memoryLines(mem([]), 600)).toBeNull();
+  });
+
+  it("**못 읽은 것은 '없다'가 아니다** — 표가 없어도 던지지 않고 칸만 뺀다", async () => {
+    // 스키마를 아직 push 하지 않은 배포에서 실제로 일어난다. 여기서 던지면 대화 전체가 죽는다.
+    const broken: AgentResource[] = [
+      ...FAKE,
+      { key: "memory", label: "기억", listPath: "/memories", inCatalog: false,
+        catalog: async () => { throw new Error("relation does not exist"); } },
+    ];
+    await expect(memoryLines(broken, 600)).resolves.toBeNull();
+  });
+
+  it("리소스가 아예 없어도 조용하다", async () => {
+    expect(await memoryLines(FAKE, 600)).toBeNull();
+  });
+
+  it("예산을 넘으면 자르고 **몇 개가 남았는지 말한다**", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ title: `기억 ${i} ${"가".repeat(40)}` }));
+    const out = (await memoryLines(mem(many), 300))!;
+    expect(out).toContain("더 있습니다");
+    expect(out).toContain("/memories");
+    expect(out.length).toBeLessThan(500);
+  });
+
+  it("목록 상한 꼬리는 줄로 세지 않고 '더 있다'로만 쓴다", async () => {
+    const rows = [{ title: "예정일은 5월 3일" }, { title: "…더 있음" }];
+    const out = (await memoryLines(mem(rows), 600))!;
+    expect(out).toContain("더 있습니다");
+    expect(out.split("\n").filter((l) => l.includes("…더 있음"))).toHaveLength(0);
+  });
+
+  it("**루프가 실제로 안내문에 싣는다** — 함수만 시험하면 배선이 끊겨도 통과한다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({
+      question: "예정일 언제였지?", provider: p, catalog: "계획(1): 발리",
+      ctx: { origin: "http://t.local", cookie: "c", resources: mem([{ title: "예정일은 5월 3일", hint: "가족" }]) },
+    }));
+    expect(p.calls[0].system).toContain("[기억해 둔 것]");
+    expect(p.calls[0].system).toContain("예정일은 5월 3일");
+  });
+
+  it("기억이 없으면 그 칸이 안내문에 아예 없다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({ question: "뭐 있어?", provider: p, ctx, catalog: "계획(1): 발리" }));
+    expect(p.calls[0].system).not.toContain("[기억해 둔 것]");
+  });
+
+  it("목차보다 앞, 화면보다 뒤에 온다", () => {
+    const sys = buildSystemPrompt("계획(1): 발리", screenLine("/plans", FAKE), "- 예정일은 5월 3일");
+    expect(sys.indexOf("[지금 보고 있는 화면]")).toBeLessThan(sys.indexOf("[기억해 둔 것]"));
+    expect(sys.indexOf("[기억해 둔 것]")).toBeLessThan(sys.indexOf("[사이트 목차]"));
+  });
+
+  it("안내문이 기억을 언제 적는지 이른다 — 대화 요약을 쌓지 말라는 것까지", () => {
+    const sys = buildSystemPrompt("", null, null);
+    expect(sys).toContain('create_item("memory")');
+    expect(sys).toContain("대화를 요약해서 쌓지 마세요");
   });
 });

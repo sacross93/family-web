@@ -269,6 +269,19 @@ model AgentAuth {
   updatedAt    DateTime @updatedAt
 }
 
+// 포동이가 **대화를 넘어** 들고 가는 것. 한 줄짜리 사실만 담는다(대화 요약이 아니다).
+// 가족에게 `/memories` 로 보이고 거기서 지운다 — 고치는 도구는 없다(추가 전용 규칙).
+model AgentMemory {
+  id        String   @id @default(cuid())
+  text      String
+  // "포동이" | "가족" — 포동이가 짐작해 적은 것과 가족이 말해 준 것은 무게가 다르다.
+  // 표시할 때 구분하지 않으면 잘못 짐작한 기억이 사실처럼 굳는다.
+  by        String   @default("포동이")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // 에이전트 실행 로그 (디버깅용). 대용량 본문을 넣지 않는다.
 model AgentRun {
   id        String   @id @default(cuid())

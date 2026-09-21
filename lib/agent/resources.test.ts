@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { LIST_TAKE, MORE_TITLE, PAST_TAKE, RESOURCES } from "@/lib/agent/resources";
+import { LIST_TAKE, MEMORY_TAKE, MORE_TITLE, PAST_TAKE, RESOURCES } from "@/lib/agent/resources";
 import { resolvePath } from "@/lib/agent/registry";
 import { executeTool } from "@/lib/agent/tools";
 
@@ -190,7 +190,10 @@ describe("목록 상한 표시", () => {
     const takes = new Set(
       db.calls.map((c) => c.args?.take).filter((t): t is number => typeof t === "number")
     );
-    expect([...takes].sort((a, b) => a - b)).toEqual([PAST_TAKE, LIST_TAKE].sort((a, b) => a - b));
+    // 이름 붙은 상한만 쓴다. 새 상한이 생기면 **여기 이름을 더한다** — 숫자를 더하지 않는다.
+    expect([...takes].sort((a, b) => a - b)).toEqual(
+      [PAST_TAKE, LIST_TAKE, MEMORY_TAKE].sort((a, b) => a - b)
+    );
   });
 });
 

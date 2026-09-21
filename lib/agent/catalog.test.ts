@@ -236,3 +236,27 @@ describe("목차는 본문을 싣지 않는다", () => {
     expect(text).toContain("우유 사기");
   });
 });
+
+describe("목차에 안 나오는 리소스", () => {
+  it("inCatalog:false 는 목차에 안 실린다 — 목차와 기억은 다른 질문이다", async () => {
+    const out = await buildCatalog([
+      { key: "plan", label: "계획", listPath: "/plans", catalog: async () => [{ title: "발리" }] },
+      { key: "memory", label: "기억", listPath: "/memories", inCatalog: false,
+        catalog: async () => [{ title: "예정일은 5월 3일" }] },
+    ], 4000);
+    expect(out).toContain("발리");
+    expect(out).not.toContain("예정일");
+    expect(out).not.toContain("기억");
+  });
+
+  it("실패해도 목차의 '못 불러왔다' 에 안 뜬다 — 목차가 모르는 것을 못 불러왔다 할 수는 없다", async () => {
+    const out = await buildCatalog([
+      { key: "plan", label: "계획", listPath: "/plans", catalog: async () => [{ title: "발리" }] },
+      { key: "memory", label: "기억", listPath: "/memories", inCatalog: false,
+        catalog: async () => { throw new Error("no table"); } },
+    ], 4000);
+    expect(out).toContain("발리");
+    expect(out).not.toContain("확인 안 됨");
+    expect(out).not.toContain("불러오지 못했");
+  });
+});

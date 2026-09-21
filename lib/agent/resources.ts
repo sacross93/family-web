@@ -104,6 +104,12 @@ async function memberIdByName(name: unknown): Promise<string | undefined> {
  */
 export const LIST_TAKE = 30;
 
+/**
+ * 안내문에 실을 기억의 수. 목록(`/memories`)에는 전부 있고, **포동이가 들고 다니는 것**만
+ * 이만큼이다. 무한정 늘리면 매 턴 이것이 안내문을 먹는다 — 기억은 싸야 자주 쓴다.
+ */
+export const MEMORY_TAKE = 12;
+
 /** 앞으로의 일정이 하나도 없을 때만 대신 싣는 "지난 일정" 폴백의 상한. 보조 정보라 더 짧다. */
 export const PAST_TAKE = 10;
 
@@ -862,6 +868,55 @@ export const RESOURCES: AgentResource[] = [
         };
       },
       undoApi: (id) => `/api/decorations/${id}`,
+    },
+  },
+
+  {
+    key: "memory",
+    label: "기억",
+    listPath: "/memories",
+    // **목차에는 안 나온다.** 목차는 "사이트에 뭐가 있나" 고 기억은 "내가 아는 것" 이다.
+    // 같은 4,000자를 두고 게시판 글과 다투게 두면 글이 늘어난 날 기억이 조용히 접힌다.
+    // 대신 안내문에 제 몫의 칸으로 들어간다(`loop.ts` 의 `memoryLines`).
+    inCatalog: false,
+    async catalog() {
+      const rows = await prisma.agentMemory.findMany({
+        orderBy: { createdAt: "desc" },
+        select: { id: true, text: true, by: true, createdAt: true },
+        take: MEMORY_TAKE,
+      });
+      // 다른 16종과 같은 규칙으로 꼬리("…더 있음")를 단다 — 잘린 것을 전부인 척하지 않는다.
+      return capped(
+        rows.map((m) => ({
+          id: m.id,
+          title: m.text,
+          // 누가 적었는지를 **반드시** 붙인다 — 포동이가 짐작해 적은 것과 가족이 말해 준 것이
+          // 같아 보이면, 잘못 짐작한 기억이 사실처럼 굳는다.
+          hint: hintOf([m.by, kDateShort(m.createdAt)]),
+        })),
+        MEMORY_TAKE
+      );
+    },
+    create: {
+      api: "/api/memories",
+      describe:
+        "다음 대화에서도 기억할 **한 줄짜리 사실**을 적어 둔다. 대화 요약이나 할 일을 넣는 곳이 아니다.",
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "기억할 한 줄. 예: 아내 예정일은 2027년 5월 3일" },
+          by: {
+            type: "string",
+            description: "가족이 직접 말해 준 사실이면 가족, 대화에서 알아낸 것이면 포동이",
+            enum: ["포동이", "가족"],
+          },
+        },
+        required: ["text"],
+      },
+      async toBody(args) {
+        return { text: String(args.text ?? "").trim(), by: optStr(args.by) };
+      },
+      undoApi: (id) => `/api/memories/${id}`,
     },
   },
 ];

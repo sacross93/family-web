@@ -42,12 +42,15 @@ export async function buildCatalog(
   resources: AgentResource[] = RESOURCES,
   maxChars: number = agentConfig().catalogMaxChars
 ): Promise<string> {
-  const settled = await Promise.allSettled(resources.map(async (r) => r.catalog()));
+  // 목차에 안 나오는 리소스가 있다(`inCatalog: false` — 지금은 기억 하나).
+  // 여기서 먼저 걸러야 실패 알림에도 안 뜬다 — 목차가 모르는 것을 못 불러왔다고 말할 수는 없다.
+  const listed = resources.filter((r) => r.inCatalog !== false);
+  const settled = await Promise.allSettled(listed.map(async (r) => r.catalog()));
 
   const rows: Row[] = [];
   const failed: string[] = [];
   settled.forEach((s, i) => {
-    const r = resources[i];
+    const r = listed[i];
     // 실패 "원인"은 절대 담지 않는다. 이 문자열은 LLM 에게 그대로 전달되고
     // DB 에러 본문에는 쿼리·스키마가 들어 있을 수 있다. 이름과 개수까지만.
     if (s.status === "rejected") {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import {
   Sparkles,
+  ChevronRight,
   Upload,
   Trash2,
   ExternalLink,
@@ -71,6 +72,23 @@ export function AdminClient({
       <SiteSettingsCard site={site} onSaved={() => router.refresh()} />
       <NavEditorCard nav={nav} onSaved={() => router.refresh()} />
       <DecorationManager decorations={decorations} />
+      {/* 기억 목록은 메뉴에 없다 — 매일 여는 화면이 아니라 한 번씩 확인하고 지우는 자리다.
+          그래도 **길은 있어야 한다**: 포동이에게 물어본 적이 없으면 이 화면이 있는 줄도 모른다. */}
+      <Link
+        href="/memories"
+        className="flex items-center gap-3 rounded-lg border border-line bg-surface px-5 py-4 text-left transition hover:bg-sunken"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-lavender-soft text-xl">
+          🧠
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-display font-bold text-ink">포동이의 기억</span>
+          <span className="block text-sm text-ink-soft">
+            포동이가 다음 대화에서도 기억하려고 적어 둔 것들을 보고 지워요
+          </span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-ink-faint" />
+      </Link>
     </div>
   );
 }

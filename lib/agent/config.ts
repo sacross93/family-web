@@ -17,6 +17,8 @@ export interface AgentConfig {
   listMaxChars: number;
   /** 도구 결과 하나가 대화에 들어갈 수 있는 최대 글자(마지막 안전장치). */
   toolResultMaxChars: number;
+  /** 안내문의 "기억" 칸에 줄 글자. 목차와 따로 가진다 — 내용이 늘어도 기억은 안 밀린다. */
+  memoryMaxChars: number;
 }
 
 /** 양수 정수만 허용. 아니면 기본값. */
@@ -54,5 +56,8 @@ export function agentConfig(): AgentConfig {
     // 위의 것들을 다 통과해도 결국 넘치는 것이 있을 수 있다(상세가 큰 리소스·앞으로 생길 도구).
     // 루프가 마지막으로 한 번 더 막는다. 넉넉히 두되 무한은 아니게.
     toolResultMaxChars: num("AGENT_TOOL_RESULT_MAX_CHARS", 12000),
+    // 한 줄짜리 사실 열두 개면 넉넉하다. 목차(4,000)와 **따로** 두는 것이 핵심 —
+    // 같은 예산을 나누면 게시판 글이 늘어난 날 기억이 조용히 접힌다.
+    memoryMaxChars: num("AGENT_MEMORY_MAX_CHARS", 600),
   };
 }

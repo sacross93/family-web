@@ -45,6 +45,15 @@ export interface AgentResource {
   key: string;
   label: string;
   listPath: string;
+  /**
+   * 사이트 목차(`buildCatalog`)에 낼지. 기본은 낸다.
+   *
+   * `false` 인 것은 지금 **기억(`memory`)** 하나다. 목차는 "사이트에 뭐가 있나" 에 답하는
+   * 자리고 기억은 "내가 아는 것" 이라 질문이 다르다. 같은 4,000자를 두고 게시판 글과
+   * 다투게 두면, 글이 늘어난 날 기억이 조용히 접힌다 — 기억은 접히면 안 되는 쪽이다.
+   * 대신 안내문에 **제 몫의 예산**을 가진 칸으로 들어간다(`loop.ts` 의 `memoryLines`).
+   */
+  inCatalog?: boolean;
   /** "/plans/:id" — 경로 해석이 역방향으로 동작해야 하므로 함수가 아니라 패턴이다. */
   detailPattern?: string;
   catalog(): Promise<CatalogEntry[]>;

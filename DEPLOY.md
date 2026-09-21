@@ -171,11 +171,12 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 
 ### ⚠️ 4. 테이블 4개를 먼저 만드세요
 
-`AgentAuth`·`AgentRun`·`AgentChat`·`AgentChatMessage` 를 **코드 배포 전에** `prisma db push` 로 프로덕션에 반영합니다(2절). 순서가 어긋나면 해당 기능이 500 을 냅니다 — 예전에 `/baby` 에서 한 번 겪었어요.
+`AgentAuth`·`AgentRun`·`AgentMemory`·`AgentChat`·`AgentChatMessage` 를 **코드 배포 전에** `prisma db push` 로 프로덕션에 반영합니다(2절). 순서가 어긋나면 해당 기능이 500 을 냅니다 — 예전에 `/baby` 에서 한 번 겪었어요.
 
 - `AgentAuth` — 암호화된 토큰 한 줄. 이 절의 명령이 채웁니다.
 - `AgentChat`·`AgentChatMessage` — 대화 기록. 창을 여는 것만으로는 DB 를 건드리지 않지만, **질문을 보내면 쓰고 ☰ 기록을 열면 읽습니다.** 코드가 먼저 올라가면 그 두 자리에서 500 이 납니다.
-- `AgentRun` — 실행 로그용. 지금은 **테이블만 있고 쓰는 코드가 없습니다**(만들어는 두세요, 스키마에 있으니).
+- `AgentRun` — 실행 로그용. 한 턴이 끝나면 한 줄씩 쌓입니다(`npm run agent:runs` 로 봅니다).
+- `AgentMemory` — 포동이가 대화를 넘어 기억하는 한 줄들(`/memories`). **없으면 그 기능만 조용히 빠집니다**(500 이 아니라 "아직 확인할 수 없어요").
 
 ### ⚠️ 5. 아직 확인하지 못한 것
 
