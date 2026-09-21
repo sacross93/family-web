@@ -177,6 +177,7 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 - `AgentChat`·`AgentChatMessage` — 대화 기록. 창을 여는 것만으로는 DB 를 건드리지 않지만, **질문을 보내면 쓰고 ☰ 기록을 열면 읽습니다.** 코드가 먼저 올라가면 그 두 자리에서 500 이 납니다.
 - `AgentRun` — 실행 로그용. 한 턴이 끝나면 한 줄씩 쌓입니다(`npm run agent:runs` 로 봅니다).
 - `AgentMemory` — 포동이가 대화를 넘어 기억하는 한 줄들(`/memories`). **없으면 그 기능만 조용히 빠집니다**(500 이 아니라 "아직 확인할 수 없어요").
+  - `db push` 가 부담스러우면 **[docs/ADD-AGENT-MEMORY.sql](docs/ADD-AGENT-MEMORY.sql)** 를 Neon 콘솔 SQL 편집기에 붙여 넣으면 됩니다. 새 표 하나 + 색인 하나가 전부고, 두 번 돌려도 안전하며, 기존 표는 건드리지 않습니다. 연결 문자열을 어디에도 옮길 필요가 없습니다.
 
 ### ⚠️ 5. 아직 확인하지 못한 것
 
