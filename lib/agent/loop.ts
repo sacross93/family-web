@@ -250,6 +250,28 @@ export async function inWaves<T, R>(items: T[], size: number, run: (item: T) => 
   return out;
 }
 
+/**
+ * 도구 결과를 대화에 넣을 글로 바꾼다. **마지막 안전장치**다.
+ *
+ * 줄이는 일은 원래 도구가 한다 — `read_url` 은 `fetchMaxChars`, 목록은 `listMaxChars`.
+ * 그래도 여기서 한 번 더 막는 이유는 **앞으로 생길 것** 때문이다. 리소스가 늘거나 상세가
+ * 커지면 그 자리에 상한을 다는 것을 잊게 되고, 그러면 한 턴이 통째로 날아간다.
+ *
+ * 넘칠 때 **JSON 을 그냥 자르지 않는다.** 잘린 JSON 은 모델에게 깨진 글이고, 무엇이
+ * 잘렸는지도 말해 주지 못한다. 대신 **온전한 JSON 한 개**로 감싸 앞부분과 숫자를 같이 준다 —
+ * 이 저장소가 `read_url` 에서 이미 정한 방식이다("전체 43,270자 중 앞부분 6,000자").
+ */
+export function serializeResult(result: ToolResult, maxChars: number): string {
+  const full = JSON.stringify(result);
+  if (maxChars <= 0 || full.length <= maxChars) return full;
+  return JSON.stringify({
+    ok: result.ok,
+    잘림: true,
+    안내: `결과가 너무 길어 앞부분만 싣습니다. 전체 ${full.length.toLocaleString("ko-KR")}자 중 앞 ${maxChars.toLocaleString("ko-KR")}자입니다. 더 필요하면 조건을 좁혀 다시 부르세요(예: list_resource 의 limit).`,
+    앞부분: full.slice(0, maxChars),
+  });
+}
+
 // ── 루프 ──────────────────────────────────────────────────────
 
 export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
@@ -340,7 +362,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
         const { imageData, ...forModel } = result.ok ? result : { ...result, imageData: undefined };
         results.push({
           role: "tool",
-          content: JSON.stringify(forModel),
+          content: serializeResult(forModel as ToolResult, config.toolResultMaxChars),
           toolCallId: call.id,
           ...(imageData ? { imageData, imageDetail: "low" as const } : {}),
         });

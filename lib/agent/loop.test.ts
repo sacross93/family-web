@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, inWaves, readBudget, runAgent, screenLine } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, readBudget, runAgent, screenLine, serializeResult } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -586,5 +586,64 @@ describe("지금 보고 있는 화면", () => {
     const sys = buildSystemPrompt("계획(1): 발리", screenLine("/plans", FAKE));
     expect(sys.indexOf("[지금 보고 있는 화면]")).toBeLessThan(sys.indexOf("[사이트 목차]"));
     expect(sys.indexOf("[사이트 목차]")).toBeLessThan(sys.indexOf("[규칙]"));
+  });
+});
+
+describe("도구 결과가 대화를 먹지 않게 — 마지막 안전장치", () => {
+  it("예산 안이면 있는 그대로 넣는다", () => {
+    const r = { ok: true as const, data: { a: 1 }, label: "계획" };
+    expect(serializeResult(r, 12000)).toBe(JSON.stringify(r));
+  });
+
+  it("넘치면 **깨진 JSON 이 아니라** 온전한 JSON 한 개로 감싼다", () => {
+    const r = { ok: true as const, data: { body: "가".repeat(50000) } };
+    const out = serializeResult(r, 1000);
+    // 잘린 JSON 은 모델에게 깨진 글이다. 무엇보다 **파싱이 된다**는 것이 이 시험의 요지.
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    expect(parsed.잘림).toBe(true);
+    expect(parsed.ok).toBe(true);
+    expect(typeof parsed.앞부분).toBe("string");
+  });
+
+  it("몇 자 중 몇 자인지 숫자로 말한다 — `…` 하나로는 전달되지 않는다", () => {
+    const out = serializeResult({ ok: true, data: "나".repeat(30000) }, 1000);
+    const parsed = JSON.parse(out) as { 안내: string };
+    expect(parsed.안내).toContain("1,000자");
+    expect(parsed.안내).toMatch(/전체 [\d,]+자/);
+  });
+
+  it("실패한 결과도 ok:false 를 그대로 유지한다", () => {
+    const out = serializeResult({ ok: false, error: "가".repeat(50000) }, 100);
+    expect((JSON.parse(out) as { ok: boolean }).ok).toBe(false);
+  });
+
+  it("상한이 0 이하면 아무것도 안 한다 — 설정을 잘못 줘도 조용히 비우지 않게", () => {
+    const r = { ok: true as const, data: "긴 글".repeat(1000) };
+    expect(serializeResult(r, 0)).toBe(JSON.stringify(r));
+  });
+
+  it("**루프가 실제로 이걸 쓴다** — 함수만 시험하면 배선이 끊겨도 통과한다", async () => {
+    // 변이 시험에서 실제로 그랬다: 루프에서 serializeResult 를 빼도 위 시험들이 다 통과했다.
+    process.env.AGENT_TOOL_RESULT_MAX_CHARS = "500";
+    try {
+      const HUGE: AgentResource[] = [{
+        key: "plan", label: "계획", listPath: "/plans", detailPattern: "/plans/:id",
+        catalog: async () => [],
+        detail: async () => ({ body: "가".repeat(40000) }),
+      }];
+      const p = createFakeProvider([
+        [{ type: "tool_call", id: "c1", name: "open_page", args: { path: "/plans/p1" } }, { type: "done" }],
+        [{ type: "text", delta: "끝" }, { type: "done" }],
+      ]);
+      await drain(runAgent({
+        question: "긴 거", provider: p, catalog: "",
+        ctx: { origin: "http://t.local", cookie: "c", resources: HUGE },
+      }));
+      const toolMessage = p.calls[1].messages.find((m) => m.role === "tool")!;
+      expect(toolMessage.content.length).toBeLessThan(2000);
+      expect(JSON.parse(toolMessage.content)).toHaveProperty("잘림", true);
+    } finally {
+      delete process.env.AGENT_TOOL_RESULT_MAX_CHARS;
+    }
   });
 });

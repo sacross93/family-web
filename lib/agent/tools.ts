@@ -6,7 +6,7 @@ import { agentConfig } from "./config";
 import { detailPath, findResource, resolvePath } from "./registry";
 import type { AgentResource, CreateSpec, JsonSchema, ToolSchema } from "./registry";
 import { LIST_TAKE, MORE_TITLE, RESOURCES } from "./resources";
-import { composeRead } from "./read/budget";
+import { budgetBodies, composeRead } from "./read/budget";
 import { extractPage, looksBlocked } from "./read/extract";
 import { rewriteKnownShell } from "./read/rewrite";
 import {
@@ -287,7 +287,9 @@ async function openPage(args: Record<string, unknown>, resources: AgentResource[
     // 단일 리소스가 아직 등록 전이면(아기 정보 없음) 목차로 내려간다 — 빈 목차와 같은 답이 된다.
   }
 
-  return { ok: true, data: await resource.catalog(), label: resource.label, path: resource.listPath };
+  // 목차로 내려온 경우도 목록과 같은 예산을 쓴다 — 같은 글을 싣는 같은 자리다.
+  const entries = budgetBodies(await resource.catalog(), agentConfig().listMaxChars);
+  return { ok: true, data: entries, label: resource.label, path: resource.listPath };
 }
 
 // ── list_resource ─────────────────────────────────────────────
@@ -299,9 +301,11 @@ async function listResource(args: Record<string, unknown>, resources: AgentResou
 
   const entries = await resource.catalog();
   const limit = count(args.limit);
+  const picked = limit ? entries.slice(0, limit) : entries;
   return {
     ok: true,
-    data: limit ? entries.slice(0, limit) : entries,
+    // 본문이 길면 여기서 줄인다. 제목·보조정보는 그대로 — 목록의 뼈대다(budget.ts).
+    data: budgetBodies(picked, agentConfig().listMaxChars),
     label: resource.label,
     path: resource.listPath,
   };

@@ -13,6 +13,10 @@ export interface AgentConfig {
   webSearch: boolean;
   /** 실행 기록(`AgentRun`)을 며칠 보관할지. 무료 티어라 끝없이 쌓이면 안 된다. */
   runLogDays: number;
+  /** 목록 하나가 실어 보낼 **본문** 총량. 제목·보조정보는 여기 안 걸린다. */
+  listMaxChars: number;
+  /** 도구 결과 하나가 대화에 들어갈 수 있는 최대 글자(마지막 안전장치). */
+  toolResultMaxChars: number;
 }
 
 /** 양수 정수만 허용. 아니면 기본값. */
@@ -44,5 +48,11 @@ export function agentConfig(): AgentConfig {
     // 30일. "지난주에 이상했는데" 를 되짚기엔 넉넉하고, 가족 둘이 쓰는 사이트에서
     // 무료 데이터베이스를 채울 만한 양이 아니다.
     runLogDays: num("AGENT_RUN_LOG_DAYS", 30),
+    // 바깥 웹 한 쪽에 6,000자를 주면서 **우리 게시판 목록은 무제한**이었다. 실측: 8,000자짜리
+    // 글 다섯 개를 심으니 list_resource 하나가 647자 → 39,117자가 됐다(상한은 30개니 더 간다).
+    listMaxChars: num("AGENT_LIST_MAX_CHARS", 8000),
+    // 위의 것들을 다 통과해도 결국 넘치는 것이 있을 수 있다(상세가 큰 리소스·앞으로 생길 도구).
+    // 루프가 마지막으로 한 번 더 막는다. 넉넉히 두되 무한은 아니게.
+    toolResultMaxChars: num("AGENT_TOOL_RESULT_MAX_CHARS", 12000),
   };
 }

@@ -916,3 +916,48 @@ describe("만든 것을 되읽어 확인한다", () => {
     expect(create.description).toContain("stored");
   });
 });
+
+describe("목록이 대화를 먹지 않게", () => {
+  // 실측(2026-09-21): 8,000자짜리 게시판 글 다섯 개를 심으니 list_resource 하나가
+  // 647자 → 39,117자가 됐다. 바깥 웹 한 쪽은 6,000자로 묶으면서 우리 목록은 무제한이었다.
+  const FAT: AgentResource[] = [{
+    key: "board", label: "게시판 글", listPath: "/board",
+    catalog: async () => Array.from({ length: 5 }, (_, i) => ({
+      id: `b${i}`, title: `글 ${i}`, hint: "9월", body: "우리 가족의 하루. ".repeat(500),
+    })),
+  }];
+  const fatCtx = { origin: "http://t.local", cookie: "c", resources: FAT };
+
+  it("**도구가 실제로 예산을 건다** — 함수만 시험하면 배선이 끊겨도 통과한다", async () => {
+    process.env.AGENT_LIST_MAX_CHARS = "2000";
+    try {
+      const r = await executeTool("list_resource", { resource: "board" }, fatCtx);
+      expect(JSON.stringify(r).length).toBeLessThan(6000);
+    } finally {
+      delete process.env.AGENT_LIST_MAX_CHARS;
+    }
+  });
+
+  it("목차로 내려온 open_page 도 같은 예산을 쓴다 — 같은 글을 싣는 같은 자리다", async () => {
+    process.env.AGENT_LIST_MAX_CHARS = "2000";
+    try {
+      const r = await executeTool("open_page", { path: "/board" }, fatCtx);
+      expect(JSON.stringify(r).length).toBeLessThan(6000);
+    } finally {
+      delete process.env.AGENT_LIST_MAX_CHARS;
+    }
+  });
+
+  it("제목과 보조정보는 다섯 개 다 남는다 — 줄이는 것은 본문뿐", async () => {
+    process.env.AGENT_LIST_MAX_CHARS = "2000";
+    try {
+      const r = await executeTool("list_resource", { resource: "board" }, fatCtx);
+      const rows = (r as { data: { title: string; hint: string }[] }).data;
+      expect(rows).toHaveLength(5);
+      expect(rows.map((x) => x.title)).toEqual(["글 0", "글 1", "글 2", "글 3", "글 4"]);
+      expect(rows.every((x) => x.hint === "9월")).toBe(true);
+    } finally {
+      delete process.env.AGENT_LIST_MAX_CHARS;
+    }
+  });
+});
