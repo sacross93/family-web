@@ -177,7 +177,8 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 - `AgentChat`·`AgentChatMessage` — 대화 기록. 창을 여는 것만으로는 DB 를 건드리지 않지만, **질문을 보내면 쓰고 ☰ 기록을 열면 읽습니다.** 코드가 먼저 올라가면 그 두 자리에서 500 이 납니다.
 - `AgentRun` — 실행 로그용. 한 턴이 끝나면 한 줄씩 쌓입니다(`npm run agent:runs` 로 봅니다).
 - `AgentMemory` — 포동이가 대화를 넘어 기억하는 한 줄들(`/memories`). **없으면 그 기능만 조용히 빠집니다**(500 이 아니라 "아직 확인할 수 없어요").
-  - `db push` 가 부담스러우면 **[docs/ADD-AGENT-MEMORY.sql](docs/ADD-AGENT-MEMORY.sql)** 를 Neon 콘솔 SQL 편집기에 붙여 넣으면 됩니다. 새 표 하나 + 색인 하나가 전부고, 두 번 돌려도 안전하며, 기존 표는 건드리지 않습니다. 연결 문자열을 어디에도 옮길 필요가 없습니다.
+  - **이제 손으로 할 것이 없습니다.** 배포할 때 `scripts/ensure-tables.mjs` 가 `prisma/ensure.sql` 을 돌려 있어야 할 표를 만듭니다. 운영 `DATABASE_URL` 은 Vercel 에 Secret 이라 아무도 다시 못 읽지만 **빌드 환경은 갖고 있기 때문**입니다.
+  - ⚠️ `prisma/ensure.sql` 에는 **`CREATE ... IF NOT EXISTS` 만** 적습니다. 배포마다 도는 자리라 `DROP`·`ALTER` 한 줄이 들어가면 배포할 때마다 운영 데이터가 그 명령을 맞습니다(스크립트가 그런 낱말을 보면 실행을 건너뜁니다). 열을 바꾸거나 표를 지우는 일은 사람이 한 번만 하세요.
 
 ### ⚠️ 5. 아직 확인하지 못한 것
 

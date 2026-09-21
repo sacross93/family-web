@@ -12,7 +12,7 @@ import { MORE_TITLE, RESOURCES } from "./resources";
 import { executeTool, toolSchemas } from "./tools";
 import type { ToolContext, ToolResult } from "./tools";
 import { displayDomain } from "@/lib/url";
-import { kDate } from "@/lib/date";
+import { kDate, koreaNow } from "@/lib/date";
 
 export interface RunInput {
   question: string;
@@ -184,10 +184,11 @@ export async function memoryLines(
  * 여섯 해가 틀렸는데 아무도 못 알아챘다 — 되읽기 장치도 `kDateShort` 로 "9월 19일 (토)"
  * 만 보고 멀쩡하다고 판단했다(그래서 `kDateShortYear` 도 같이 만들었다).
  *
- * 서버 시계를 그대로 쓴다. 배포는 UTC 지만 `lib/date.ts` 가 전 사이트에서 쓰는 것과
- * **같은 함수**라, 여기만 다른 시간대를 쓰면 목차의 날짜와 어긋나 더 나쁘다.
+ * **한국 시간으로 못 박는다**(`koreaNow`). 운영은 지금 한국 시간으로 돌지만 우리가 정한 것이
+ * 아니다 — `TZ` 는 Vercel 예약어라 넣을 수도 없고, 플랫폼이 바꾸면 우리는 모른다. 하루가
+ * 밀리면 "내일" 이 오늘로 들어가는 자리라, 여기만은 서버 시계에 기대지 않는다.
  */
-export function todayLine(now: Date = new Date()): string {
+export function todayLine(now: Date = koreaNow()): string {
   return `오늘은 ${kDate(now)} 입니다. "내일"·"이번 주말"·"다음 달" 같은 말은 이 날짜를 기준으로 계산하세요. 날짜를 적을 때는 yyyy-MM-dd 로, **해를 빠뜨리지 마세요.**`;
 }
 

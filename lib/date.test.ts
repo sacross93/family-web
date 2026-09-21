@@ -9,8 +9,10 @@ import {
   fromDateInput,
   parseDateInput,
   kDateRelative,
+  kDate,
   kDateShort,
   kDateShortYear,
+  koreaNow,
 } from "@/lib/date";
 
 // 예정일 2027-05-20 고정. daysBefore(n) = 예정일 n일 전.
@@ -178,5 +180,25 @@ describe("다른 해면 해를 밝힌다", () => {
 
   it("앞으로의 해도 밝힌다 — 예정일·기념일이 내년일 수 있다", () => {
     expect(kDateShortYear(new Date("2027-05-03T00:00:00+09:00"), today)).toContain("2027년");
+  });
+});
+
+describe("한국 시간 기준의 지금", () => {
+  // 운영(Vercel)은 지금 한국 시간으로 돌지만 우리가 정한 것이 아니다 — `TZ` 는 예약어라
+  // 넣을 수도 없다. 하루가 밀리면 "내일 우유 사기" 가 오늘로 들어간다.
+  it("서버가 UTC 여도 한국 날짜를 가리킨다", () => {
+    // 한국 9월 22일 오전 8시 = UTC 9월 21일 23시. UTC 서버는 "21일" 이라고 하지만 답은 22일이다.
+    const utcMoment = new Date("2026-09-21T23:00:00Z");
+    expect(kDate(koreaNow(utcMoment))).toContain("9월 22일");
+  });
+
+  it("서버가 한국이어도 답이 같다 — 지금 맞는 것을 깨뜨리지 않는다", () => {
+    const sameMoment = new Date("2026-09-21T06:28:00Z"); // 한국 15:28
+    expect(kDate(koreaNow(sameMoment))).toContain("9월 21일");
+  });
+
+  it("자정 직후가 제일 위험한 자리다", () => {
+    // 한국 9월 22일 00:30 = UTC 9월 21일 15:30.
+    expect(kDate(koreaNow(new Date("2026-09-21T15:30:00Z")))).toContain("9월 22일");
   });
 });

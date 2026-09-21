@@ -9,6 +9,23 @@ import {
 
 export { isToday, isSameDay, startOfDay, differenceInCalendarDays };
 
+/**
+ * 한국 시간 기준의 "지금". **서버 시간대에 기대지 않는다.**
+ *
+ * 왜: 운영(Vercel)은 지금 한국 시간으로 돌지만 저장소 어디에도 그렇게 정한 곳이 없다
+ * (`TZ` 는 Vercel 예약어라 우리가 넣을 수도 없다 — 플랫폼이 관리한다). 지금은 맞지만
+ * **우리가 보장한 것이 아니다.** UTC 로 도는 순간 한국 새벽 0~9시에 "오늘" 이 어제가 된다.
+ *
+ * 화면 전체를 바꾸지는 않는다(지금 다 맞게 나온다). 대신 **하루가 틀리면 제일 크게 망가지는
+ * 자리**에만 쓴다 — 포동이에게 "오늘이 며칠인지" 를 알려 주는 곳. 거기서 하루가 밀리면
+ * "내일 우유 사기" 가 오늘로 들어간다.
+ */
+export function koreaNow(now: Date = new Date()): Date {
+  // 이 기계가 몇 시간대든 상관없이 한국 벽시계 시각을 가리키는 Date 를 만든다.
+  const KOREA_OFFSET_MIN = 9 * 60;
+  return new Date(now.getTime() + (KOREA_OFFSET_MIN + now.getTimezoneOffset()) * 60_000);
+}
+
 /** 2026년 7월 21일 (화) */
 export function kDate(d: Date | string) {
   return format(new Date(d), "yyyy년 M월 d일 (EEE)", { locale: ko });
