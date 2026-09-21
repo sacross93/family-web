@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { toDateInput, fromDateInput, kDate } from "@/lib/date";
 import type { BabyEntryWithAuthor, FamilyMember } from "@/lib/types";
 import { ENTRY_KINDS, KIND_META, MOODS, AUTHOR_STORAGE_KEY, type EntryKind } from "./baby-meta";
+import { writeMe } from "@/lib/me";
 
 export interface EntryPayload {
   /** "yyyy-MM-dd" */
@@ -71,7 +72,11 @@ export function EntryModal({
       });
       if (ok) {
         try {
-          if (authorId) window.localStorage.setItem(AUTHOR_STORAGE_KEY, authorId);
+          if (authorId) {
+            window.localStorage.setItem(AUTHOR_STORAGE_KEY, authorId);
+            // 방금 "내가 썼다" 고 고른 것이다 — 포동이가 물어보지 않아도 알게 같은 값을 남긴다.
+            writeMe(authorId);
+          }
         } catch {
           /* ignore */
         }

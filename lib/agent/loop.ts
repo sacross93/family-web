@@ -34,6 +34,14 @@ export interface RunInput {
    * 돌려주고 있었다 — 걸음만 먹는 도구였다).
    */
   screen?: string;
+  /**
+   * 지금 말하고 있는 사람의 이름. **짐작이다.**
+   *
+   * 계정이 하나라(온 가족이 `wlsdud022` 를 함께 쓴다) 세션으로는 알 수 없고, 기기에 한 번
+   * 골라 둔 값이 전부다(`lib/me.ts`). 라우트가 실제 가족 명단과 맞춰 본 이름만 넘어온다.
+   * 안내문은 이것을 **확실하지 않다고 못 박고**, 쓸 때는 무엇을 가정했는지 밝히게 한다.
+   */
+  speaker?: string;
   maxSteps?: number;
 }
 
@@ -160,14 +168,33 @@ export async function memoryLines(
   return lines.join("\n");
 }
 
+/**
+ * "지금 누가 말하고 있나" 한 줄. **짐작이라는 말이 이 줄의 절반이다.**
+ *
+ * 이름을 그냥 주면 모델은 그것을 사실로 쓴다 — 아빠 폰을 엄마가 들었을 때
+ * 일기가 조용히 아빠 이름으로 적힌다. 되돌리기가 있어도 **틀렸다는 것을 아무도 모른다.**
+ * 그래서 짐작임을 말하고, **무엇을 가정했는지 밝히라**고 함께 적는다.
+ */
+export function speakerLine(name: string | undefined): string | null {
+  if (!name) return null;
+  return (
+    `이 기기에서 고른 사람은 '${name}' 입니다. 지금 말하는 사람일 가능성이 높지만 ` +
+    `**확실하지 않습니다**(가족이 계정 하나를 함께 씁니다). 작성자·담당자처럼 이름이 필요한 자리에 ` +
+    `기본값으로 쓰되, 쓴 뒤에는 "${name}(으)로 적었어요" 처럼 **무엇으로 적었는지 밝히세요.** ` +
+    `가족이 다른 이름을 말하면 그쪽이 맞습니다.`
+  );
+}
+
 export function buildSystemPrompt(
   catalog: string,
   screen?: string | null,
-  memory?: string | null
+  memory?: string | null,
+  speaker?: string | null
 ): string {
   return [
     INTRO,
     "",
+    ...(speaker ? ["[지금 말하는 사람 — 짐작입니다]", speaker, ""] : []),
     ...(screen ? ["[지금 보고 있는 화면]", screen, ""] : []),
     ...(memory ? ["[기억해 둔 것] — 지난 대화에서 적어 둔 것입니다. 누가 적었는지 함께 봅니다.", memory, ""] : []),
     "[사이트 목차]",
@@ -333,7 +360,12 @@ export async function* runAgent(input: RunInput): AsyncGenerator<LoopEvent> {
     input.catalog !== undefined ? Promise.resolve(input.catalog) : buildCatalog(resources),
     memoryLines(resources, config.memoryMaxChars),
   ]);
-  const system = buildSystemPrompt(catalog, screenLine(input.screen, resources), memory);
+  const system = buildSystemPrompt(
+    catalog,
+    screenLine(input.screen, resources),
+    memory,
+    speakerLine(input.speaker)
+  );
   const tools = toolSchemas(resources);
   // 0 은 nullish 가 아니라 그냥 통과한다 — 그러면 한 번도 묻지 않고 빈 답으로 끝난다.
   // 라우트가 남은 예산 따위를 계산해 넘길 수 있으므로 여기서 바닥을 받쳐 둔다.

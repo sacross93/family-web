@@ -9,6 +9,7 @@
 // 공급자 원문에는 사용자 본인의 ChatGPT 세션 사정이 섞여 있습니다.
 
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { appendMessages, chatExists, createChat, loadHistory } from "@/lib/agent/chat-store";
 import { agentConfig } from "@/lib/agent/config";
 import { createCodexProvider } from "@/lib/agent/llm/codex";
@@ -92,6 +93,7 @@ interface AgentRequestBody {
   imageUrl?: unknown;
   imageData?: unknown;
   path?: unknown;
+  memberId?: unknown;
 }
 
 /**
@@ -122,6 +124,27 @@ function ownImageUrl(value: unknown): string | undefined {
 function knownPath(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.startsWith("/") || value.length > 200) return undefined;
   return resolvePath(value, RESOURCES) ? value : undefined;
+}
+
+/**
+ * 기기가 보내온 "나는 누구" 를 **실제 가족 명단과 맞춰** 이름으로 바꿉니다.
+ *
+ * id 를 그대로 믿지 않는 이유는 둘입니다. ① 이 값은 브라우저 저장소에서 오므로 아무 글자나
+ * 올 수 있고, 그 글자가 안내문에 **글로** 실립니다. ② 지운 가족의 id 가 기기에 남아 있을 수
+ * 있습니다 — 없는 사람 이름으로 적으면 안 됩니다. 못 찾으면 **조용히 없던 일**이 됩니다
+ * (여기서 400 을 내면 사용자는 아무것도 못 하고 멈춥니다).
+ */
+async function speakerName(value: unknown): Promise<string | undefined> {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) return undefined;
+  try {
+    const member = await prisma.familyMember.findUnique({
+      where: { id: value },
+      select: { name: true },
+    });
+    return member?.name || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** 축소본 상한. 768px JPEG 는 보통 200KB 아래다 — 그보다 훨씬 크면 줄이지 않고 보낸 것입니다. */
@@ -160,6 +183,7 @@ export async function POST(request: NextRequest) {
   const imageUrl = ownImageUrl(body?.imageUrl);
   const imageData = modelImage(body?.imageData);
   const screen = knownPath(body?.path);
+  const speaker = await speakerName(body?.memberId);
 
   // 대화 준비는 스트림을 열기 **전에** 끝냅니다 — 여기서 실패하면 JSON 오류로 돌려줄 수 있습니다.
   let chatId: string;
@@ -218,6 +242,7 @@ export async function POST(request: NextRequest) {
         ...(imageUrl ? { imageUrl } : {}),
         ...(imageData ? { imageData } : {}),
         ...(screen ? { screen } : {}),
+        ...(speaker ? { speaker } : {}),
       });
       try {
         for await (const event of run) {

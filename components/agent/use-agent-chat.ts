@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { readMe } from "@/lib/me";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import {
   asOkResult,
@@ -183,6 +184,9 @@ export function useAgentChat(): AgentChatState {
             // 중요한 것은 **보낸 순간** 어디였는가다(훅이 다시 그려지는 시점이 아니라).
             // 서버가 등록된 경로만 통과시키므로 여기서 또 거르지 않는다.
             path: typeof window === "undefined" ? undefined : window.location.pathname,
+            // 이 기기의 사람. **짐작이다** — 계정이 하나라 세션으로는 알 수 없다(lib/me.ts).
+            // 서버가 실제 가족 명단과 맞춰 보고, 안내문은 "확실하지 않다" 고 못 박는다.
+            memberId: readMe() ?? undefined,
           }),
           signal: controller.signal,
         });

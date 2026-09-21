@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
 import { cn } from "@/lib/utils";
+import { readMe, writeMe } from "@/lib/me";
 import { visibleResults, type OkResult } from "./agent-stream";
 import type { AgentChatState } from "./use-agent-chat";
 
@@ -113,15 +114,24 @@ function ResultCard({
  * 빈 화면일 때만 **우리 집 추천 질문**을 한 번 받아온다.
  * 대화가 이미 있으면 안 부른다 — 빈 화면에서만 쓰는 값이라 미리 받을 이유가 없다.
  */
+interface Member {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 function useHints(empty: boolean) {
   const [hints, setHints] = useState<string[] | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   useEffect(() => {
     if (!empty || hints) return;
     let alive = true;
     fetch("/api/agent/hints")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (alive && Array.isArray(d?.hints) && d.hints.length) setHints(d.hints);
+        if (!alive) return;
+        if (Array.isArray(d?.hints) && d.hints.length) setHints(d.hints);
+        if (Array.isArray(d?.members)) setMembers(d.members);
       })
       .catch(() => {
         /* 못 받으면 기본 문장 그대로 — 빈 화면이 비어 보이면 안 된다 */
@@ -130,7 +140,56 @@ function useHints(empty: boolean) {
       alive = false;
     };
   }, [empty, hints]);
-  return hints ?? SUGGESTIONS;
+  return { hints: hints ?? SUGGESTIONS, members };
+}
+
+/**
+ * "나는 ___ 예요." 계정이 하나라 세션으로는 지금 말하는 사람을 알 수 없다(lib/me.ts).
+ *
+ * 빈 화면에만 둔다 — 대화 중에 묻는 것은 방해고, 여기서는 첫 줄을 쓰기 전 한 번이면 된다.
+ * 고른 값은 이 기기에 남아 다음부터 안 묻는다.
+ */
+function MeChooser({ members }: { members: Member[] }) {
+  // localStorage 는 서버에 없다. 첫 그림 뒤에 읽어야 서버·클라이언트 그림이 어긋나지 않는다 —
+  // 렌더 중에 읽으면 hydration 이 깨진다. **React 바깥의 것과 맞추는 자리**라 효과가 맞다.
+  const [me, setMe] = useState<string | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage(React 밖)를 마운트 뒤 한 번 읽어 상태로 들여온다
+  useEffect(() => setMe(readMe()), []);
+
+  if (members.length === 0) return null;
+  const mine = members.find((m) => m.id === me);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-sm text-ink-faint">나는</span>
+      {members.map((m) => {
+        const on = m.id === me;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            // 다시 누르면 해제 — 잘못 고른 것을 되돌릴 길이 있어야 한다.
+            onClick={() => {
+              const next = on ? null : m.id;
+              writeMe(next);
+              setMe(next);
+            }}
+            aria-pressed={on}
+            className={cn(
+              // 폰에서 누를 것이라 40px 을 채운다(py-1.5 면 32px 이었다 — 재 봤다).
+              "min-h-10 rounded-full px-3.5 py-2 text-sm transition active:scale-[.98]",
+              on
+                ? "bg-primary font-semibold text-ink"
+                : "bg-sunken text-ink-soft hover:brightness-[.97]"
+            )}
+          >
+            {m.emoji} {m.name}
+          </button>
+        );
+      })}
+      {!mine && <span className="text-xs text-ink-faint">골라 두면 이름까지 적어 드려요</span>}
+    </div>
+  );
 }
 
 export function AgentThread({
@@ -153,7 +212,7 @@ export function AgentThread({
   const [undoErrors, setUndoErrors] = useState<Record<string, string>>({});
 
   const { bubbles, toolLabel, running, error } = state;
-  const hints = useHints(bubbles.length === 0);
+  const { hints, members } = useHints(bubbles.length === 0);
 
   // 글자가 흘러나오는 동안 따라 내려간다 — 답이 화면 밖에서 자라면 멈춘 것처럼 보인다.
   useEffect(() => {
@@ -214,6 +273,7 @@ export function AgentThread({
           <p className="font-display text-xl font-bold text-ink">
             뭐든 물어보고, 시켜도 돼요
           </p>
+          <MeChooser members={members} />
           <div className="flex flex-col items-start gap-2">
             {hints.map((text) => (
               <button

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult, speakerLine } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -722,5 +722,41 @@ describe("대화를 넘어 기억한다", () => {
     const sys = buildSystemPrompt("", null, null);
     expect(sys).toContain('create_item("memory")');
     expect(sys).toContain("대화를 요약해서 쌓지 마세요");
+  });
+});
+
+describe("지금 누가 말하는지 — 짐작이라는 것까지", () => {
+  it("이름을 싣되 **확실하지 않다고 못 박는다**", () => {
+    const line = speakerLine("아빠")!;
+    expect(line).toContain("아빠");
+    expect(line).toContain("확실하지 않습니다");
+  });
+
+  it("무엇으로 적었는지 밝히라고 이른다 — 틀려도 가족이 알아채게", () => {
+    // 이름만 주면 모델은 사실로 쓴다. 아빠 폰을 엄마가 들었을 때 일기가 조용히 아빠 이름으로
+    // 적히고, 되돌리기가 있어도 **틀렸다는 것을 아무도 모른다**. 그래서 밝히게 한다.
+    expect(speakerLine("엄마")).toContain("적었어요");
+  });
+
+  it("모르면 칸이 없다", () => {
+    expect(speakerLine(undefined)).toBeNull();
+    expect(speakerLine("")).toBeNull();
+  });
+
+  it("안내문 맨 앞에 온다 — 화면·기억·목차보다 먼저", () => {
+    const sys = buildSystemPrompt("계획(1): 발리", screenLine("/plans", FAKE), "- 기억 한 줄", speakerLine("아빠"));
+    expect(sys.indexOf("[지금 말하는 사람 — 짐작입니다]")).toBeLessThan(sys.indexOf("[지금 보고 있는 화면]"));
+    expect(sys.indexOf("[지금 보고 있는 화면]")).toBeLessThan(sys.indexOf("[기억해 둔 것]"));
+  });
+
+  it("**루프가 실제로 싣는다** — 함수만 시험하면 배선이 끊겨도 통과한다", async () => {
+    const p = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({ question: "일기 써줘", provider: p, ctx, catalog: "", speaker: "아빠" }));
+    expect(p.calls[0].system).toContain("[지금 말하는 사람 — 짐작입니다]");
+    expect(p.calls[0].system).toContain("아빠");
+
+    const p2 = createFakeProvider([[{ type: "text", delta: "네" }, { type: "done" }]]);
+    await drain(runAgent({ question: "일기 써줘", provider: p2, ctx, catalog: "" }));
+    expect(p2.calls[0].system).not.toContain("[지금 말하는 사람");
   });
 });

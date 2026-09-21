@@ -18,12 +18,19 @@ export const dynamic = "force-dynamic";
  * 데이터가 없으면 일반적인 문장으로 떨어진다 — 빈집에서도 셋은 보여야 한다.
  */
 export async function GET() {
-  const [album, event] = await Promise.all([
+  const [album, event, members] = await Promise.all([
     prisma.album.findFirst({ orderBy: { createdAt: "desc" }, select: { title: true } }),
     prisma.calendarEvent.findFirst({
       where: { start: { gte: new Date() } },
       orderBy: { start: "asc" },
       select: { title: true },
+    }),
+    // 빈 화면의 "나는 ___" 을 채운다. 계정이 하나라 세션으로는 지금 말하는 사람을 알 수 없어서,
+    // 기기에 한 번 골라 두게 한다(lib/me.ts). 새 엔드포인트를 만들지 않고 여기 얹는 이유는
+    // 이 요청이 **이미 빈 화면에서만** 한 번 나가기 때문이다.
+    prisma.familyMember.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, emoji: true },
     }),
   ]);
 
@@ -35,5 +42,5 @@ export async function GET() {
     ? `${event.title} 언제라고 했지?`
     : "다가오는 일정 알려줘";
 
-  return NextResponse.json({ hints: [find, make, recall] });
+  return NextResponse.json({ hints: [find, make, recall], members });
 }
