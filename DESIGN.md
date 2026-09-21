@@ -173,6 +173,8 @@
 ### 파스텔 6색 (lavender·peach·mint·sky·butter·rose)
 
 각 색은 `-soft`(배경) · `-ink`(글자) · 기본(점·막대)의 세 벌. 분류에만 쓴다.
+**여섯 `-soft` 는 흰 바탕에서 ΔE 10~15** 로 뜬다 — 분홍 바탕일 때 로즈 계열이 2.9 로
+묻혔던 것과 정반대다. 더 옅게 만들고 싶어지면 `lib/colors.contrast.test.ts` 부터 볼 것.
 `lib/colors.ts` 의 `palette(key)` 로만 접근한다 — `"bg-" + key` 같은 동적 조합은
 Tailwind v4 가 스캔하지 못한다.
 

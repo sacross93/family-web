@@ -275,6 +275,16 @@ describe("글자 대비", () => {
     expect(apart, `danger-ink vs ink = ${apart.toFixed(0)}도`).toBeGreaterThanOrEqual(20);
   });
 
+  it("파스텔 채움이 **흰 바탕에서** 보인다 — 태그·쪽지가 종이에 묻히면 안 된다", () => {
+    // 바탕이 흰색이 된 뒤로 이게 기준선이다. 분홍 바탕일 때는 로즈 계열이 묻혔는데
+    // (게시판 로즈 쪽지 ΔE 2.9) 흰 바탕에서는 여섯 다 10~15 로 산다.
+    // 파스텔을 더 옅게 만들고 싶어지면 여기부터 볼 것.
+    for (const key of ["lavender", "peach", "mint", "sky", "butter", "rose"]) {
+      const d = deltaE(token(`${key}-soft`), token("paper"));
+      expect(d, `${key}-soft on paper = ΔE ${d.toFixed(1)}`).toBeGreaterThanOrEqual(7);
+    }
+  });
+
   it("파스텔 잉크는 **본문 기준(4.5:1)** 이다 — 3:1 로 재던 것이 화면에서 37곳을 놓쳤다", () => {
     // 이 여섯 잉크는 태그 안에만 있는 게 아니다: 사이드바에서 **지금 있는 메뉴의 이름**
     // ("장보기" 15px · "공유 장보기 목록" 11px), 게시판 쪽지의 **쓴 사람**,
