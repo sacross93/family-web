@@ -215,22 +215,6 @@ describe("글자 대비", () => {
     expect(white, `흰 글자 on primary = ${white.toFixed(2)}`).toBeLessThan(4.5);
   });
 
-  it("강조색: 그래픽은 accent, 글자는 accent-ink", () => {
-    // accent(#c2691f)는 막대·점·아이콘처럼 **그려지는 것** 전용이라 UI 기준(3:1)만 본다.
-    // ⚠️ 틀 위에서 3.02 — 여유가 0.02 다. accent 나 chrome 을 건드리면 여기가 먼저 깨진다.
-    for (const bg of [...BACKGROUNDS, "chrome"]) {
-      const r = contrast(token("accent"), token(bg));
-      expect(r, `accent on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(3);
-    }
-    // 글자가 필요하면 언제나 이쪽. 틀까지 밝아져 강조색이 놓일 배경이 셋으로 늘었으니,
-    // 흰 판·종이·**연한 로즈 틀** 어디에서도 AA 를 넘어야 한다.
-    // (예전엔 진한 틀 위 큰 숫자를 밝은 accent 로 쓸 수 있었다. 이제 그 자리가 없다.)
-    for (const bg of [...BACKGROUNDS, "chrome"]) {
-      const r = contrast(token("accent-ink"), token(bg));
-      expect(r, `accent-ink on ${bg} = ${r.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
   it("파스텔 동그라미 위의 표시는 잉크로 — 흰색은 거기서 아무것도 표시하지 못한다", () => {
     // 체크 표시(장보기·준비물), 색 고르개의 체크가 파스텔 `dot` 위에 놓인다.
     // 흰색이면 1.28(버터)~1.80(로즈) 이라 담았는지 아닌지가 눈으로 안 잡혔다.

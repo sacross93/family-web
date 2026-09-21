@@ -530,7 +530,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
               aria-label="준비 진행"
             >
               <div
-                className="h-full rounded-full bg-accent transition-all"
+                className="h-full rounded-full bg-primary transition-all"
                 style={{ width: `${Math.round((prepDone / prepTotal) * 100)}%` }}
               />
             </div>

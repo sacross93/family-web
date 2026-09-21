@@ -438,7 +438,7 @@ function FeaturedCard({
       </p>
 
       {/* 강조색은 '지금 벌어지는 일' 에만(DESIGN §2). 여기가 그 자리다. */}
-      <p className="font-num mt-3 text-base text-accent-ink">
+      <p className="font-num mt-3 text-base text-ink-soft">
         {isToday
           ? `${meta.label}을 축하해요 ${item.emoji}`
           : `${kDate(d.nextDate)}까지 ${d.days}일`}

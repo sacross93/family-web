@@ -66,12 +66,6 @@
   --color-primary-soft: #fce4ee;
   --color-primary-ink: #9c3459; /* 틀 위 4.9:1 · soft 위 5.7:1 */
 
-  /* ── 강조 한 색 ──
-     '지금 벌어지고 있는 일' 에만 쓴다 — 주차 숫자, 오늘, 진행 막대.
-     글자로 쓰지 않는다: 흰 판에서 3.9:1 로 AA(4.5)에 못 미친다. 글자엔 accent-ink. */
-  --color-accent: #b35f18; /* 살구. 틀 위 3.2:1 — 막대·점용 */
-  --color-accent-ink: #8a4410; /* 글자용 — 흰 판 7.2 : 1 */
-  --color-accent-soft: #fdeadb;
 
   /* ── 파스텔 분류색 (각 색: base 점 · soft 배경 · ink 글자) ──
      가족이 고른 색이고 스티커·사진이 이 위에 산다. 값은 그대로 둔다. */

@@ -90,7 +90,7 @@ export function BabyHero({
               {weekLabel(p)}
             </p>
             {/* 강조색은 '지금 벌어지는 일' 에만 쓴다 — 여기가 그 자리다. */}
-            <p className="font-num mt-3 text-base text-accent-ink">
+            <p className="font-num mt-3 text-base text-ink-soft">
               {p.overdue
                 ? `예정일에서 ${Math.abs(p.dueDays)}일 지났어요. 곧 만나요 🤍`
                 : `${p.dueDays}일 남았어요`}
@@ -136,7 +136,7 @@ export function BabyHero({
           <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
             <span className="text-chrome-ink">다음 검진</span>
             <span className="font-num">{kDateShort(nextCheckup.date)}</span>
-            <span className="font-num text-accent-ink">{dday(nextCheckup.date).label}</span>
+            <span className="font-num text-ink-soft">{dday(nextCheckup.date).label}</span>
           </p>
         )}
       </div>
