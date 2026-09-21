@@ -264,6 +264,46 @@ function toPath(input: string): string {
   return input.startsWith("/") ? input : `/${input}`;
 }
 
+/**
+ * 상세를 모델에게 주기 전에 **집안 사정**을 걷어낸다.
+ *
+ * `open_page` 의 상세는 프리즈마 행을 그대로 싣는다. 실측(2026-09-21)으로 모델이 받는 글의
+ * **34~50%가 내부 값**이었다 — `createdAt`·`updatedAt`, `authorId`·`babyId` 같은 외래키,
+ * `userId`. 아기 일기 한 번 읽는데 엄마의 생일과 색깔까지 같이 나갔다.
+ *
+ * 목록(`list_resource`)은 이미 깨끗하다(`catalog()` 가 id·title·hint·body 만 고른다).
+ * 그래서 이 함수는 **상세에만** 쓴다.
+ *
+ * 남기는 것: `id`(모델이 다시 열 때 쓴다)와 뜻이 있는 모든 값(`date`·`dueDate`·`content` …).
+ * 버리는 것: 시각 도장, 외래키, 로그인 연결. **뜻이 애매하면 남긴다** — 줄이자고
+ * 모델이 알아야 할 것을 지우면 "확인 안 됨" 보다 나쁜 "잘못 앎" 이 된다.
+ */
+const HOUSEKEEPING = /^(createdAt|updatedAt|userId)$/;
+/**
+ * `albumId`·`authorId` … — `id` 자체는 걸리지 않는다(첫 글자가 소문자 + Id 로 끝나는 두 글자 이상).
+ *
+ * **통째로 거는 규칙**이라 `…Id` 로 끝나는 새 필드는 뜻이 있어도 같이 걸린다. 이 스키마의
+ * `…Id` 는 지금 전부 외래키라 맞는 규칙이지만, 모델이 알아야 할 `…Id` 를 만들게 되면
+ * 이름을 바꾸거나 여기를 고칠 것(시험의 `calledWith` 가 그래서 이름을 바꿨다).
+ */
+const FOREIGN_KEY = /^[a-z][A-Za-z]*Id$/;
+/** 아무리 깊어도 여기서 멈춘다. 모르는 모양이 들어와도 무한히 파고들지 않게. */
+const MAX_DEPTH = 8;
+
+export function stripInternals(value: unknown, depth = 0): unknown {
+  if (depth > MAX_DEPTH) return value;
+  if (Array.isArray(value)) return value.map((v) => stripInternals(v, depth + 1));
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (HOUSEKEEPING.test(key) || FOREIGN_KEY.test(key)) continue;
+      out[key] = stripInternals(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function openPage(args: Record<string, unknown>, resources: AgentResource[]): Promise<ToolResult> {
   const raw = str(args.path);
   if (!raw) return fail("어느 경로를 열지 알려주세요.");
@@ -282,7 +322,7 @@ async function openPage(args: Record<string, unknown>, resources: AgentResource[
     if (target.id && (data === null || data === undefined)) return fail("그 항목을 찾지 못했어요.");
     if (data !== null && data !== undefined) {
       const path = target.id ? detailPath(resource, target.id) : resource.listPath;
-      return { ok: true, data, label: resource.label, path };
+      return { ok: true, data: stripInternals(data), label: resource.label, path };
     }
     // 단일 리소스가 아직 등록 전이면(아기 정보 없음) 목차로 내려간다 — 빈 목차와 같은 답이 된다.
   }

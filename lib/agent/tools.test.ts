@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { toolSchemas, executeTool } from "@/lib/agent/tools";
+import { toolSchemas, executeTool, stripInternals } from "@/lib/agent/tools";
 import type { AgentResource } from "@/lib/agent/registry";
 
 const FAKE: AgentResource[] = [
@@ -494,7 +494,7 @@ describe("open_page — detailPattern 이 없는 단일 리소스", () => {
     key: "baby", label: "아기", listPath: "/baby",
     catalog: async () => [{ title: "콩이", hint: "기록 12" }],
     detail: async (id?: string) => ({
-      askedId: id ?? null,
+      calledWith: id ?? null,
       nickname: "콩이",
       entries: [{ content: "오늘 태동을 느꼈다" }],
       checklist: [{ text: "산모수첩 챙기기" }],
@@ -505,8 +505,9 @@ describe("open_page — detailPattern 이 없는 단일 리소스", () => {
   it("id 없이 열어도 상세를 읽는다(목차 한 줄로 떨어지지 않는다)", async () => {
     const r = await executeTool("open_page", { path: "/baby" }, ctxOf([SINGLE]));
     expect(r).toMatchObject({ ok: true, path: "/baby", label: "아기" });
-    const data = (r as { data: { askedId: null; entries: { content: string }[] } }).data;
-    expect(data.askedId).toBe(null); // id 없이 불린다
+    const data = (r as { data: { calledWith: null; entries: { content: string }[] } }).data;
+    // 이름을 `askedId` 에서 바꿨다 — 외래키(`…Id`)를 걷어내는 규칙에 걸렸다. 뜻은 그대로다.
+    expect(data.calledWith).toBe(null); // id 없이 불린다
     expect(data.entries[0].content).toBe("오늘 태동을 느꼈다");
   });
 
@@ -959,5 +960,55 @@ describe("목록이 대화를 먹지 않게", () => {
     } finally {
       delete process.env.AGENT_LIST_MAX_CHARS;
     }
+  });
+});
+
+describe("상세에서 집안 사정을 걷어낸다", () => {
+  // 실측(2026-09-21): `open_page` 상세의 34~50%가 내부 값이었다. 아기 일기 한 번 읽는데
+  // 엄마의 생일·색깔·로그인 연결까지 같이 나갔다. 목록은 이미 깨끗해서 상세에만 건다.
+  it("시각 도장과 외래키를 버리고 뜻 있는 값은 남긴다", () => {
+    const row = {
+      id: "b1", nickname: "콩이", dueDate: "2027-05-23", babyId: "b1", authorId: "m1",
+      createdAt: "2026-09-20", updatedAt: "2026-09-21", userId: null,
+      author: { id: "m1", name: "엄마", birthday: "1988-09-02", userId: null, createdAt: "x" },
+    };
+    expect(stripInternals(row)).toEqual({
+      id: "b1", nickname: "콩이", dueDate: "2027-05-23",
+      author: { id: "m1", name: "엄마", birthday: "1988-09-02" },
+    });
+  });
+
+  it("`id` 는 남긴다 — 모델이 다시 열 때 쓴다", () => {
+    expect(stripInternals({ id: "x", albumId: "y" })).toEqual({ id: "x" });
+  });
+
+  it("배열 속까지 들어간다", () => {
+    const out = stripInternals({ entries: [{ id: "e1", content: "글", babyId: "b1", createdAt: "x" }] });
+    expect(out).toEqual({ entries: [{ id: "e1", content: "글" }] });
+  });
+
+  it("**도구가 실제로 건다** — 함수만 시험하면 배선이 끊겨도 통과한다", async () => {
+    const DEEP: AgentResource[] = [{
+      key: "baby", label: "아기", listPath: "/baby",
+      catalog: async () => [],
+      detail: async () => ({ id: "b1", nickname: "콩이", babyId: "b1", createdAt: "2026-09-20" }),
+    }];
+    const r = await executeTool("open_page", { path: "/baby" }, { origin: "http://t.local", cookie: "c", resources: DEEP });
+    expect((r as { data: Record<string, unknown> }).data).toEqual({ id: "b1", nickname: "콩이" });
+  });
+
+  it("목록은 건드리지 않는다 — 이미 깨끗하고, 괜히 손대면 body 가 상한다", async () => {
+    const L: AgentResource[] = [{
+      key: "note", label: "쪽지", listPath: "/notes",
+      catalog: async () => [{ id: "n1", title: "제목", hint: "9월", body: "본문" }],
+    }];
+    const r = await executeTool("list_resource", { resource: "note" }, { origin: "http://t.local", cookie: "c", resources: L });
+    expect((r as { data: unknown }).data).toEqual([{ id: "n1", title: "제목", hint: "9월", body: "본문" }]);
+  });
+
+  it("너무 깊으면 멈춘다 — 모르는 모양이 와도 무한히 파지 않게", () => {
+    let deep: Record<string, unknown> = { createdAt: "x" };
+    for (let i = 0; i < 30; i += 1) deep = { child: deep };
+    expect(() => stripInternals(deep)).not.toThrow();
   });
 });
