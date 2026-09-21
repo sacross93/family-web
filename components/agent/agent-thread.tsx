@@ -15,10 +15,11 @@ import type { AgentChatState } from "./use-agent-chat";
  * 두 번째 칩이 **"시키기도 된다"** 를 전한다. 버튼 이름(`물어보기`)이 못 하는 일이라
  * 문구를 바꾸더라도 이 자리에는 '시키는' 예시가 있어야 한다.
  */
+/** 서버가 못 줄 때만 쓰는 기본값. 우리 집 것은 `/api/agent/hints` 가 만든다. */
 const SUGGESTIONS = [
-  "발리 사진 어디 있지?",
+  "사진첩에 뭐 있는지 보여줘",
   "내일 우유 사기 할일 추가해줘",
-  "다음 검진 언제라고 했지?",
+  "다가오는 일정 알려줘",
 ];
 
 /** 되돌리기 실패 문구를 라우트가 못 준 경우에만 쓴다. */
@@ -108,6 +109,30 @@ function ResultCard({
   );
 }
 
+/**
+ * 빈 화면일 때만 **우리 집 추천 질문**을 한 번 받아온다.
+ * 대화가 이미 있으면 안 부른다 — 빈 화면에서만 쓰는 값이라 미리 받을 이유가 없다.
+ */
+function useHints(empty: boolean) {
+  const [hints, setHints] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!empty || hints) return;
+    let alive = true;
+    fetch("/api/agent/hints")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && Array.isArray(d?.hints) && d.hints.length) setHints(d.hints);
+      })
+      .catch(() => {
+        /* 못 받으면 기본 문장 그대로 — 빈 화면이 비어 보이면 안 된다 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [empty, hints]);
+  return hints ?? SUGGESTIONS;
+}
+
 export function AgentThread({
   state,
   onSuggest,
@@ -128,6 +153,7 @@ export function AgentThread({
   const [undoErrors, setUndoErrors] = useState<Record<string, string>>({});
 
   const { bubbles, toolLabel, running, error } = state;
+  const hints = useHints(bubbles.length === 0);
 
   // 글자가 흘러나오는 동안 따라 내려간다 — 답이 화면 밖에서 자라면 멈춘 것처럼 보인다.
   useEffect(() => {
@@ -189,7 +215,7 @@ export function AgentThread({
             뭐든 물어보고, 시켜도 돼요
           </p>
           <div className="flex flex-col items-start gap-2">
-            {SUGGESTIONS.map((text) => (
+            {hints.map((text) => (
               <button
                 key={text}
                 type="button"
