@@ -28,10 +28,18 @@ export async function PATCH(req: NextRequest) {
   const description =
     (typeof body.description === "string" && body.description.trim()) || def.desc;
 
+  // **순서는 보낸 쪽이 정한다.** 예전에는 여기서 `DEFAULT_NAV` 의 인덱스를 썼다 —
+  // 그래서 무슨 순서를 보내도 늘 기본값이 저장됐고, `sortOrder` 컬럼이 사실상 죽어 있었다
+  // (가족이 폰 탭바에 무엇을 올릴지 바꿀 방법이 없었다는 뜻이다).
+  // 범위 밖이거나 숫자가 아니면 기본 인덱스로 떨어진다.
+  const asked = Number(body.sortOrder);
+  const sortOrder =
+    Number.isInteger(asked) && asked >= 0 && asked < DEFAULT_NAV.length ? asked : idx;
+
   const row = await prisma.navItem.upsert({
     where: { href },
-    update: { emoji, label, description, sortOrder: idx },
-    create: { href, emoji, label, description, sortOrder: idx },
+    update: { emoji, label, description, sortOrder },
+    create: { href, emoji, label, description, sortOrder },
   });
   return NextResponse.json(row);
 }

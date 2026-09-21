@@ -131,7 +131,13 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - `SiteConfig`(싱글턴 id="main": siteName·tagline·brandEmoji/Image·heroSubtitle·heroEmoji/Image) + `NavItem`(href별 emoji·label·description 오버라이드).
 - 로더 `lib/site.ts`의 `getSiteConfig()`·`getNav()` — **DB 없으면 기본값(lib/nav, SITE_DEFAULTS) 폴백** → 시드 안 해도, 배포 DB에서도 동작.
 - 소비처: `app/layout.tsx`(→ AppShell에 site·nav prop, generateMetadata 제목), `app/page.tsx`(히어로), `app/login`(브랜드). 편집 UI는 `/admin`, API는 `/api/site-config`·`/api/nav`(관리자 전용). 저장 후 `router.refresh()`로 반영.
-- 경로(href)와 색은 고정 — 이모지·이름·설명만 편집 가능.
+- 경로(href)와 색은 고정 — **이모지·이름·설명·순서**를 편집한다.
+- **순서는 세 곳이 맞아떨어져야 돈다**(오래 죽어 있었다): `/admin` 이 지금 화면 순서를
+  `sortOrder` 로 보내고 → `/api/nav` 가 **보낸 값**을 저장하고(예전엔 `DEFAULT_NAV` 인덱스를
+  써서 무슨 순서를 보내도 기본값이 됐다) → `getNav()` 가 그걸 읽어 정렬한다(예전엔 안 읽었다).
+  **아홉 개가 다 저장돼 있을 때만** 저장된 순서를 쓴다 — 한 줄만 남아 있던 적이 있는데
+  그 하나 때문에 사진첩이 맨 앞으로 왔다. 부분 데이터는 순서가 아니다.
+- 순서가 곧 **폰 하단 탭**이다(앞 `TAB_COUNT`=4개). 관리자 화면이 그 사실을 글로 알려 준다.
 
 ## 꾸미기 (스티커) — 재사용 표면
 - 핵심: `components/decoration-surface.tsx`의 `<DecorationSurface surfaceKey canEdit variant clip editing onEditingChange showTrigger>`. 전역 래퍼는 `components/decorations.tsx`.

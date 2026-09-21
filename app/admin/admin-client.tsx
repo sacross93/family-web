@@ -12,6 +12,7 @@ import {
   ImagePlus,
   X,
   ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { Decoration } from "@prisma/client";
 import {
@@ -24,8 +25,9 @@ import {
   EmptyState,
   ColorDot,
   CollapsibleCard,
+  IconButton,
 } from "@/components/ui";
-import { NAV, type NavItem } from "@/lib/nav";
+import { NAV, TAB_COUNT, type NavItem } from "@/lib/nav";
 import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
@@ -252,6 +254,18 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
   const [items, setItems] = useState(nav);
   // 한 번에 한 항목만 펼친다 — 아홉 개를 다 펴 두면 폰에서 두 화면이다.
   const [editingHref, setEditingHref] = useState<string | null>(null);
+
+  /** 순서 바꾸기. 앞 네 개가 폰 하단 탭이 되므로 **매일 쓰는 것을 위로** 올리면 된다. */
+  function move(href: string, dir: -1 | 1) {
+    setItems((prev) => {
+      const i = prev.findIndex((x) => x.href === href);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -265,7 +279,8 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
     setBusy(true);
     try {
       const results = await Promise.all(
-        items.map((it) =>
+        // 지금 화면에 보이는 **순서 그대로** 보낸다 — 앞 네 개가 폰 하단 탭이 된다.
+        items.map((it, i) =>
           fetch("/api/nav", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -274,6 +289,7 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
               emoji: it.emoji,
               label: it.label,
               description: it.desc,
+              sortOrder: i,
             }),
           }).then((r) => r.ok)
         )
@@ -294,12 +310,41 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
       className="gap-5"
     >
 
+      {/* 순서를 바꿀 수 있다는 걸 **여기서 알려 준다.** 화살표만 있으면 그게 무슨 뜻인지
+          — 특히 "앞 네 개가 폰 아래 탭이 된다" 는 걸 — 알 길이 없다. */}
+      <p className="rounded-md bg-sunken px-3 py-2 text-xs text-ink-soft">
+        ↑↓ 로 순서를 바꿀 수 있어요. <b className="text-ink">맨 위 {TAB_COUNT}개</b>가 폰 아래 탭이 되고,
+        나머지는 <b className="text-ink">더보기</b> 안에 들어가요.
+      </p>
+
       {/* 아홉 항목 × 세 칸이 늘 펼쳐져 있으면 폰에서 두 화면이다. 대개 한 항목만 고치러 온다. */}
       <div className="flex flex-col gap-2">
-        {items.map((it) => {
+        {items.map((it, idx) => {
           const open = editingHref === it.href;
           return (
-            <div key={it.href} className="rounded-md border border-line">
+            <div key={it.href} className="flex items-stretch gap-1 rounded-md border border-line">
+              {/* 순서 바꾸기. 펼치는 버튼 **밖**에 둔다 — 버튼 안에 버튼을 넣을 수 없다. */}
+              <div className="flex flex-col justify-center gap-0.5 py-1 pl-1">
+                <IconButton
+                  type="button"
+                  size="sm"
+                  aria-label={`${it.label} 위로`}
+                  disabled={idx === 0}
+                  onClick={() => move(it.href, -1)}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </IconButton>
+                <IconButton
+                  type="button"
+                  size="sm"
+                  aria-label={`${it.label} 아래로`}
+                  disabled={idx === items.length - 1}
+                  onClick={() => move(it.href, 1)}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </IconButton>
+              </div>
+              <div className="min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => setEditingHref(open ? null : it.href)}
@@ -337,6 +382,7 @@ function NavEditorCard({ nav, onSaved }: { nav: NavItem[]; onSaved: () => void }
                   />
                 </div>
               )}
+              </div>
             </div>
           );
         })}

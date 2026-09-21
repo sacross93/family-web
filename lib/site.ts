@@ -50,16 +50,31 @@ export async function getNav(): Promise<NavItem[]> {
     const rows = await prisma.navItem.findMany();
     if (!rows.length) return DEFAULT_NAV;
     const byHref = new Map(rows.map((r) => [r.href, r]));
-    return DEFAULT_NAV.map((d) => {
-      const o = byHref.get(d.href);
-      if (!o) return d;
-      return {
-        ...d,
-        emoji: o.emoji || d.emoji,
-        label: o.label || d.label,
-        desc: o.description || d.desc,
-      };
-    });
+    return (
+      DEFAULT_NAV.map((d) => {
+        const o = byHref.get(d.href);
+        if (!o) return d;
+        return {
+          ...d,
+          emoji: o.emoji || d.emoji,
+          label: o.label || d.label,
+          desc: o.description || d.desc,
+        };
+      })
+        // **순서도 가족이 정한다.** `sortOrder` 는 그동안 저장만 되고 아무도 안 읽어서,
+        // 폰 탭바에 무엇이 오를지(앞 `TAB_COUNT` 개)를 바꿀 방법이 없었다 — 매일 쓰는
+        // 캘린더·할일이 `더보기` 뒤에 있는데도 손댈 수가 없었다는 뜻이다.
+        //
+        // **전부 저장돼 있을 때만** 저장된 순서를 쓴다. DB 에 한 줄만 남아 있던 적이 있는데
+        // (옛 찌꺼기) 그 하나 때문에 사진첩이 맨 앞으로 올라왔다 — **부분 데이터는 순서가
+        // 아니다.** 관리자 화면은 언제나 아홉 개를 한꺼번에 저장하므로, 제대로 저장한 뒤엔
+        // 이 조건이 참이 된다.
+        .map((d, i) => ({ d, order: byHref.get(d.href)?.sortOrder ?? i }))
+        .sort((a, b) =>
+          rows.length === DEFAULT_NAV.length ? a.order - b.order : 0
+        )
+        .map((x) => x.d)
+    );
   } catch {
     return DEFAULT_NAV;
   }
