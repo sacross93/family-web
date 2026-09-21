@@ -839,3 +839,80 @@ describe("read_url — 유튜브 자막 릴레이", () => {
     expect(wrappedOf(r)).toContain("제목: 영상");
   });
 });
+
+describe("만든 것을 되읽어 확인한다", () => {
+  // 200 을 받았다고 저장된 값이 보낸 값과 같지는 않다. 라우트가 모르는 필드를 조용히 버리면
+  // "내일 우유 사기" 가 날짜 없이 저장되고도 200 이 온다 — 그때 포동이가 "내일 넣었어요"
+  // 라고 말하면 거짓말이 된다. 그래서 목록에서 되읽은 모습을 결과에 싣는다.
+  const STORE: { id: string; title: string; hint?: string }[] = [];
+  const NOTE: AgentResource = {
+    key: "note", label: "쪽지", listPath: "/notes",
+    catalog: async () => STORE.map((n) => ({ id: n.id, title: n.title, hint: n.hint })),
+    create: {
+      api: "/api/notes",
+      describe: "쪽지를 남긴다",
+      schema: { type: "object", properties: { text: { type: "string", description: "내용" } }, required: ["text"] },
+      toBody: async (a) => ({ text: a.text }),
+      undoApi: (id) => `/api/notes/${id}`,
+    },
+  };
+  const noteCtx = (f?: typeof fetch) => ({ origin: "http://t.local", cookie: "c", resources: [NOTE], fetchImpl: f });
+
+  afterEach(() => { STORE.length = 0; });
+
+  it("저장된 제목·보조정보를 stored 로 돌려준다", async () => {
+    STORE.push({ id: "n1", title: "우유 사기", hint: "9월 22일 (화)" });
+    const f = jsonFetch(200, { id: "n1" });
+    const r = await executeTool("create_item", { resource: "note", args: { text: "우유 사기" } }, noteCtx(f));
+    expect(r.ok).toBe(true);
+    expect((r as { stored?: unknown }).stored).toEqual({ title: "우유 사기", hint: "9월 22일 (화)" });
+  });
+
+  it("보낸 값이 저장에서 빠지면 stored 가 그것을 드러낸다", async () => {
+    // 날짜를 보냈지만 저장된 것에는 날짜가 없다 — 모델이 stored 를 보고 말하면 거짓을 피한다.
+    STORE.push({ id: "n2", title: "우유 사기" });
+    const r = await executeTool(
+      "create_item",
+      { resource: "note", args: { text: "우유 사기", date: "2026-09-22" } },
+      noteCtx(jsonFetch(200, { id: "n2" }))
+    );
+    expect((r as { stored?: { hint?: string } }).stored).toEqual({ title: "우유 사기" });
+  });
+
+  it("목록에서 못 찾아도 성공은 성공이다 — 확인만 못 한 것이다", async () => {
+    // 목차는 상한이 있고 종류마다 정렬이 다르다. "못 찾았다" 를 "안 만들어졌다" 로 옮기면
+    // 이미 만든 것을 모델이 또 만든다. 확인하려다 중복을 만드는 꼴이 된다.
+    const r = await executeTool("create_item", { resource: "note", args: { text: "x" } }, noteCtx(jsonFetch(200, { id: "없음" })));
+    expect(r.ok).toBe(true);
+    expect(r).not.toHaveProperty("stored");
+    expect((r as { undo?: unknown }).undo).toEqual({ resource: "note", id: "없음" });
+  });
+
+  it("목록 읽기가 터져도 추가는 성공으로 남는다", async () => {
+    const BOOM: AgentResource = { ...NOTE, catalog: async () => { throw new Error("db down"); } };
+    const r = await executeTool(
+      "create_item",
+      { resource: "note", args: { text: "x" } },
+      { origin: "http://t.local", cookie: "c", resources: [BOOM], fetchImpl: jsonFetch(200, { id: "n3" }) }
+    );
+    expect(r.ok).toBe(true);
+    expect(r).not.toHaveProperty("stored");
+  });
+
+  it("화면 카드도 저장된 제목을 쓴다 — 화면과 모델이 다른 말을 하지 않게", async () => {
+    // 응답 본문과 **정말 다른** 제목으로 저장된 경우를 쓴다(라우트가 이름을 정리했다).
+    // 공백만 다르게 하면 `str()` 이 어차피 다듬어서, 되읽기를 빼도 시험이 통과한다 — 실제로 그랬다.
+    STORE.push({ id: "n4", title: "우유 사기(2L)" });
+    const r = await executeTool(
+      "create_item",
+      { resource: "note", args: { text: "우유사기" } },
+      noteCtx(jsonFetch(200, { id: "n4", text: "우유사기" }))
+    );
+    expect((r as { label: string }).label).toBe("쪽지 · 우유 사기(2L)");
+  });
+
+  it("도구 설명이 stored 를 보고 말하라고 이른다", () => {
+    const create = toolSchemas([NOTE]).find((t) => t.name === "create_item")!;
+    expect(create.description).toContain("stored");
+  });
+});

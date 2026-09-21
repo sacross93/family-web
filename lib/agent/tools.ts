@@ -1,5 +1,5 @@
 // 2층 — 도구. 스키마는 레지스트리에서 "생성"하고, 실행은 기존 API 라우트를 그대로 부른다.
-// 규칙 셋: ① 도구 개수는 리소스 수와 무관하게 5개 고정 ② 추가만 되고 수정·삭제는 없다
+// 규칙 셋: ① 도구 개수는 리소스 수와 무관하게 4개 고정 ② 추가만 되고 수정·삭제는 없다
 // ③ 어떤 도구도 예외를 던지지 않는다(실패는 { ok:false, error } 로 돌려 모델이 스스로 고치게 한다).
 
 import { agentConfig } from "./config";
@@ -51,6 +51,15 @@ export type ToolResult =
       /** 도구가 가져온 그림(data URL). **`data` 안에 넣지 않는다** — 루프가 data 를 JSON 으로
        *  직렬화해 대화에 넣기 때문에, 여기 있어야 base64 가 글로 박히지 않는다. */
       imageData?: string;
+      /**
+       * 만든 뒤 **목록에서 되읽은 실제 모습**. 없으면 확인하지 못했다는 뜻이다.
+       *
+       * 200 을 받았다고 저장된 값이 보낸 값과 같지는 않다 — 라우트가 모르는 필드를 조용히
+       * 버리면 "내일 우유 사기" 가 날짜 없이 저장되고도 200 이 온다. 그러면 포동이는
+       * "내일 할일로 넣었어요" 라고 **사실이 아닌 말**을 한다. 그래서 만든 것을 다시 읽어
+       * 제목과 보조 정보를 그대로 싣는다. 모델은 이 값을 보고 말한다.
+       */
+      stored?: { title: string; hint?: string };
     }
   | { ok: false; error: string };
 
@@ -98,7 +107,7 @@ function objectSchema(properties: JsonSchema["properties"], required?: string[])
 }
 
 /**
- * LLM 에게 노출할 도구 5개. 리소스가 15개든 50개든 개수는 그대로고,
+ * LLM 에게 노출할 도구 4개. 리소스가 15개든 50개든 개수는 그대로고,
  * 달라지는 것은 enum 과 설명뿐이다(그래서 새 기능이 생겨도 이 파일은 바뀌지 않는다).
  */
 export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[] {
@@ -137,7 +146,10 @@ export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[
       name: "create_item",
       description:
         `사이트에 새 항목을 추가한다. 추가만 할 수 있고 고치거나 지울 수는 없다. ` +
-        `사용자가 분명히 요청했을 때만 쓰고, 값이 모자라면 먼저 물어본다.`,
+        `사용자가 분명히 요청했을 때만 쓰고, 값이 모자라면 먼저 물어본다. ` +
+        `결과의 stored 는 만든 뒤 목록에서 **다시 읽은 실제 저장 모습**이다 — ` +
+        `사용자에게 알릴 때는 보낸 값이 아니라 stored 를 보고 말한다(날짜 같은 값이 빠졌으면 여기서 드러난다). ` +
+        `stored 가 없으면 만들어지긴 했지만 되읽어 확인하지는 못했다는 뜻이다.`,
       parameters: objectSchema(
         {
           resource: {
@@ -315,15 +327,47 @@ function firstItem(payload: unknown): Record<string, unknown> | undefined {
 }
 
 /** 결과 카드에 쓸 이름. 항목에서 찾을 수 있으면 제목을 덧붙인다. */
-function createdLabel(resource: AgentResource, item?: Record<string, unknown>): string {
+/**
+ * 화면 카드에 뜰 한 줄.
+ *
+ * **되읽은 제목이 있으면 그것을 쓴다.** 보낸 값과 저장된 값이 다를 수 있기 때문이다 —
+ * 라우트가 앞뒤 공백을 떼거나 이름을 정리하면 카드만 옛 글자를 보여 준다.
+ * 화면과 모델이 서로 다른 것을 말하면 가족은 어느 쪽을 믿어야 할지 모른다.
+ */
+function createdLabel(
+  resource: AgentResource,
+  item?: Record<string, unknown>,
+  stored?: { title: string } | null
+): string {
+  const short = (value: string) => (value.length > 40 ? `${value.slice(0, 40)}…` : value);
+  if (stored?.title) return `${resource.label} · ${short(stored.title)}`;
   for (const field of ["title", "text", "name", "content", "url"]) {
     const value = item ? str(item[field]) : undefined;
-    if (value) {
-      const short = value.length > 40 ? `${value.slice(0, 40)}…` : value;
-      return `${resource.label} · ${short}`;
-    }
+    if (value) return `${resource.label} · ${short(value)}`;
   }
   return resource.label;
+}
+
+/**
+ * 만든 항목을 **목록에서 되읽는다.** 모델을 한 번 더 부르지 않는다(리소스의 목차 한 번).
+ *
+ * 못 찾아도 **실패로 돌리지 않는다.** 목차는 상한(`LIST_TAKE`)이 있고 종류마다 정렬이
+ * 달라서, 방금 만든 것이 목록 밖으로 밀릴 수 있다. "못 찾았다" 를 "안 만들어졌다" 로
+ * 옮기면 이미 만들어진 것을 모델이 또 만든다 — 확인하려다 중복을 만드는 꼴이다.
+ * 그래서 이 함수의 실패는 언제나 `null`(= 확인 못 함)이고, 호출부는 그걸 조용히 뺀다.
+ */
+async function confirmCreated(
+  resource: AgentResource,
+  id: string
+): Promise<{ title: string; hint?: string } | null> {
+  try {
+    const entries = await resource.catalog();
+    const hit = entries.find((e) => e.id === id);
+    if (!hit) return null;
+    return { title: hit.title, ...(hit.hint ? { hint: hit.hint } : {}) };
+  } catch {
+    return null; // 목차를 못 읽은 것은 항목이 없다는 뜻이 아니다.
+  }
 }
 
 async function createItem(
@@ -368,11 +412,13 @@ async function createItem(
   // 여기까지 왔으면 이미 만들어졌다. 본문을 못 읽어도 실패로 돌리지 않는다(다시 부르면 중복 생성).
   const item = firstItem(payload);
   const id = item ? str(item.id) : undefined;
+  const stored = id ? await confirmCreated(resource, id) : null;
   return {
     ok: true,
     data: payload ?? {},
     ...(id && spec.undoApi ? { undo: { resource: resource.key, id } } : {}),
-    label: createdLabel(resource, item),
+    ...(stored ? { stored } : {}),
+    label: createdLabel(resource, item, stored),
     path: id ? detailPath(resource, id) : resource.listPath,
   };
 }
