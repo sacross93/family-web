@@ -20,6 +20,7 @@
     "user:add": "tsx scripts/add-user.ts",
     "agent:auth": "tsx scripts/agent-auth.ts",
     "agent:login": "tsx scripts/codex-login.ts",
+    "agent:runs": "tsx scripts/agent-runs.ts",
     "postinstall": "prisma generate",
     "ui:audit": "node scripts/ui-audit.mjs",
     "ui:flows": "node scripts/ui-flows.mjs"

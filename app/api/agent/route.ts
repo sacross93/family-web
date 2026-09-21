@@ -15,6 +15,8 @@ import { createCodexProvider } from "@/lib/agent/llm/codex";
 import type { AgentMessage } from "@/lib/agent/llm/types";
 import { runAgent } from "@/lib/agent/loop";
 import { agentOrigin } from "@/lib/agent/origin";
+import { recordRun } from "@/lib/agent/run-log";
+import type { RunOutcome, RunStep } from "@/lib/agent/run-log";
 import { resolvePath } from "@/lib/agent/registry";
 import { RESOURCES } from "@/lib/agent/resources";
 
@@ -200,6 +202,14 @@ export async function POST(request: NextRequest) {
       // 클라이언트가 chatId 를 서버와 맞출 수 있도록 언제나 가장 먼저 한 번 보냅니다.
       send({ type: "chat", chatId });
 
+      // 실행 기록(`AgentRun`). **내용은 담지 않는다** — 이름·성패·label·시간까지만(run-log.ts).
+      const startedAt = Date.now();
+      const steps: RunStep[] = [];
+      /** 도구가 시작한 시각. 결과는 부른 순서대로 오므로 앞에서부터 짝짓는다. */
+      const startedTools: { name: string; label: string; at: number }[] = [];
+      let outcome: RunOutcome = "ok";
+      let shownError: string | undefined;
+
       const run = runAgent({
         question: message,
         provider: createCodexProvider(),
@@ -218,21 +228,37 @@ export async function POST(request: NextRequest) {
             send(event);
           } else if (event.type === "tool_start") {
             log.call(event.id, event.name, event.args);
+            startedTools.push({ name: event.name, label: event.label, at: Date.now() });
             // 화면에는 계약대로 name·label 만. id·args 는 기록용이라 브라우저로 내보내지 않습니다.
             send({ type: "tool_start", name: event.name, label: event.label });
           } else if (event.type === "tool_result") {
             log.result(JSON.stringify(event.result));
+            // 결과의 **성패만** 가져옵니다. `data` 도 `error` 문구도 남기지 않습니다 —
+            // 바깥에서 가져온 글과 가족 데이터가 로그 표에 눌러앉습니다(run-log.ts).
+            const started = startedTools[steps.length];
+            if (started) {
+              steps.push({
+                name: started.name,
+                ok: event.result.ok,
+                label: started.label,
+                ms: Date.now() - started.at,
+              });
+            }
             send(event);
           } else if (event.type === "error") {
             // 원문(event.message)은 서버 로그에만 남기고, 화면에는 번역한 문장만 보냅니다.
             console.error("[agent] 공급자 오류", event.status ?? "", event.message);
-            send({ type: "error", message: humanError(event.status), status: event.status });
+            outcome = "error";
+            shownError = humanError(event.status);
+            send({ type: "error", message: shownError, status: event.status });
           } else {
             send({ type: "done" });
           }
         }
       } catch (error) {
         console.error("[agent] 턴이 중단되었습니다", error);
+        outcome = "error";
+        shownError = GENERIC_ERROR;
         send({ type: "error", message: GENERIC_ERROR });
       } finally {
         // 끊겼어도 사용자가 읽던 것은 기록에 남아야 합니다. 저장 실패가 응답을 죽이지는 않습니다.
@@ -245,6 +271,19 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error("[agent] 대화를 저장하지 못했습니다", error);
         }
+        // 연결이 먼저 끊긴 턴은 "실패" 가 아니라 "도중에 나간 것" 입니다 — 구분해서 남깁니다.
+        if (outcome === "ok" && (disconnected.signal.aborted || request.signal.aborted)) {
+          outcome = "aborted";
+        }
+        // 기록은 스스로 던지지 않습니다(run-log.ts). 실패해도 여기까지는 이미 다 보냈습니다.
+        await recordRun({
+          prompt: message,
+          steps,
+          outcome,
+          ...(shownError ? { error: shownError } : {}),
+          toolMode: config.toolMode,
+          ms: Date.now() - startedAt,
+        });
         if (open) {
           try {
             controller.close();

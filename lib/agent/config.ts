@@ -11,6 +11,8 @@ export interface AgentConfig {
   fetchMaxChars: number;
   /** 모델 쪽 내장 웹검색을 켤지. 끄면 우리 도구만 쓴다. */
   webSearch: boolean;
+  /** 실행 기록(`AgentRun`)을 며칠 보관할지. 무료 티어라 끝없이 쌓이면 안 된다. */
+  runLogDays: number;
 }
 
 /** 양수 정수만 허용. 아니면 기본값. */
@@ -39,5 +41,8 @@ export function agentConfig(): AgentConfig {
     // 기본값 켬. 우리 fetch 가 막히는 사이트(쿠팡 등)를 모델이 대신 읽어 준다(실측).
     // 끄려면 AGENT_WEB_SEARCH="false".
     webSearch: process.env.AGENT_WEB_SEARCH !== "false",
+    // 30일. "지난주에 이상했는데" 를 되짚기엔 넉넉하고, 가족 둘이 쓰는 사이트에서
+    // 무료 데이터베이스를 채울 만한 양이 아니다.
+    runLogDays: num("AGENT_RUN_LOG_DAYS", 30),
   };
 }

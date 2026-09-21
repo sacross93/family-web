@@ -86,8 +86,12 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
   - 되돌리기는 `{resource, id}` 만 받는다 — `app/api/agent/undo/route.ts`. 경로는 서버가 `findResource(key)?.create?.undoApi(id)` 로만 만들고, `id` 는 `/^[A-Za-z0-9_-]{1,64}$/` 만 통과한다(`../site-config` 가 지나가면 화이트리스트가 무의미해진다). 대상의 5xx 는 502 로 번역해 우리 라우트가 500 으로 남지 않게 한다.
 - **2단계가 아직 안 지킨 것** — 하게 되면 여기서 지운다.
   - **도구 결과 본문 줄이기.** `loop.ts` 가 `JSON.stringify(result)` 로 대화에 넣고 라우트는 `LoopEvent` 만 보므로 줄일 자리는 도구·루프뿐이다. 지금은 `read_url` 만 `fetchMaxChars` 로 잘리고 `open_page` 의 상세는 상한이 없다.
-  - **`AgentRun` 로그.** 테이블만 있고(`prisma/schema.prisma`) 쓰는 코드가 한 줄도 없다. 쓰게 되면 `steps` 에 `ToolResult.data` 를 넣지 말 것 — `read_url` 로 가져온 바깥 글과 가족 데이터가 로그 테이블에 눌러앉는다. 도구 이름·성패·label 까지만. 공급자 오류 본문도 마찬가지.
   - **"…더 있음"을 사용자에게 보이기.** 목록이 상한(`LIST_TAKE`)에 걸리면 엔진이 꼬리(`MORE_TITLE`)를 붙이지만, 화면은 도구 결과를 카드 한 장(제목+버튼)으로만 그려 모델이 말로 옮겨 주는 데 기대고 있다.
+- **실행 기록 (`lib/agent/run-log.ts`, `AgentRun`)** — 한 턴이 끝나면 라우트가 한 줄 남긴다.
+  - 남기는 것은 **도구 이름·성패·label·걸린 시간**과 질문 200자·결과(ok/error/aborted)·화면에 띄운 오류 한 문장까지다. **`ToolResult.data` 도, 도구의 `error` 문구도, 공급자 오류 본문도 넣지 않는다** — `read_url` 로 가져온 바깥 글과 가족의 일기 본문이 로그 표에 눌러앉고, 공급자 원문에는 사용자 ChatGPT 세션 사정이 섞인다. 거르는 곳은 `shapeRun()` 한 군데(순수 함수라 프리즈마 없이 시험한다).
+  - **기록이 실패해도 대화는 살아야 한다** — `recordRun` 은 던지지 않는다. 로그 때문에 가족의 답이 사라지면 본말이 뒤집힌다.
+  - 무료 티어라 **30일치만** 둔다(`AGENT_RUN_LOG_DAYS`). 기록할 때마다 지난 것을 지운다(실측: 40일 전 행이 지워졌다).
+  - 보는 법은 **`npm run agent:runs [개수]`**. 표만 만들고 읽을 길이 없으면 없는 것과 같다.
 - **2단계가 정한 것**
   - `createCodexProvider()` 수명 = **요청 하나.** `app/api/agent/route.ts` 가 요청마다 새로 만들어 `session_id` 도 턴마다 새로 생긴다. `store:false` 라 히스토리를 매번 다시 보내므로 문제되지 않는다.
   - 결과 카드는 `components/agent/agent-stream.ts` 의 `visibleResults` 가 두 갈래로 추린다. **만든 것(`undo` 있음)은 하나도 접지 않는다** — 되돌리기를 품은 유일한 자리이고, 리소스 16종 중 14종은 `detailPattern` 이 없어 만든 항목의 `path` 가 목록 경로로 다 같아지므로 경로로 중복을 지우면 "우유·계란·빵" 의 둘째·셋째가 되돌리기째 사라진다. **찾아준 곳(`undo` 없음)만** 같은 경로 한 번 · 만든 카드가 이미 가리키는 곳 제외 · `MAX_PLACE_CARDS`(2장) 상한.
