@@ -349,6 +349,30 @@ if (!pwPath) {
 const { chromium } = await import(pwPath);
 
 const browser = await chromium.launch({ executablePath: findChromium() });
+
+// ── 이 감사는 **읽기만 한다** ────────────────────────────
+// 그래서 운영에 대고 돌려도 된다(`npm run ui:audit https://…`). 실제로 재 보니 감사가
+// 보내는 GET 아닌 요청은 **로그인 하나뿐**이다 — 만들지도 지우지도 않고,
+// `POST /api/agent` 도 없어서 가족의 ChatGPT 사용량도 안 쓴다.
+// (반대로 `ui-flows` 는 실제로 만들고 지운다 — 그건 로컬 전용이다.)
+//
+// **말로만 두지 않는다.** 누군가 `…` 메뉴에서 삭제를 눌러 보는 단계를 넣는 날
+// 이 문장은 조용히 거짓이 된다. 그래서 감사가 제 요청을 스스로 세고,
+// 로그인 말고 쓰는 것이 하나라도 있으면 오류로 올린다.
+const writes = [];
+const watchWrites = (target) => {
+  target.on("request", (r) => {
+    if (r.method() === "GET") return;
+    const u = r.url().replace(BASE, "");
+    if (u.startsWith("/api/auth/login")) return; // 로그인은 감사가 하는 유일한 쓰기다
+    writes.push(`${r.method()} ${u}`);
+  });
+  return target;
+};
+const _newContext = browser.newContext.bind(browser);
+browser.newContext = async (...a) => watchWrites(await _newContext(...a));
+const _newPage = browser.newPage.bind(browser);
+browser.newPage = async (...a) => watchWrites(await _newPage(...a));
 const problems = [];
 const rows = [];
 
@@ -979,6 +1003,13 @@ await Promise.all(
 }
 
 await browser.close();
+
+if (writes.length) {
+  const counts = writes.reduce((m, w) => { m[w] = (m[w] || 0) + 1; return m; }, {});
+  for (const [what, n] of Object.entries(counts)) {
+    problems.push(`감사가 **쓰기 요청**을 보냈습니다 (${n}회): ${what} — 감사는 읽기만 해야 합니다`);
+  }
+}
 
 console.table(rows);
 if (problems.length === 0) {
