@@ -336,6 +336,11 @@ const probeTapTargets = () => {
   return { small, stolen };
 };
 
+// ⏱️ **폭은 동시에 돈다.** 순서대로 돌 때 5분 43초였고, 그 정도면 내가 감사 돌리기를
+// 망설이게 된다 — 망설이는 검사는 안 돌리는 검사다. 지금은 2분 24초.
+// 폭마다 브라우저 컨텍스트가 따로라 서로 볼 일이 없다. 결과가 같은 것을 확인했다
+// (표 53줄·문제 0건·폭·경로 해시 일치), 검사가 여전히 무는 것도 확인했다
+// (꾸미기 버튼 이름을 틀리게 하면 1건, 로즈 잉크를 옛 값으로 되돌리면 38건).
 const pwPath = findPlaywright();
 if (!pwPath) {
   console.error("playwright 를 못 찾았어요. `npx playwright install chromium` 뒤에 다시 돌려 주세요.");
@@ -389,7 +394,11 @@ const rows = [];
   }
 }
 
-for (const { w, h, tag } of WIDTHS) {
+// **네 폭을 동시에 돈다.** 폭마다 브라우저 컨텍스트가 따로라 서로 볼 일이 없다 —
+// 순서대로 돌리면 이 구간만 198초였고, 그러면 내가 감사 돌리기를 망설이게 된다.
+// (`problems` 는 순서가 뜻을 갖지 않는다. `rows` 는 표라서 아래에서 폭 순으로 다시 세운다.)
+await Promise.all(
+  WIDTHS.map(async ({ w, h, tag }) => {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
 
@@ -525,7 +534,14 @@ for (const { w, h, tag } of WIDTHS) {
     }
   }
   await ctx.close();
+  })
+);
+// 폭이 섞여 들어왔으니 표를 폭 순으로 다시 세운다(한 폭 안의 차례는 그대로다 — 안정 정렬).
+{
+  const order = new Map(WIDTHS.map((x, i) => [x.tag, i]));
+  rows.sort((a, b) => (order.get(a.tag) ?? 0) - (order.get(b.tag) ?? 0));
 }
+
 // ── 글자 확대 ────────────────────────────────────────────
 // 브라우저·폰의 "글자 크기" 를 키운 사람에게도 읽혀야 한다. 화면 확대(zoom)와 달리
 // 글자만 커지므로 한 줄에 밀어 넣은 레이아웃이 깨진다 — 장보기 "우유" 가 "두" 로
@@ -682,24 +698,26 @@ for (const { w, h, tag } of WIDTHS) {
     }
     return [...new Set(out)].slice(0, 3);
   };
-  for (const { w, h, tag } of WIDTHS) {
-    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
-    const page = await ctx.newPage();
-    if (USER && PASS) {
-      await page.goto(BASE + "/login");
-      await page.locator('input[autocomplete="username"]').fill(USER);
-      await page.locator('input[autocomplete="current-password"]').fill(PASS);
-      await page.getByRole("button", { name: "로그인" }).click();
-      await page.waitForURL(BASE + "/", { timeout: 15000 });
-    }
-    for (const path of PATHS) {
-      await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
-      for (const bad of await page.evaluate(scan)) {
-        problems.push(`${tag} ${path}: 낱말 한가운데서 줄바꿈 — …${bad}…`);
+  await Promise.all(
+    WIDTHS.map(async ({ w, h, tag }) => {
+      const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+      const page = await ctx.newPage();
+      if (USER && PASS) {
+        await page.goto(BASE + "/login");
+        await page.locator('input[autocomplete="username"]').fill(USER);
+        await page.locator('input[autocomplete="current-password"]').fill(PASS);
+        await page.getByRole("button", { name: "로그인" }).click();
+        await page.waitForURL(BASE + "/", { timeout: 15000 });
       }
-    }
-    await ctx.close();
-  }
+      for (const path of PATHS) {
+        await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => {});
+        for (const bad of await page.evaluate(scan)) {
+          problems.push(`${tag} ${path}: 낱말 한가운데서 줄바꿈 — …${bad}…`);
+        }
+      }
+      await ctx.close();
+    })
+  );
 }
 
 // ── 글자 대비 (화면에 그려진 대로) ──────────────────────
@@ -847,7 +865,8 @@ for (const { w, h, tag } of WIDTHS) {
   // 꾸미기 모드에 **실제로 들어가 봤는지** 센다. 0이면 검사가 조용히 아무것도 안 한 것이다 —
   // 그런 검사는 "문제 없음" 이라고 말하면서 아무것도 지키지 않는다. 오늘 두 번 당했다.
   let decoVisits = 0;
-  for (const { w, h, tag } of WIDTHS.filter((x) => x.w !== 768)) {
+  await Promise.all(
+    WIDTHS.filter((x) => x.w !== 768).map(async ({ w, h, tag }) => {
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
     if (USER && PASS) {
@@ -918,7 +937,8 @@ for (const { w, h, tag } of WIDTHS) {
       }
     }
     await ctx.close();
-  }
+    })
+  );
   if (decoVisits === 0) {
     problems.push("꾸미기 모드에 한 번도 못 들어갔습니다 — 그 검사는 아무것도 보지 못했습니다");
   }
