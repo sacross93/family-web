@@ -20,7 +20,7 @@ async function main() {
   const runs = await prisma.agentRun.findMany({ orderBy: { createdAt: "desc" }, take });
 
   if (runs.length === 0) {
-    console.log("아직 기록이 없어요. (포동이에게 한 번 물어보면 여기에 남습니다)");
+    console.log("아직 기록이 없어요. (인공 포동이에게 한 번 물어보면 여기에 남습니다)");
     return;
   }
 

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { MoreHorizontal, MessageCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { AGENT_NAME } from "@/lib/agent/name";
 import { TAB_COUNT, isNavActive, type NavItem } from "@/lib/nav";
 
 /**
@@ -85,14 +86,14 @@ export function BottomTabs({
             <button
               type="button"
               onClick={onAsk}
-              aria-label="포동이에게 물어보기"
+              aria-label={`${AGENT_NAME}에게 물어보기`}
               className="flex h-full w-full flex-col items-center justify-center gap-0.5"
             >
               <span className="flex h-7 w-11 items-center justify-center rounded-full bg-primary text-ink">
                 <MessageCircle className="h-4 w-4" />
               </span>
               <span className="text-[0.625rem] font-bold leading-none text-chrome-ink">
-                포동이
+                {AGENT_NAME}
               </span>
             </button>
           </li>

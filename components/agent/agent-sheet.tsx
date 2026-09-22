@@ -17,6 +17,7 @@ import { ArrowUp, Menu, Paperclip, Plus, Square, X } from "lucide-react";
 
 import { IconButton, Spinner, Textarea, useFocusTrap } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { AGENT_NAME } from "@/lib/agent/name";
 import { AgentHistory } from "./agent-history";
 import { AgentThread } from "./agent-thread";
 import { shrinkImage } from "./image-attach";
@@ -237,7 +238,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
         tabIndex={-1}
         aria-modal="true"
         role="dialog"
-        aria-label="포동이에게 물어보기"
+        aria-label={`${AGENT_NAME}에게 물어보기`}
         className={cn(
           // 높이는 내용에 맞춘다. 아직 아무 말도 안 했으면 시트가 작게 떠 있고, 대화가 쌓이면
           // 최대 높이까지 자란다 — 빈 대화창이 화면의 85% 를 흰 여백으로 차지하지 않는다.
@@ -254,7 +255,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
             🌱
           </span>
           <h2 className="ml-1 flex-1 truncate font-display text-lg font-bold text-chrome-ink">
-            포동이
+            {AGENT_NAME}
           </h2>
           <IconButton
             type="button"
@@ -364,7 +365,7 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
                 }}
                 onKeyDown={onInputKeyDown}
                 placeholder="무엇이든 말해보세요"
-                aria-label="포동이에게 보낼 말"
+                aria-label={`${AGENT_NAME}에게 보낼 말`}
                 className="min-h-11 max-h-[120px] flex-1 rounded-xl py-2.5"
               />
               {state.running ? (

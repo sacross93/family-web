@@ -60,7 +60,7 @@ async function main() {
     [{ type: "text", delta: "다 했어요." }, { type: "done" }],
   ]);
 
-  console.log(`포동이 연기 시험 — ${BASE} (모델 호출 0회)\n`);
+  console.log(`인공 포동이 연기 시험 — ${BASE} (모델 호출 0회)\n`);
   const seen: string[] = [];
   let listed = false;
   let stored: { title: string; hint?: string } | null = null;

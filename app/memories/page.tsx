@@ -1,12 +1,13 @@
 import { pageTitle } from "@/lib/site";
 import { prisma } from "@/lib/prisma";
+import { AGENT_NAME } from "@/lib/agent/name";
 import { MemoriesClient } from "./memories-client";
 import type { MemoryRow } from "./memories-client";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await pageTitle("/memories", "포동이의 기억") };
+  return { title: await pageTitle("/memories", `${AGENT_NAME}의 기억`) };
 }
 
 /**

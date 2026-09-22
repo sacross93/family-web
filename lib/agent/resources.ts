@@ -9,6 +9,7 @@ import { kindMeta } from "@/app/baby/baby-meta";
 // 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
 import { dday, kDateShortYear, kTime, startOfDay } from "@/lib/date";
 import { NAV } from "@/lib/nav";
+import { MEMORY_BY, byLabel } from "./name";
 import type { AgentResource, CatalogEntry } from "./registry";
 
 /** 빈 문자열·공백은 "값 없음"으로 본다. */
@@ -894,7 +895,7 @@ export const RESOURCES: AgentResource[] = [
           title: m.text,
           // 누가 적었는지를 **반드시** 붙인다 — 포동이가 짐작해 적은 것과 가족이 말해 준 것이
           // 같아 보이면, 잘못 짐작한 기억이 사실처럼 굳는다.
-          hint: hintOf([m.by, kDateShortYear(m.createdAt)]),
+          hint: hintOf([byLabel(m.by), kDateShortYear(m.createdAt)]),
         })),
         MEMORY_TAKE
       );
@@ -909,8 +910,8 @@ export const RESOURCES: AgentResource[] = [
           text: { type: "string", description: "기억할 한 줄. 예: 아내 예정일은 2027년 5월 3일" },
           by: {
             type: "string",
-            description: "가족이 직접 말해 준 사실이면 가족, 대화에서 알아낸 것이면 포동이",
-            enum: ["포동이", "가족"],
+            description: "가족이 직접 말해 준 사실이면 family, 당신이 대화에서 알아낸 것이면 agent",
+            enum: [...MEMORY_BY],
           },
         },
         required: ["text"],

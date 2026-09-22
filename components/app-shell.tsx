@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { X, LogOut, Palette, Sparkles, MessageCircle } from "lucide-react";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
+import { AGENT_NAME } from "@/lib/agent/name";
 import { Decorations } from "@/components/decorations";
 import { AgentFab } from "@/components/agent/agent-fab";
 import { BottomTabs } from "@/components/bottom-tabs";
@@ -240,7 +241,7 @@ export function AppShell({
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
                 <MessageCircle className="h-4.5 w-4.5" />
               </span>
-              <span className="text-[0.9375rem]">포동이에게 물어보기</span>
+              <span className="text-[0.9375rem]">{AGENT_NAME}에게 물어보기</span>
             </button>
           )}
           <div className="scrollbar-thin flex-1 overflow-y-auto">

@@ -69,7 +69,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - UI 파일은 `app/baby/*` 책임별 분리(setup·hero·settings-modal·entry-modal·entry-timeline·checklist). 종류 메타·기본 체크리스트는 `app/baby/baby-meta.ts`.
 - 의료 시기·국가 제도 문구를 UI에 넣지 않는다. 홈 노출은 `showOnHome` 토글일 때만. 스펙: `docs/superpowers/specs/2026-09-08-baby-page-design.md`.
 
-## 사이트 에이전트 (포동이)
+## 사이트 에이전트 (인공 포동이)
 
 **`lib/agent/`·`components/agent/`·`app/api/agent/` 를 고치기 전에 [PODONGI.md](PODONGI.md) 필독.**
 (이 파일 `AGENTS.md` 와 한 글자 차이로 헷갈리지 않게 포동이 이름을 붙였다.)
@@ -77,7 +77,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 
 - 도구는 **4개 고정**. 새 기능이 생기면 도구가 아니라 **리소스를 추가**한다(`lib/agent/resources.ts` 한 곳, 현재 17종).
 - **추가 전용.** 수정·삭제 도구를 만들지 않는다. 되돌리기는 `create.undoApi` 화이트리스트로 서버만 실행.
-- 숫자·모델명은 `lib/agent/config.ts`(환경변수)에서만. 코드에 박지 않는다.
+- 숫자·모델명은 `lib/agent/config.ts`(환경변수)에서만, **이름은 `lib/agent/name.ts` 에서만**. 코드에 박지 않는다.
 - 고친 뒤에는 **`npm run agent:smoke`** — 모델 없이 엔진·DB·라우트를 끝까지 한 번 돌린다(로컬 전용). 안내문·도구·나가는 본문을 글로 읽으려면 `npm run agent:prompt [경로] [사람이름]`, 실행 기록은 `npm run agent:runs`. 셋 다 모델을 부르지 않는다.
 - **가족의 개인 ChatGPT 사용량으로 돈다.** 확인하겠다고 진짜 턴을 돌리지 말 것 — 가짜 공급자(`llm/fake.ts`)와 라우트 가로채기로 왕복을 다 밟을 수 있다.
 

@@ -32,6 +32,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { NAV, TAB_COUNT, type NavItem } from "@/lib/nav";
+import { AGENT_NAME } from "@/lib/agent/name";
 import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
@@ -77,7 +78,7 @@ export function AdminClient({
       <DecorationManager decorations={decorations} />
       <FamilyCard />
       {/* 기억 목록은 메뉴에 없다 — 매일 여는 화면이 아니라 한 번씩 확인하고 지우는 자리다.
-          그래도 **길은 있어야 한다**: 포동이에게 물어본 적이 없으면 이 화면이 있는 줄도 모른다. */}
+          그래도 **길은 있어야 한다**: 한 번도 물어본 적이 없으면 이 화면이 있는 줄도 모른다. */}
       <Link
         href="/memories"
         className="flex items-center gap-3 rounded-lg border border-line bg-surface px-5 py-4 text-left transition hover:bg-sunken"
@@ -86,9 +87,9 @@ export function AdminClient({
           🧠
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-display font-bold text-ink">포동이의 기억</span>
+          <span className="block font-display font-bold text-ink">{AGENT_NAME}의 기억</span>
           <span className="block text-sm text-ink-soft">
-            포동이가 다음 대화에서도 기억하려고 적어 둔 것들을 보고 지워요
+            {AGENT_NAME}가 다음 대화에서도 기억하려고 적어 둔 것들을 보고 지워요
           </span>
         </span>
         <ChevronRight className="h-5 w-5 shrink-0 text-ink-faint" />
@@ -635,7 +636,7 @@ function FamilyCard() {
     <CollapsibleCard emoji="👨‍👩‍👧‍👦" emojiClassName="bg-mint-soft" title="가족" className="gap-5">
       <p className="rounded-md bg-sunken px-3 py-2 text-xs text-ink-soft">
         여기 넣은 이름이 <b className="text-ink">할일 담당자 · 글쓴이 · 아기 기록 작성자</b>와
-        포동이의 <b className="text-ink">&ldquo;나는 ___&rdquo;</b>에 나와요.
+        {AGENT_NAME}의 <b className="text-ink">&ldquo;나는 ___&rdquo;</b>에 나와요.
       </p>
 
       {rows === null ? (

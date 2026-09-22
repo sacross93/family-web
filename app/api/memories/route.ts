@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isMemoryBy } from "@/lib/agent/name";
 
 /** 한 줄짜리 사실만 담는다. 대화 요약이 쌓이면 기억이 아니라 로그가 된다. */
 const TEXT_MAX = 200;
-
-/** 누가 적었는가. 포동이가 짐작한 것과 가족이 말해 준 것은 무게가 다르다. */
-const SOURCES = ["포동이", "가족"] as const;
 
 /** 기억 추가 { text, by? } */
 export async function POST(req: NextRequest) {
@@ -22,7 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   const asked = String(body?.by ?? "");
-  const by = (SOURCES as readonly string[]).includes(asked) ? asked : "포동이";
+  // 이름이 아니라 **열쇠**를 저장한다 — 이름은 바뀌지만 열쇠는 안 바뀐다(lib/agent/name.ts).
+  const by = isMemoryBy(asked) ? asked : "agent";
 
   // 같은 말을 또 적지 않는다. 포동이가 매번 "예정일은 5월 3일" 을 다시 적으면
   // 기억 목록이 같은 줄로 가득 차고, 정작 다른 기억이 예산에서 밀려난다.

@@ -699,11 +699,11 @@ await Promise.all(
       await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
       await page.getByRole("button", { name: /기념일 추가|첫 기념일/ }).first().click();
     }, ".fixed.inset-0.z-50"],
-    ["포동이 시트", async () => {
+    ["인공 포동이 시트", async () => {
       await page.goto(BASE + "/", { waitUntil: "networkidle" });
-      const b = page.getByRole("button", { name: "포동이에게 물어보기" });
+      const b = page.getByRole("button", { name: "인공 포동이에게 물어보기" });
       if (await b.count()) await b.first().click(); else throw new Error("skip");
-    }, '[role="dialog"][aria-label="포동이에게 물어보기"]'],
+    }, '[role="dialog"][aria-label="인공 포동이에게 물어보기"]'],
   ];
   for (const [name, openIt, sel] of traps) {
     try {
