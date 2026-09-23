@@ -212,18 +212,23 @@ function DashCard({
 }
 
 export default async function HomePage() {
-  const {
-    members,
-    todayTodos,
-    events,
-    upcomingAnnis,
-    photos,
-    posts,
-    shopping,
-    plan,
-    baby,
-  } = await getData();
-  const site = await getSiteConfig();
+  // 사이트 설정은 `getData()` 를 기다린 **뒤에** 읽고 있었다 — DB 왕복이 하나 더 줄을 섰다.
+  // 나란히 시작한다. `getSiteConfig` 는 요청 안에서 기억되므로(lib/site.ts `cache`)
+  // 레이아웃이 이미 읽은 값을 그대로 받는다.
+  const [
+    {
+      members,
+      todayTodos,
+      events,
+      upcomingAnnis,
+      photos,
+      posts,
+      shopping,
+      plan,
+      baby,
+    },
+    site,
+  ] = await Promise.all([getData(), getSiteConfig()]);
 
   const doneCount = todayTodos.filter((t) => t.done).length;
 

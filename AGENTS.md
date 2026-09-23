@@ -54,6 +54,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 ## DB / 실행
 - 로컬: `postgresql://ascentai@localhost:5432/podong` (Homebrew `postgresql@16`, `brew services start postgresql@16`).
 - `npm run dev` · `npm run db:push` · `npm run db:seed` · `npm run db:reset` · `npm run db:studio`.
+- ⚠️ **Vercel 함수 지역은 `vercel.json` 의 `regions`(`sin1`)** — Neon DB 와 같은 싱가포르. 지우거나 바꾸면 기본값 미국 동부(`iad1`)로 돌아가 **화면마다 태평양을 건넌다**(실측 0.57~0.81초 → 로컬 0.005초, DEPLOY.md "함수 지역"). DB 를 다른 지역으로 옮기면 이 값도 같이 옮길 것.
 - ⚠️ **`db:reset` 은 `AgentAuth` 를 날린다** — `--force-reset` 이라 테이블을 통째로 다시 만든다. 거기 들어 있는 건 사용자의 **암호화된 ChatGPT 토큰**이고, 다시 받으려면 브라우저 로그인(`npm run agent:login`)을 또 해야 한다. 시드 내용만 되돌리고 싶으면 **`db:seed`** 를 쓸 것 — 그건 콘텐츠 표만 지우고 `AgentAuth`·`AppUser` 는 건드리지 않는다(확인함: 지운 뒤에도 토큰 1행 그대로).
 
 ## 로그인 / 인증 (적용됨)

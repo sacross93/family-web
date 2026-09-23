@@ -94,6 +94,34 @@ DATABASE_URL="<Neon Direct>" npx prisma db push
    > 이미 프로덕션에 다른 값이 들어가 있다면, 그 값 그대로 토큰을 주입하면 됩니다 — 6절 참고.
 5. **Deploy** 클릭 → 잠시 후 `https://family-web-xxxx.vercel.app` 주소가 나와요.
 
+### 함수 지역은 싱가포르(`sin1`) — DB 옆에
+
+저장소 루트의 `vercel.json` 이 서버 함수 지역을 **`sin1`(싱가포르)** 로 정합니다. Neon DB 가
+`ap-southeast-1`(싱가포르)에 있기 때문입니다.
+
+**왜:** Vercel 새 프로젝트의 기본 함수 지역은 **미국 동부 `iad1`** 입니다. 그대로 두었더니
+화면을 열 때마다 서울 → 미국을 한 번 건너고, 그 안에서 **DB 조회 하나마다 미국 ↔ 싱가포르**를
+또 건넜습니다(2026-09-23 실측).
+
+| | 걸린 시간(응답 시작까지) |
+|---|---|
+| 운영 응답 헤더 `x-vercel-id` | `icn1::iad1::…` — 서울 엣지에서 받고 미국 동부에서 실행 |
+| `/login`, 연달아 열 때(iad1) | 0.57~0.81초 |
+| `/login`, 7분 쉰 뒤 첫 요청(iad1) | 1.15초 |
+| 같은 빌드를 로컬 `next start` + 로컬 DB 로 | 0.004~0.008초 |
+
+코드가 화면을 만드는 시간은 거의 0 이고, 나머지는 전부 지역 사이를 오가는 시간이었습니다.
+
+- `vercel.json` 의 `regions` 는 **대시보드 설정(Settings → Functions → Function Regions)보다 우선**합니다.
+  대시보드에서 바꿔도 이 파일이 있으면 파일 값이 적용됩니다.
+- **Hobby(무료) 플랜은 지역 하나만** 됩니다. 두 개 이상 적으면 빌드 전에 배포가 실패합니다
+  (`lib/deploy-region.test.ts` 가 한 개인지 확인합니다).
+- 적용은 **다음 배포부터**입니다. 배포 뒤 응답 헤더 `x-vercel-id` 가 `…::sin1::…` 인지 보면 됩니다.
+- ⚠️ **DB 를 옮기면 이 값도 같이 옮기세요.** Neon 프로젝트를 다른 지역에 새로 만들면
+  함수와 DB 가 다시 갈라져 화면마다 바다를 건넙니다. 지역 코드 표: https://vercel.com/docs/regions
+- `next.config` 나 페이지의 `preferredRegion` 으로는 **안 됩니다** — Vercel 에서는 edge 런타임에만
+  먹습니다(Next 16 문서). 이 사이트는 Node 함수라 `vercel.json` 이 맞는 자리입니다.
+
 ---
 
 ## 4. 사진 저장소 연결 (Vercel Blob)

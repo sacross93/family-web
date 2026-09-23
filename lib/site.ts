@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { NAV as DEFAULT_NAV, type NavItem } from "@/lib/nav";
 
@@ -26,7 +27,15 @@ export const SITE_DEFAULTS: SiteConfigData = {
   heroImageUrl: null,
 };
 
-export async function getSiteConfig(): Promise<SiteConfigData> {
+// ── 한 요청에 한 번만 읽는다 (`cache`) ──
+// 화면 하나를 열 때 SiteConfig·NavItem 을 **여러 번** 읽고 있었다: 루트 레이아웃 본문,
+// 루트 `generateMetadata`, 화면마다의 `generateMetadata`(`pageTitle` → `getNav`), 그리고
+// 홈처럼 페이지가 `getSiteConfig` 를 또 부르는 곳. 함수가 미국 동부(iad1)에서 돌던 때는
+// 그 한 번 한 번이 싱가포르 DB 까지 태평양을 건넜다(DEPLOY.md "함수 지역").
+// React `cache` 로 감싸 **요청 하나에 한 번**만 읽는다. 기억은 요청 안에서만 가므로
+// `/admin` 에서 저장한 값은 다음 요청(=`router.refresh()`)에 그대로 보인다.
+// React 렌더 밖(라우트 핸들러·`manifest.ts`·vitest)에서는 기억 없이 그냥 부른다.
+export const getSiteConfig = cache(async (): Promise<SiteConfigData> => {
   try {
     const row = await prisma.siteConfig.findUnique({ where: { id: "main" } });
     if (!row) return SITE_DEFAULTS;
@@ -42,10 +51,11 @@ export async function getSiteConfig(): Promise<SiteConfigData> {
   } catch {
     return SITE_DEFAULTS;
   }
-}
+});
 
-/** 기본 메뉴에 DB 오버라이드(이모지·이름·설명)를 병합해 반환. 항상 8개, 순서 유지. */
-export async function getNav(): Promise<NavItem[]> {
+/** 기본 메뉴에 DB 오버라이드(이모지·이름·설명)를 병합해 반환. 항상 8개, 순서 유지.
+ *  `getSiteConfig` 와 같은 이유로 요청 하나에 한 번만 읽는다(`cache`). */
+export const getNav = cache(async (): Promise<NavItem[]> => {
   try {
     const rows = await prisma.navItem.findMany();
     if (!rows.length) return DEFAULT_NAV;
@@ -78,7 +88,7 @@ export async function getNav(): Promise<NavItem[]> {
   } catch {
     return DEFAULT_NAV;
   }
-}
+});
 
 /**
  * 그 화면의 **브라우저 탭 제목**.
