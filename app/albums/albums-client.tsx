@@ -36,14 +36,14 @@ export function AlbumsClient({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("📸");
-  const [color, setColor] = useState<PaletteKey>("peach");
+  const [color, setColor] = useState<PaletteKey>("rose");
   const [takenOn, setTakenOn] = useState("");
 
   function resetForm() {
     setTitle("");
     setDescription("");
     setEmoji("📸");
-    setColor("peach");
+    setColor("rose");
     setTakenOn("");
   }
 

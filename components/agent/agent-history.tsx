@@ -165,8 +165,10 @@ export function AgentHistory({
               )}
             >
               <span className="w-full truncate text-[0.9375rem] font-semibold text-ink">{title}</span>
-              <span className="text-xs text-ink-faint">
-                {when(chat.updatedAt)} · 메시지 {chat.count}개
+              {/* 가운뎃점으로 잇지 않고 간격으로 가른다(DESIGN.md §3 — 메타 줄 `A · B` 금지). */}
+              <span className="flex gap-x-2 text-xs text-ink-faint">
+                <span>{when(chat.updatedAt)}</span>
+                <span>메시지 {chat.count}개</span>
               </span>
             </button>
             {/* 폰에는 hover 가 없다 — 항상 보이게 두고 데스크톱에서만 숨긴다(AGENTS.md). */}

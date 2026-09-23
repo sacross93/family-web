@@ -49,39 +49,12 @@ import {
 } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { PlanDetail, PlanItem, PlanChecklistItem, Plan } from "@/lib/types";
+import { suggestionsFor, prepTitle, wantsTzNudge, FIRST_SUGGESTIONS } from "../plan-suggestions";
 
 const PLAN_TYPES = ["여행", "주말", "이벤트", "기타"] as const;
 const NO_DAY = "__none__";
 
-// 여행 계획에 흔히 필요한 추천 항목 (원터치 추가)
-const PREP_SUGGESTIONS = [
-  "항공권 예약",
-  "숙소 예약",
-  "여행자보험 가입",
-  "환전 / 트래블카드",
-  "유심 / 로밍",
-  "렌터카 예약",
-  "온라인 체크인",
-  "맛집 / 장소 찾기",
-  "반려동물 맡기기",
-  "택배 / 우편물 정지",
-];
-const PACKING_SUGGESTIONS = [
-  "여권 / 신분증",
-  "지갑 / 카드",
-  "현금",
-  "휴대폰 충전기",
-  "보조배터리",
-  "멀티 어댑터",
-  "세면도구",
-  "상비약",
-  "선크림",
-  "옷 / 속옷",
-  "우산 / 우비",
-  "카메라",
-  "이어폰",
-  "물티슈 / 마스크",
-];
+// 추천 항목(원터치 추가)은 계획 종류에 따라 다르다 — `app/plans/plan-suggestions.ts`.
 
 // 현지 시차 프리셋 (현지-한국, 분). DST 등으로 대략값이니 필요시 직접 조정.
 const TZ_PRESETS: { label: string; min: number }[] = [
@@ -544,8 +517,9 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
         )}
       </section>
 
-      {/* 해외 여행이면 시차 설정 안내 */}
-      {plan.tzOffsetMin === 0 && (
+      {/* 해외 여행이면 시차 설정 안내 — 여행 계획에만(주말 계획에 "해외 여행인가요?" 는 엉뚱하다).
+          시차는 어느 계획이든 `…` 메뉴의 "시차 설정" 에서 바꿀 수 있다. */}
+      {wantsTzNudge(plan) && (
         <button
           type="button"
           onClick={openTz}
@@ -565,11 +539,11 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
       {/* 준비 체크리스트 (여행 전 준비 · 준비물) */}
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <ChecklistSection
-          title="여행 전 준비"
+          title={prepTitle(plan.type)}
           emoji="✅"
           color="mint"
           items={plan.checklist.filter((c) => c.kind === "prep")}
-          suggestions={PREP_SUGGESTIONS}
+          suggestions={suggestionsFor(plan.type, "prep")}
           onAdd={(t) => addCheck("prep", t)}
           onToggle={toggleCheck}
           onRemove={removeCheck}
@@ -579,7 +553,7 @@ export function PlanDetailClient({ initialPlan }: { initialPlan: PlanDetail }) {
           emoji="🎒"
           color="peach"
           items={plan.checklist.filter((c) => c.kind === "packing")}
-          suggestions={PACKING_SUGGESTIONS}
+          suggestions={suggestionsFor(plan.type, "packing")}
           onAdd={(t) => addCheck("packing", t)}
           onToggle={toggleCheck}
           onRemove={removeCheck}
@@ -1051,6 +1025,13 @@ function ChecklistSection({
   const remaining = suggestions.filter(
     (s) => !items.some((i) => i.text === s)
   );
+  // 펼칠 추천: "더 보기" 를 눌렀으면 전부, 목록이 비었으면 처음 몇 개, 담은 게 있으면 없음.
+  const shownSuggestions = showSuggestions
+    ? remaining
+    : items.length === 0
+      ? remaining.slice(0, FIRST_SUGGESTIONS)
+      : [];
+  const hiddenCount = remaining.length - shownSuggestions.length;
 
   function add(t: string) {
     const v = t.trim();
@@ -1122,7 +1103,10 @@ function ChecklistSection({
                 className="flex h-10 items-center gap-1.5 self-start text-xs font-semibold text-ink-faint transition hover:text-ink lg:h-7"
               >
                 <Check className="h-3.5 w-3.5" />
-                챙긴 것 <span className="font-num">{done.length}</span>개
+                {/* 글자와 숫자는 한 덩어리로 — 버튼의 gap 이 사이마다 끼면 "챙긴 것  3  개" 가 된다. */}
+                <span>
+                  챙긴 것 <span className="font-num">{done.length}</span>개
+                </span>
                 <ChevronDown className={cn("h-3.5 w-3.5 transition", showDone && "rotate-180")} />
               </button>
               {showDone && (
@@ -1159,33 +1143,40 @@ function ChecklistSection({
       </div>
 
       {/* 추천 항목 — 목록이 비었을 때를 거드는 것이라, 이미 담은 게 있으면 접어 둔다.
-          칩 스물일곱 개가 늘 펼쳐져 있으면 정작 담은 것이 안 보인다. */}
+          비어 있을 때도 **처음 몇 개만** 펼친다: 두 칸의 칩이 스물네 개 한꺼번에 펼쳐져 있으면
+          정작 여정(일정 목록)이 폰에서 화면 몇 장 아래로 밀렸다. 나머지는 "더 보기" 뒤로. */}
       {remaining.length > 0 && (
-        items.length === 0 || showSuggestions ? (
-          <div className="flex flex-wrap gap-1.5">
-            {remaining.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onAdd(s)}
-                // 칩이 스물일곱 개 붙어 있는데 26px 이면 손가락이 옆 것을 짚는다.
-                // 폰에서만 40px, 데스크톱은 그대로.
-                className="flex h-10 items-center rounded-full border border-line bg-sunken px-3 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink lg:h-7"
-              >
-                + {s}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowSuggestions(true)}
-            className="flex h-10 items-center gap-1.5 self-start text-xs font-semibold text-ink-faint transition hover:text-ink lg:h-7"
-          >
-            추천 <span className="font-num">{remaining.length}</span>개 더 보기
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-        )
+        <>
+          {shownSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {shownSuggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onAdd(s)}
+                  // 칩이 여럿 붙어 있는데 26px 이면 손가락이 옆 것을 짚는다.
+                  // 폰에서만 40px, 데스크톱은 그대로.
+                  className="flex h-10 items-center rounded-full border border-line bg-sunken px-3 text-xs font-medium text-ink-soft transition hover:bg-primary-soft hover:text-primary-ink lg:h-7"
+                >
+                  + {s}
+                </button>
+              ))}
+            </div>
+          )}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSuggestions(true)}
+              className="flex h-10 items-center gap-1.5 self-start text-xs font-semibold text-ink-faint transition hover:text-ink lg:h-7"
+            >
+              {/* 글자와 숫자는 한 덩어리로 — gap 은 화살표와 글자 사이에만 둔다. */}
+              <span>
+                추천 <span className="font-num">{hiddenCount}</span>개 더 보기
+              </span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </>
       )}
       </>
       )}

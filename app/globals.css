@@ -52,8 +52,11 @@
   /* 조작 요소의 테두리 — 체크 동그라미, 입력칸, 외곽선 버튼.
      WCAG 1.4.11 은 "무엇이 조작 요소인지 알아볼 수 있는 시각 정보" 에 3:1 을 요구한다.
      `line-strong` 은 흰 판에서 1.53:1 이라 마트에서 누를 동그라미가 거의 안 보였다.
-     선(테두리)과 **조작 요소**는 다른 기준으로 잡는다. */
-  --color-control: #bb7a96; /* 흰 판 3.3 : 1 */
+     선(테두리)과 **조작 요소**는 다른 기준으로 잡는다.
+     예전 값 `#bb7a96` 은 대비는 됐지만 **화면에서 유일하게 탁한 색**이었다(회색 섞인 자주).
+     같은 대비(흰 판 3.3:1)에서 채도만 올린 맑은 로즈로 바꿨다 — 채도(C*) 29.7 → 50.6.
+     위험색(`danger`)과는 ΔE 40 떨어져 있어 헷갈리지 않는다. */
+  --color-control: #d9679a; /* 흰 판 3.3 : 1 */
 
   /* ── 브랜드 / 주요 액션 (밝은 로즈) ──
      **짙은 핑크를 쓰지 않는다.** 예전 `#be4571` 은 흰 글자를 얹으려고 어둡게 잡은 색인데,
@@ -240,17 +243,27 @@ body {
   color: var(--color-primary-ink);
 }
 
-/* 접근성: 키보드 포커스 링 (전역 기본값) */
-:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
+/* 접근성: 키보드 포커스 링 (전역 기본값)
+   **`@layer base` 안에 둔다.** 레이어 밖 규칙은 Tailwind 유틸리티(`utilities` 레이어)를
+   명시도와 상관없이 이긴다. 예전엔 여기가 레이어 밖이었고 `border-radius: 4px` 까지 들고 있어서,
+   자기 포커스 링을 따로 그리는 부품(`components/ui/field.tsx` 의 입력칸,
+   `components/markdown-editor.tsx`)이 붙인 `outline-none`·`rounded-*` 가 전부 졌다 —
+   입력칸을 누를 때마다 20px 알약이 4px 네모로 바뀌고, 제 링 위에 외곽선이 한 겹 더 얹혔다.
+   로그인은 페이지 전체가 `on-chrome` 이라 흰 카드 안 아이디 칸에 거의 검은 네모가 떴다.
+   이제 부품이 제 링을 그리면 그게 이기고, 아무것도 안 그리는 요소만 이 기본값을 받는다.
+   **모양(모서리)은 건드리지 않는다** — 외곽선은 요소의 둥근 모서리를 그대로 따라간다.
+   `lib/focus-rule.test.ts` 가 둘 다 붙잡고 있다. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 
-/* 틀(사이드바·상단바·탭바) 안에서는 로즈 링이 연한 로즈 바탕에 3.8:1 로 흐릿하다 —
-   같은 계열 위에 같은 계열을 그리는 꼴이다. 틀 위 글자색(9.7:1)으로 바꿔 또렷하게 만든다. */
-.on-chrome :focus-visible {
-  outline-color: var(--color-chrome-ink);
+  /* 틀(사이드바·상단바·탭바) 안에서는 로즈 링이 연한 로즈 바탕에 흐릿하다 —
+     같은 계열 위에 같은 계열을 그리는 꼴이다. 틀 위 글자색(9.7:1)으로 바꿔 또렷하게 만든다. */
+  .on-chrome :focus-visible {
+    outline-color: var(--color-chrome-ink);
+  }
 }
 
 /* 얇은 스크롤바 */

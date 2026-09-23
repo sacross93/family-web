@@ -45,7 +45,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
   const [title, setTitle] = useState("");
   const [type, setType] = useState<string>("여행");
   const [emoji, setEmoji] = useState("🗺️");
-  const [color, setColor] = useState<PaletteKey>("sky");
+  const [color, setColor] = useState<PaletteKey>("rose");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -55,7 +55,7 @@ export function PlansClient({ initialPlans }: { initialPlans: PlanWithCount[] })
     setTitle("");
     setType("여행");
     setEmoji("🗺️");
-    setColor("sky");
+    setColor("rose");
     setDescription("");
     setLocation("");
     setStartDate("");

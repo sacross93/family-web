@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       start,
       end,
       allDay,
-      color: body.color || "lavender",
+      color: body.color || "rose",
       location: body.location?.trim() || null,
     },
   });

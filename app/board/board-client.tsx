@@ -62,7 +62,7 @@ export function BoardClient({
   const [posts, setPosts] = useState(initialPosts);
   const [content, setContent] = useState("");
   const [emoji, setEmoji] = useState("💬");
-  const [color, setColor] = useState<PaletteKey>("butter");
+  const [color, setColor] = useState<PaletteKey>("rose");
   const [authorId, setAuthorId] = useState<string>(members[0]?.id ?? "");
   // 접힌 줄이 지금 누구로 붙는지 보여 준다.
   const composerAuthor = members.find((m) => m.id === authorId) ?? null;

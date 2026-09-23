@@ -66,7 +66,7 @@ function emptyForm(date: Date): FormState {
     allDay: false,
     start: "09:00",
     end: "",
-    color: "lavender",
+    color: "rose",
     location: "",
     description: "",
   };
@@ -367,13 +367,39 @@ export function CalendarClient({
                     {day.getDate()}
                   </span>
 
-                  <span className="flex min-w-0 flex-col gap-0.5">
+                  {/* 폰에서는 **점**, sm 부터 글자 칩.
+                      390px 에서 칸 폭이 50px 남짓이라 글자 칩은 "치과…"·"가족…" 처럼 두 글자만
+                      남아 읽을 수가 없었다 — 무엇인지 못 읽는 칩은 점보다 나을 게 없고 칸만 어지럽힌다.
+                      날짜를 누르면 그날 일정이 전부 이름째로 뜨고(하루 상세), 칸의 aria-label 이
+                      개수를 말하므로 점은 보이기만 하면 된다. */}
+                  {visible.length > 0 && (
+                    <span aria-hidden className="flex flex-wrap items-center gap-1 px-0.5 sm:hidden">
+                      {visible.map((ev) => (
+                        <span
+                          key={ev.id}
+                          className={cn(
+                            // 8px — 6px 이면 버터·라벤더 점이 흰 칸에서 흐려 안 보였다(390px 에서 확인).
+                            // 홈 장보기 점과 같은 크기다.
+                            "h-2 w-2 shrink-0 rounded-full",
+                            palette(ev.color).dot,
+                            !inMonth && "opacity-60"
+                          )}
+                        />
+                      ))}
+                      {extra > 0 && (
+                        <span className="text-[0.625rem] font-semibold leading-none text-ink-faint">
+                          +{extra}개
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
                     {visible.map((ev) => (
                       <span
                         key={ev.id}
                         title={ev.title}
                         className={cn(
-                          "block truncate rounded-sm px-1.5 py-0.5 text-[0.625rem] font-semibold leading-tight sm:text-[0.6875rem]",
+                          "block truncate rounded-sm px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-tight",
                           palette(ev.color).chip,
                           !inMonth && "opacity-60"
                         )}
@@ -438,9 +464,9 @@ export function CalendarClient({
                           {ev.title}
                         </span>
                         <span className="mt-0.5 block text-xs text-ink-soft">
-                          {kDateRelative(ev.start)}
-                          {" · "}
-                          {ev.allDay ? "종일" : kTime(ev.start)}
+                          {/* 날짜와 시각은 띄어 쓴다("오늘 종일", "9월 26일 (토) 오후 3:00").
+                              가운뎃점으로 잇는 메타 줄은 쓰지 않는다(DESIGN.md §3). */}
+                          {kDateRelative(ev.start)} {ev.allDay ? "종일" : kTime(ev.start)}
                         </span>
                       </span>
                     </button>

@@ -161,11 +161,17 @@ function EmptyRow({
   );
 }
 
+/** 카드가 하나면 한 열, 둘이면 두 열까지, 셋부터 세 열. 클래스는 통째로 적는다(Tailwind 가 스캔한다). */
+function gridCols(count: number): string {
+  if (count <= 1) return "grid-cols-1";
+  if (count === 2) return "grid-cols-1 sm:grid-cols-2";
+  return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+}
+
 function DashCard({
   href,
   emoji,
   title,
-  color,
   action,
   className,
   children,
@@ -173,20 +179,19 @@ function DashCard({
   href: string;
   emoji: string;
   title: string;
-  color: string;
   action?: string;
   className?: string;
   children: ReactNode;
 }) {
-  const pal = palette(color);
   return (
-    // 머리줄은 **그 칸의 파스텔로 꽉 채운다.** 바탕이 흰색이 된 뒤로 카드가 실선 한 줄로만
-    // 구분돼서, 홈이 흰 판 여러 장이 쌓인 모습이 됐다 — "흰 바탕에 분홍을 올린다" 는 원칙은
-    // 맞는데 본문에 올린 게 이모지 동그라미 하나뿐이었다.
-    // 색은 메뉴가 이미 쥐고 있는 분류색이다(장보기=민트·캘린더=피치·기념일=버터…).
-    // 장식이면서 **어느 칸인지 한눈에** 알려 준다. `flush` 로 여백을 없애고 줄마다 직접 준다.
+    // 머리줄은 **연분홍 한 가지로** 채운다(DESIGN.md "홈의 칸 머리줄").
+    // 9/21 에 머리줄을 칸마다 다른 분류색으로 칠했더니(흰 판만 쌓여 보이던 것을 풀려고)
+    // 홈 본문이 무지개가 됐다 — 히어로 아래 파스텔 면적 중 분홍이 19%, 아기 화면은 98%.
+    // 일곱 머리줄이 히어로와 겨루고, 그 색들은 화면 어디에도 다시 안 나와 정보도 아니었다.
+    // 흰 바탕 위의 판은 그대로 뜬다(흰 판과 ΔE 12.4 — 예전 파스텔과 같은 만큼).
+    // 어느 칸인지는 이모지와 제목이 말한다. `flush` 로 여백을 없애고 줄마다 직접 준다.
     <Card flush className={cn("flex flex-col overflow-hidden", className)}>
-      <div className={cn("flex items-center justify-between px-5 py-3", pal.soft)}>
+      <div className="flex items-center justify-between bg-primary-soft px-5 py-3">
         <div className="flex items-center gap-2.5">
           <span className="text-lg">{emoji}</span>
           <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
@@ -221,6 +226,17 @@ export default async function HomePage() {
   const site = await getSiteConfig();
 
   const doneCount = todayTodos.filter((t) => t.done).length;
+
+  // 아기 카드(한 줄 전체)를 뺀, 나란히 설 수 있는 카드 수.
+  const sideBySide = [
+    todayTodos.length > 0,
+    events.length > 0,
+    shopping.length > 0,
+    upcomingAnnis.length > 0,
+    photos.length > 0,
+    posts.length > 0,
+    !!plan,
+  ].filter(Boolean).length;
 
   // 비어 있는 칸은 카드 대신 아래 한 줄로 모인다.
   const empty: { href: string; emoji: string; label: string }[] = [];
@@ -305,8 +321,13 @@ export default async function HomePage() {
         />
       )}
 
-      {/* ── 대시보드 그리드 ── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* ── 대시보드 그리드 ──
+          열 수는 **나란히 설 카드 수**를 따른다. 늘 3열이면 카드가 하나뿐인 날(운영이 대개
+          그렇다 — 계획 하나)에 그 카드가 데스크톱 폭의 3분의 1에 붙고 나머지가 빈다.
+          아기 카드는 언제나 한 줄을 통째로 쓰므로 세지 않는다.
+          "한 줄 전체" 는 `col-span-full` 로 쓴다 — `col-span-2` 를 1열 격자에 두면
+          보이지 않는 열이 하나 더 생긴다. */}
+      <div className={cn("grid gap-4", gridCols(sideBySide))}>
         {/* 아기 (홈 표시가 켜진 경우만) */}
         {baby?.showOnHome &&
           (() => {
@@ -318,9 +339,8 @@ export default async function HomePage() {
                 href="/baby"
                 emoji={baby.emoji}
                 title={baby.nickname}
-                color={baby.color}
                 action="일기 보기"
-                className="sm:col-span-2 lg:col-span-3"
+                className="col-span-full"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
                   <div className="flex items-baseline gap-3">
@@ -368,7 +388,7 @@ export default async function HomePage() {
 
         {/* 오늘 할일 */}
         {todayTodos.length > 0 && (
-          <DashCard href="/todos" emoji="✅" title="오늘 할일" color="rose">
+          <DashCard href="/todos" emoji="✅" title="오늘 할일">
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-2 text-xs text-ink-soft">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
@@ -418,7 +438,6 @@ export default async function HomePage() {
             href="/calendar"
             emoji="📅"
             title="다가오는 일정"
-            color="peach"
           >
             <div className="flex flex-col gap-2.5">
               {events.map((e) => {
@@ -434,7 +453,7 @@ export default async function HomePage() {
                       </p>
                       <p className="font-num text-xs text-ink-faint">
                         {kDateShort(e.start)}
-                        {!e.allDay && ` · ${kTime(e.start)}`}
+                        {!e.allDay && ` ${kTime(e.start)}`}
                       </p>
                     </div>
                   </div>
@@ -450,7 +469,6 @@ export default async function HomePage() {
             href="/shopping"
             emoji="🛒"
             title="장보기"
-            color="mint"
             action={`${shopping.length}개 남음`}
           >
             <div className="flex flex-col gap-2">
@@ -480,7 +498,6 @@ export default async function HomePage() {
             href="/anniversaries"
             emoji="🎉"
             title="다가오는 기념일"
-            color="butter"
           >
             <div className="flex flex-col gap-2.5">
               {upcomingAnnis.map((a) => {
@@ -522,8 +539,7 @@ export default async function HomePage() {
             href="/albums"
             emoji="📸"
             title="최근 사진"
-            color="sky"
-            className="sm:col-span-2 lg:col-span-1"
+            className="sm:col-span-full lg:col-span-1"
           >
             <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6 lg:grid-cols-3">
               {photos.map((p) => (
@@ -549,8 +565,7 @@ export default async function HomePage() {
             href="/board"
             emoji="💬"
             title="가족 게시판"
-            color="lavender"
-            className="sm:col-span-2 lg:col-span-1"
+            className="sm:col-span-full lg:col-span-1"
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {posts.map((p) => {
@@ -580,7 +595,7 @@ export default async function HomePage() {
 
         {/* 다가오는 계획 */}
         {plan && (
-          <DashCard href="/plans" emoji="🗺️" title="다가오는 계획" color="mint">
+          <DashCard href="/plans" emoji="🗺️" title="다가오는 계획">
             <Link href={`/plans/${plan.id}`} className="block">
               <div
                 className={cn(

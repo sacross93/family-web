@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       title: body.title.trim(),
       type: body.type || "여행",
       emoji: body.emoji?.trim() || "🗺️",
-      color: body.color || "sky",
+      color: body.color || "rose",
       description: body.description?.trim() || null,
       location: body.location?.trim() || null,
       startDate: body.startDate ? new Date(body.startDate) : null,

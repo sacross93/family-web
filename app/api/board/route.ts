@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     data: {
       content: body.content.trim(),
       emoji: body.emoji?.trim() || "💬",
-      color: body.color || "butter",
+      color: body.color || "rose",
       pinned: typeof body.pinned === "boolean" ? body.pinned : false,
       authorId: body.authorId || null,
     },
