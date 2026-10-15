@@ -29,7 +29,7 @@ model FamilyMember {
   boardPosts    BoardPost[]
   shoppingItems ShoppingItem[]
   anniversaries Anniversary[]
-  babyEntries   BabyEntry[]
+  journeyEntries JourneyEntry[]
 
   // 나중에 Google 로그인 시 연결 (선택)
   userId String? @unique
@@ -343,66 +343,88 @@ model Decoration {
 }
 
 // ─────────────────────────────────────────────
-// 아기 — 임신 중엔 태명+예정일, 출생 후엔 출생일을 채워 성장 일기로 이어감.
-// UI는 아기 1명(createdAt 최신)만 다룬다.
+// 아기 페이지 (/baby) — 준비부터 출산까지 (스펙 2026-10-16-baby-journey-design.md)
+// 기록은 **페이지의 것**이고 임신은 그 아래 0..n. 진행 중인 임신(endedAt 없음)에 쓴 일기·체크리스트에
+// 서버가 pregnancyId 도장을 찍는다. "준비 단계로 · 지우기" = 그 임신 행 삭제 → 도장 찍힌 것만 cascade.
+// 운영 스키마는 prisma/ensure.sql(CREATE 만)로 나가므로 옛 Baby* 표를 고치지 않고 새 표를 만들었다.
 // ─────────────────────────────────────────────
-model Baby {
-  id         String    @id @default(cuid())
-  nickname   String // 태명 (예: "콩이")
-  emoji      String    @default("🌱")
-  color      String    @default("rose") // 팔레트 키
-  dueDate    DateTime // 출산 예정일
-  birthDate  DateTime? // 출생일 (출생 후)
-  showOnHome Boolean   @default(false) // 홈 대시보드 카드 노출
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
 
-  entries   BabyEntry[]
-  checklist BabyChecklistItem[]
-  links     BabyLink[]
+/// 임신 한 번. endedAt 이 비어 있으면 진행 중(최대 1개 — POST /api/pregnancy 가 지킨다).
+model Pregnancy {
+  id        String    @id @default(cuid())
+  nickname  String    @default("우리 아기") // 태명. 아직 없으면 기본값
+  emoji     String    @default("🌱")
+  color     String    @default("rose") // 팔레트 키
+  dueDate   DateTime // 출산 예정일
+  birthDate DateTime? // 출생일 (출생 후)
+  endedAt   DateTime? // "준비 단계로 · 남기기" 를 고른 때
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  entries   JourneyEntry[]
+  checklist JourneyChecklistItem[]
+
+  @@index([endedAt])
 }
 
-// 아기 기록 — kind: "diary"(일상) | "checkup"(검진) | "letter"(편지)
-// 검진 기록의 date 가 미래면 "다음 검진"으로 히어로에 표시.
-model BabyEntry {
-  id        String   @id @default(cuid())
-  babyId    String
-  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
-  date      DateTime // 기록 날짜 (하루 단위)
-  kind      String   @default("diary")
-  mood      String? // 컨디션 이모지 (일상 기록용)
-  content   String // 마크다운
-  authorId  String?
-  author    FamilyMember? @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// 일기 — kind: "diary"(일상) | "checkup"(병원) | "letter"(편지).
+/// pregnancyId = 쓸 때 진행 중이던 임신(서버가 찍는다). 준비 때 쓴 것은 null.
+model JourneyEntry {
+  id          String        @id @default(cuid())
+  date        DateTime // 기록 날짜 (하루 단위)
+  kind        String        @default("diary")
+  mood        String? // 컨디션 이모지
+  content     String // 마크다운
+  authorId    String?
+  author      FamilyMember? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  pregnancyId String?
+  pregnancy   Pregnancy?    @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  @@index([babyId, date])
+  @@index([date])
+  @@index([pregnancyId])
 }
 
-model BabyChecklistItem {
-  id        String   @id @default(cuid())
-  babyId    String
-  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
-  text      String
-  done      Boolean  @default(false)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+/// 체크리스트 — pregnancyId null = 준비 체크리스트, 값 = 그 임신의 체크리스트.
+model JourneyChecklistItem {
+  id          String     @id @default(cuid())
+  text        String
+  done        Boolean    @default(false)
+  sortOrder   Int        @default(0)
+  pregnancyId String?
+  pregnancy   Pregnancy? @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
 
-  @@index([babyId])
+  @@index([pregnancyId])
 }
 
-// 아기 관련 참고 사이트 — url + 사용자가 쓴 한 줄 설명(title). title이 비면 도메인으로 표시.
-model BabyLink {
+/// 참고 사이트 — 단계와 무관하게 페이지의 것. title 이 비면 도메인으로 표시.
+model JourneyLink {
   id        String   @id @default(cuid())
-  babyId    String
-  baby      Baby     @relation(fields: [babyId], references: [id], onDelete: Cascade)
   url       String
   title     String   @default("")
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+}
 
-  @@index([babyId])
+/// 주기 기록 — 하루짜리 사건을 덧붙이기만 한다(포동이는 추가 전용이라 "끝난 날" 도 따로 적을 수 있어야 한다).
+/// kind: periodStart | periodEnd | ovulationTest.  result: ovulationTest 일 때만 negative | faint | positive
+model CycleEvent {
+  id        String   @id @default(cuid())
+  date      DateTime
+  kind      String
+  result    String?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}
+
+/// 아기 페이지 설정(싱글턴 id="main"). 단계와 무관한 홈 표시 스위치.
+model JourneySettings {
+  id         String   @id @default("main")
+  showOnHome Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────

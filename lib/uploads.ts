@@ -130,7 +130,7 @@ export async function sweepUploads(urls: (string | null | undefined)[]): Promise
         const [inBoard, inEntry, inPlan, inItem, asPhoto, asCover, asDeco, asSite] =
           await Promise.all([
             prisma.boardPost.count({ where: { content: { contains: url } } }),
-            prisma.babyEntry.count({ where: { content: { contains: url } } }),
+            prisma.journeyEntry.count({ where: { content: { contains: url } } }),
             prisma.plan.count({
               where: { OR: [{ description: { contains: url } }, { memo: { contains: url } }] },
             }),

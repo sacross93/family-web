@@ -12,10 +12,11 @@ import type {
   Anniversary,
   BoardPost,
   ShoppingItem,
-  Baby,
-  BabyEntry,
-  BabyChecklistItem,
-  BabyLink,
+  Pregnancy,
+  JourneyEntry,
+  JourneyChecklistItem,
+  JourneyLink,
+  CycleEvent,
 } from "@prisma/client";
 
 export type {
@@ -30,10 +31,11 @@ export type {
   Anniversary,
   BoardPost,
   ShoppingItem,
-  Baby,
-  BabyEntry,
-  BabyChecklistItem,
-  BabyLink,
+  Pregnancy,
+  JourneyEntry,
+  JourneyChecklistItem,
+  JourneyLink,
+  CycleEvent,
 };
 
 export type AlbumWithCount = Album & { _count: { photos: number } };
@@ -49,9 +51,14 @@ export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null 
 export type BoardPostWithAuthor = BoardPost & { author: FamilyMember | null };
 export type ShoppingItemWithMember = ShoppingItem & { addedBy: FamilyMember | null };
 
-export type BabyEntryWithAuthor = BabyEntry & { author: FamilyMember | null };
-export type BabyDetail = Baby & {
-  entries: BabyEntryWithAuthor[];
-  checklist: BabyChecklistItem[];
-  links: BabyLink[];
-};
+export type JourneyEntryWithAuthor = JourneyEntry & { author: FamilyMember | null };
+
+/** 아기 페이지가 서버에서 받는 것. 체크리스트는 지금 단계 것만(준비 = pregnancyId null). */
+export interface JourneyPageData {
+  showOnHome: boolean;
+  active: Pregnancy | null;
+  entries: JourneyEntryWithAuthor[];
+  checklist: JourneyChecklistItem[];
+  links: JourneyLink[];
+  cycleEvents: CycleEvent[];
+}

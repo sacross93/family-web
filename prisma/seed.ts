@@ -21,9 +21,12 @@ function addDays(base: Date, days: number) {
 async function main() {
   console.log("🌱 기존 데이터 정리...");
   // FK 순서 고려하여 삭제
-  await prisma.babyChecklistItem.deleteMany();
-  await prisma.babyEntry.deleteMany();
-  await prisma.baby.deleteMany();
+  await prisma.journeyChecklistItem.deleteMany();
+  await prisma.journeyEntry.deleteMany();
+  await prisma.journeyLink.deleteMany();
+  await prisma.cycleEvent.deleteMany();
+  await prisma.pregnancy.deleteMany();
+  await prisma.journeySettings.deleteMany();
   await prisma.photo.deleteMany();
   await prisma.album.deleteMany();
   await prisma.planChecklistItem.deleteMany();
@@ -262,47 +265,28 @@ async function main() {
     ],
   });
 
-  console.log("🌱 아기...");
-  const baby = await prisma.baby.create({
-    data: {
-      nickname: "콩이",
-      emoji: "🌱",
-      color: "rose",
-      dueDate: addDays(today(), 245), // 오늘 기준 5주 0일
-      showOnHome: false,
-    },
-  });
-  await prisma.babyEntry.createMany({
+  console.log("🌱 아기 준비...");
+  // 준비 단계 견본: 주기 두 번(28일 간격) + 테스트기 + 일기 둘 + 다가오는 병원 하나.
+  await prisma.cycleEvent.createMany({
     data: [
-      {
-        babyId: baby.id,
-        date: addDays(today(), -2),
-        kind: "diary",
-        mood: "🤢",
-        content: "아침에 입덧이 좀 있었어요. 크래커가 도와줬어요 🍘",
-        authorId: eomma.id,
-      },
-      {
-        babyId: baby.id,
-        date: addDays(today(), -2),
-        kind: "letter",
-        content: "콩아, 엄마가 오늘 조금 힘들었대. 아빠가 미역국 끓였어. 건강하게 자라줘 💌",
-        authorId: appa.id,
-      },
-      {
-        babyId: baby.id,
-        date: addDays(today(), 12),
-        kind: "checkup",
-        content: "다음 병원 방문. 초음파 예정 🩺",
-        authorId: eomma.id,
-      },
+      { date: addDays(today(), -40), kind: "periodStart" },
+      { date: addDays(today(), -36), kind: "periodEnd" },
+      { date: addDays(today(), -12), kind: "periodStart" },
+      { date: addDays(today(), -8), kind: "periodEnd" },
+      { date: addDays(today(), -1), kind: "ovulationTest", result: "faint" },
     ],
   });
-  await prisma.babyChecklistItem.createMany({
+  await prisma.journeyEntry.createMany({
     data: [
-      { babyId: baby.id, text: "산모수첩 챙기기", done: true, sortOrder: 0 },
-      { babyId: baby.id, text: "다닐 병원 정하기", sortOrder: 1 },
-      { babyId: baby.id, text: "태명 정하기 🌱", done: true, sortOrder: 2 },
+      { date: addDays(today(), -3), kind: "diary", mood: "🙂", content: "같이 산책하면서 이야기 많이 했어요 🌿", authorId: eomma.id },
+      { date: addDays(today(), -3), kind: "letter", content: "언젠가 만날 우리 아기에게 💌", authorId: appa.id },
+      { date: addDays(today(), 9), kind: "checkup", content: "병원 상담 예약 🩺", authorId: eomma.id },
+    ],
+  });
+  await prisma.journeyChecklistItem.createMany({
+    data: [
+      { text: "다닐 병원 알아보기", sortOrder: 0 },
+      { text: "함께 이야기 나누기", done: true, sortOrder: 1 },
     ],
   });
 
