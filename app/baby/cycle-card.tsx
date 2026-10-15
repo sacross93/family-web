@@ -123,11 +123,17 @@ function CycleBody({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {prediction && (
-        <p className="font-num text-sm text-ink-soft">
-          평균 주기 {prediction.avgCycle}일 · 생리 {prediction.avgPeriod}일
-        </p>
-      )}
+      {/* 기본값(28일·5일)을 기록에서 낸 평균처럼 보이게 쓰지 않는다 — 숫자는 기록으로 낸 것만.
+          주기가 기본값일 때는 이 한 줄을 그 설명에 쓴다(생리 일수는 아래 기간 줄마다 보인다). */}
+      {prediction &&
+        (prediction.basis === "records" ? (
+          <p className="font-num text-sm text-ink-soft">
+            평균 주기 {prediction.avgCycle}일
+            {prediction.periodBasis === "records" && ` · 생리 ${prediction.avgPeriod}일`}
+          </p>
+        ) : (
+          <p className="text-sm text-ink-soft">평균 주기는 기록이 두 번 쌓이면 계산돼요</p>
+        ))}
 
       {rows.length > 0 && (
         <ul className="flex min-w-0 flex-col">

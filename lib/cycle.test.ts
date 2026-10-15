@@ -86,4 +86,58 @@ describe("predictCycle", () => {
   it("오늘 시작했으면 1일째", () => {
     expect(predictCycle([start("2026-10-01")], d("2026-10-01"))!.cycleDay).toBe(1);
   });
+  it("생리 길이를 기록으로 냈는지 기본값인지 알린다(periodBasis)", () => {
+    expect(predictCycle([start("2026-10-01")], d("2026-10-02"))!.periodBasis).toBe("default");
+    expect(predictCycle([start("2026-10-01"), end("2026-10-05")], d("2026-10-06"))!.periodBasis).toBe("records");
+  });
+});
+
+// 임신이 끝나 준비 단계로 돌아오면 그 전 생리 시작이 마지막 기록으로 남는다 — 그걸 기준으로 삼으면
+// 히어로가 "21일 지남" 을 날마다 키운다. `since`(준비로 돌아온 날) 이전의 시작은 기준이 못 된다.
+describe("predictCycle — since(준비 단계로 돌아온 날)", () => {
+  const before = [start("2026-08-01"), start("2026-08-29")];
+
+  it("since 뒤에 시작 기록이 없으면 null — 임신 전 생리를 기준으로 '지남' 을 세지 않는다", () => {
+    // since 가 없으면 8/29 기준 예정 9/26 → 10/1 에는 "5일 지남" 이 된다(고치기 전 모습).
+    expect(predictCycle(before, d("2026-10-01"))!.lateDays).toBe(5);
+    expect(predictCycle(before, d("2026-10-01"), d("2026-09-10"))).toBeNull();
+  });
+
+  it("since 뒤의 시작이 기준이고, 평균은 since 앞의 간격도 쓴다", () => {
+    // 6/1 → 6/29(28) → 7/29(30) · 임신 · 9/20 준비로 · 10/1 시작(7/29 와 64일 → 15~60 밖이라 빠진다)
+    const events = [start("2026-06-01"), start("2026-06-29"), start("2026-07-29"), start("2026-10-01")];
+    const p = predictCycle(events, d("2026-10-05"), d("2026-09-20"))!;
+    expect(ymd(p.lastStart)).toBe("2026-10-01");
+    expect(p.basis).toBe("records");
+    expect(p.avgCycle).toBe(29);
+    expect(p.cycleDay).toBe(5);
+    expect(p.lateDays).toBe(0);
+  });
+
+  it("since 와 같은 날 시작한 것은 기준이 된다", () => {
+    const p = predictCycle([...before, start("2026-09-10")], d("2026-09-12"), d("2026-09-10"))!;
+    expect(ymd(p.lastStart)).toBe("2026-09-10");
+  });
+
+  it("since 는 Date 로도 문자열로도 받는다", () => {
+    const events = [...before, start("2026-09-20")];
+    const asDate = predictCycle(events, d("2026-10-01"), d("2026-09-10"));
+    const asString = predictCycle(events, d("2026-10-01"), d("2026-09-10").toISOString());
+    expect(asDate).not.toBeNull();
+    expect(asString).toEqual(asDate);
+    expect(predictCycle(before, d("2026-10-01"), d("2026-09-10").toISOString())).toBeNull();
+  });
+
+  it("since 가 null·undefined 면 예전과 같다", () => {
+    expect(predictCycle(before, d("2026-10-01"), null)).toEqual(predictCycle(before, d("2026-10-01")));
+    expect(predictCycle(before, d("2026-10-01"), undefined)).toEqual(predictCycle(before, d("2026-10-01")));
+  });
+});
+
+// 출생 뒤 준비로 돌아왔거나 오래 안 적었으면 마지막 시작이 한참 전이다 — "90일 지남" 은 예측이 아니다.
+describe("predictCycle — 60일 넘게 새 시작이 없으면 예측하지 않는다", () => {
+  it("60일째까지는 예측, 61일째부터 null", () => {
+    expect(predictCycle([start("2026-08-01")], d("2026-09-29"))!.cycleDay).toBe(60);
+    expect(predictCycle([start("2026-08-01")], d("2026-09-30"))).toBeNull();
+  });
 });

@@ -67,6 +67,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 스펙 `docs/superpowers/specs/2026-10-16-baby-journey-design.md`. 기록(`JourneyEntry`·`JourneyChecklistItem`·`JourneyLink`·`CycleEvent`)은 **페이지의 것**, 임신(`Pregnancy`)은 그 아래 0..n. 진행 중 = `endedAt` 없음(최대 1개, `POST /api/pregnancy` 가 409 로 지킨다).
 - **도장은 서버가 찍는다**: 진행 중인 임신이 있을 때 만든 일기·체크리스트에 `pregnancyId`. "준비 단계로 · 지우기" 가 지울 범위가 이 값이라 클라이언트 값을 받지 않는다. 단계는 `stageOf()` 로 계산(저장 안 함).
 - 서버 조회는 `lib/journey.ts` 의 `journeyState()` 한 곳(홈·달력·포동이). 예측은 `lib/cycle.ts`(vitest).
+- **예측에는 `cycleSince` 를 꼭 넘긴다** — `predictCycle(events, today, cycleSince)`. 준비로 돌아온 날(`JourneySettings.cycleSince`, `/api/pregnancy/[id]/end` 가 찍는다)이고, 그 앞의 시작(곧 임신 전 생리)은 기준이 못 된다. 빼먹으면 돌아온 직후 히어로가 "21일 지남" 을 날마다 키운다. 새 화면은 직접 부르지 말고 `journeyState().prediction` 을 쓸 것. 남은 날 글자는 `prepCountdown`(journey-core) 하나에서.
 - 옛 `Baby`·`BabyEntry`·`BabyChecklistItem`·`BabyLink` 표는 **쓰지 않는다**(운영에 남아 있을 수 있다 — DEPLOY.md). `ensure.sql` 이 ALTER 를 못 해서 새 표로 옮겼다.
 - **의료 문구 원칙과 그 예외 하나**: 의료 시기·국가 제도 문구를 UI 에 넣지 않는다. **예외는 주기 계산 날짜(다음 생리 예정·배란 예정·가임기)뿐** — 날짜와 "추정" 표시만, **권하는 문장 금지.** 준비 체크리스트에 기본 항목을 넣지 않는 것도 같은 이유다.
 - 화면 문구는 임신이 끝난 이유를 암시하지 않는다(두 리셋: "준비 단계로" = 그 임신만, "처음부터 다시 시작" = 전부).

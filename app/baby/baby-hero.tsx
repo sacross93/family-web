@@ -11,23 +11,23 @@ import {
   dday,
   kDate,
   kDateShort,
-  startOfDay,
 } from "@/lib/date";
+// "use client" 파일은 journey-core 에서 — lib/journey.ts 는 prisma 를 가져와 브라우저 묶음에 섞인다.
+import { findNextCheckup } from "@/lib/journey-core";
 import type { Pregnancy, JourneyEntryWithAuthor } from "@/lib/types";
 
-/** 오늘 이후(오늘 포함) 가장 가까운 병원 기록. 준비·임신 두 히어로가 같이 쓴다. */
-export function findNextCheckup<T extends { kind: string; date: Date | string }>(entries: T[]): T | null {
-  const today = startOfDay(new Date()).getTime();
-  return (
-    entries
-      .filter((e) => e.kind === "checkup" && startOfDay(new Date(e.date)).getTime() >= today)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] ?? null
-  );
-}
-
-/** 히어로 맨 아래 "다음 진료" 한 줄(미래 병원 기록이 있을 때만). 준비·임신 두 히어로가 같은 모양으로 쓴다. */
-export function NextVisitLine({ entries }: { entries: { kind: string; date: Date | string }[] }) {
-  const next = findNextCheckup(entries);
+/**
+ * 히어로 맨 아래 "다음 진료" 한 줄(미래 병원 기록이 있을 때만). 준비·임신 두 히어로가 같은 모양으로 쓴다.
+ * `activeId` = 진행 중인 임신(준비 단계는 null) — 끝난 임신 때 잡아 둔 진료는 건너뛴다(`findNextCheckup`).
+ */
+export function NextVisitLine({
+  entries,
+  activeId,
+}: {
+  entries: { kind: string; date: Date | string; pregnancyId?: string | null }[];
+  activeId: string | null;
+}) {
+  const next = findNextCheckup(entries, activeId);
   if (!next) return null;
   return (
     <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
@@ -144,7 +144,7 @@ export function BabyHero({
           </div>
         )}
 
-        <NextVisitLine entries={entries} />
+        <NextVisitLine entries={entries} activeId={pregnancy.id} />
       </div>
     </section>
   );

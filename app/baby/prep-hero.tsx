@@ -6,6 +6,8 @@ import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDate, kDateShort, differenceInCalendarDays } from "@/lib/date";
 import type { CyclePrediction } from "@/lib/cycle";
+// "use client" 파일은 journey-core 에서 — lib/journey.ts 는 prisma 를 가져와 브라우저 묶음에 섞인다.
+import { prepCountdown } from "@/lib/journey-core";
 import type { JourneyEntryWithAuthor } from "@/lib/types";
 import { NextVisitLine } from "./baby-hero";
 
@@ -65,7 +67,8 @@ export function PrepHero({
           </div>
         )}
 
-        <NextVisitLine entries={entries} />
+        {/* 준비 단계라 진행 중인 임신이 없다 — 끝난 임신 때 잡아 둔 진료는 "다음 진료" 가 아니다. */}
+        <NextVisitLine entries={entries} activeId={null} />
 
         {/* outline(흰 채움) — 이 로즈 판 위에서 soft(primary-soft)는 ΔE 9.1 로 채움이 거의 안 보였다.
             같은 판의 "생리 시작 적기" 와 같은 모양이다. */}
@@ -79,7 +82,8 @@ export function PrepHero({
 
 function Prediction({ p }: { p: CyclePrediction }) {
   const late = p.lateDays > 0;
-  const big = late ? `${p.lateDays}일 지남` : p.daysUntilNext === 0 ? "오늘" : `D-${p.daysUntilNext}`;
+  // 큰 숫자는 홈 카드·초대 줄·포동이와 같은 글자(prepCountdown)다. 아래 날짜 줄은 이 자리만의 말이다.
+  const big = prepCountdown(p).value;
   const pct = Math.round(clampPct((p.cycleDay / p.avgCycle) * 100));
   // 가임기 띠: 이번 주기(시작 ~ 평균 주기) 위의 자리. 막대 밖으로 나가는 부분은 자른다.
   const left = clampPct((differenceInCalendarDays(p.fertileStart, p.lastStart) / p.avgCycle) * 100);

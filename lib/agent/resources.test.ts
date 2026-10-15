@@ -5,7 +5,7 @@ import { resolvePath } from "@/lib/agent/registry";
 import { executeTool } from "@/lib/agent/tools";
 import { CYCLE_KINDS, TEST_RESULTS, predictCycle } from "@/lib/cycle";
 import { kDateShortYear } from "@/lib/date";
-import type { JourneyState } from "@/lib/journey-core";
+import { prepCountdown, type JourneyState } from "@/lib/journey-core";
 
 // 실제 리소스를 그대로 돌리되 DB 는 타지 않는다. 몇 행을 돌려줄지는 테스트가 정한다.
 // (행 수를 상한에 딱 맞추면 "더 있음" 표시가 붙어야 하고, 하나 모자라면 붙으면 안 된다.)
@@ -298,9 +298,23 @@ describe("아기 목차 — 단계마다 한 줄", () => {
     const [entry, ...rest] = await find("baby").catalog();
     expect(rest).toEqual([]);
     expect(entry.title).toBe("아기 준비");
-    expect(entry.hint).toContain(`다음 생리 예정 ${kDateShortYear(p.nextStart)}(추정)`);
+    // 남은 날 글자는 홈 카드·초대 줄과 같은 하나(prepCountdown)에서 온다.
+    expect(entry.hint).toContain(prepCountdown(p).line);
+    expect(entry.hint).toContain(`예정일 ${kDateShortYear(p.nextStart)}(추정)`);
     expect(entry.hint).toContain(`가임기 ${kDateShortYear(p.fertileStart)}~${kDateShortYear(p.fertileEnd)}(추정)`);
-    expect(entry.hint!.match(/\(추정\)/g)).toHaveLength(2);
+    // 날짜·남은 날 하나하나에 추정이 붙는다(셋 다)
+    expect(entry.hint!.match(/추정/g)).toHaveLength(3);
+  });
+
+  it("예정일이 지났으면 지난 날짜를 '다음' 이라 하지 않고 가임기도 말하지 않는다", async () => {
+    const late = predictCycle(PREP_EVENTS, new Date(2026, 10, 20))!; // 마지막 시작 10/14 → 예정 11/11
+    expect(late.lateDays).toBeGreaterThan(0);
+    db.journey = journey({ stage: "prep", prediction: late, hasAnything: true });
+    const [entry] = await find("baby").catalog();
+    expect(entry.hint).toContain(`예정일에서 ${late.lateDays}일 지남 · 추정`);
+    expect(entry.hint).toContain(`예정일 ${kDateShortYear(late.nextStart)}(추정)`);
+    expect(entry.hint).not.toContain("다음 생리 예정");
+    expect(entry.hint).not.toContain("가임기");
   });
 
   it("주기 기록이 없으면 예측을 지어내지 않는다", async () => {
@@ -430,7 +444,7 @@ describe("주기 기록(cycle)", () => {
     expect(entries).toHaveLength(3);
     expect(entries[0].title).toMatch(/^생리 시작 /);
     expect(entries[1].title).toMatch(/^생리 끝 /);
-    expect(entries[2].title).toMatch(/^테스트기 /);
+    expect(entries[2].title).toMatch(/^배란 테스트기 /);
     expect(entries.map((e) => e.hint)).toEqual([undefined, undefined, "희미"]);
     for (const e of entries) {
       expect(e.id).toBeTruthy(); // 되읽기(confirmCreated)가 id 로 찾는다

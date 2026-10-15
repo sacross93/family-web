@@ -16,8 +16,8 @@ import {
 import { format } from "date-fns";
 import { kindMeta } from "@/app/baby/baby-meta";
 import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
-import { journeyState } from "@/lib/journey";
-import type { CyclePrediction } from "@/lib/cycle";
+// prepCountdown: 준비 단계 "다음 생리 예정" 글자. 아기 페이지 히어로·포동이 목차와 같은 하나다.
+import { journeyState, prepCountdown } from "@/lib/journey";
 import { getSiteConfig } from "@/lib/site";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -36,25 +36,6 @@ function firstLine(md: string): string {
     .map((l) => l.replace(/^[#>*\-\s]+/, "").trim())
     .find((l) => l.length > 0);
   return line ?? "사진을 남겼어요 📷";
-}
-
-/**
- * 준비 단계의 "다음 생리 예정" 한 줄. 초대 줄과 카드가 **이 하나에서** 글자를 받는다 —
- * 두 자리가 따로 만들면 언젠가 서로 다른 말을 한다.
- * 기록으로 낸 **추정**이라 늘 "추정" 을 붙이고, 날짜와 그 표시 말고는 아무 말도 하지 않는다.
- * 예정일이 지났으면 다음 달로 굴리지 않고 지난 날수만 말한다(`lib/cycle.ts` 와 같은 규칙).
- */
-function prepCountdown(p: CyclePrediction): {
-  label: string;
-  value: string;
-  line: string;
-} {
-  if (p.lateDays > 0) {
-    const value = `${p.lateDays}일 지남`;
-    return { label: "예정일에서", value, line: `예정일에서 ${value} · 추정` };
-  }
-  const value = p.daysUntilNext === 0 ? "오늘" : `D-${p.daysUntilNext}`;
-  return { label: "다음 생리 예정", value, line: `다음 생리 예정 ${value} · 추정` };
 }
 
 function greeting() {

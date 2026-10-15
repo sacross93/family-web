@@ -6,7 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import { kindMeta } from "@/app/baby/baby-meta";
 import { CYCLE_KIND_META, TEST_RESULT_META, type CycleKind, type TestResult } from "@/lib/cycle";
-import { journeyState } from "@/lib/journey";
+import { journeyState, prepCountdown } from "@/lib/journey";
 // 날짜는 `kDateShortYear` 로. 다른 해면 해를 밝힌다 — 포동이가 "내일" 을 2020년으로
 // 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
 import { dday, kDateShortYear, kTime, startOfDay } from "@/lib/date";
@@ -682,10 +682,21 @@ export const RESOURCES: AgentResource[] = [
         }];
       }
       // 준비 단계 — 예측은 반드시 "추정" 으로 말한다(모델이 사실처럼 옮기지 않게).
+      // 남은 날은 홈과 같은 글자(prepCountdown)로 — 예전엔 예정일이 지나도 "다음 생리 예정 (지난 날짜)" 에
+      // 이미 지난 가임기까지 앞날처럼 실었다. 날짜도 같이 준다: 모델은 "D-12" 에서 날짜를 잘 못 센다.
+      // 가임기는 예정일이 안 지났을 때만(아기 페이지 히어로·홈·달력과 같은 규칙).
       const p = s.prediction;
       return [{
         title: "아기 준비",
-        hint: p ? `다음 생리 예정 ${kDateShortYear(p.nextStart)}(추정) · 가임기 ${kDateShortYear(p.fertileStart)}~${kDateShortYear(p.fertileEnd)}(추정)` : "주기 기록 없음",
+        hint: p
+          ? [
+              prepCountdown(p).line,
+              `예정일 ${kDateShortYear(p.nextStart)}(추정)`,
+              p.lateDays === 0 && `가임기 ${kDateShortYear(p.fertileStart)}~${kDateShortYear(p.fertileEnd)}(추정)`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "주기 기록 없음",
       }];
     },
     // /baby 에는 id 가 없다 → open_page("/baby") 가 id 없이 부른다.

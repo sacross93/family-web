@@ -15,7 +15,8 @@ export const TEST_RESULTS: TestResult[] = ["negative", "faint", "positive"];
 export const CYCLE_KIND_META: Record<CycleKind, { label: string; emoji: string }> = {
   periodStart: { label: "생리 시작", emoji: "🌸" },
   periodEnd: { label: "생리 끝", emoji: "🌿" },
-  ovulationTest: { label: "테스트기", emoji: "🧪" },
+  // "테스트기" 만 쓰면 임신 테스트기로 읽힌다 — 버튼·창 제목·목록·포동이 목차가 모두 이 이름을 쓴다.
+  ovulationTest: { label: "배란 테스트기", emoji: "🧪" },
 };
 export const TEST_RESULT_META: Record<TestResult, { label: string; color: PaletteKey }> = {
   negative: { label: "음성", color: "sky" },
@@ -27,6 +28,7 @@ export const TEST_RESULT_META: Record<TestResult, { label: string; color: Palett
 export const DEFAULT_CYCLE = 28;
 export const DEFAULT_PERIOD = 5;
 // 이 밖의 간격은 빠뜨린 기록이나 잘못 적은 날로 본다 — 넣으면 평균이 90일로 튄다.
+// CYCLE_MAX 는 예측을 내는 한계이기도 하다(마지막 시작에서 이보다 오래면 null, predictCycle).
 const CYCLE_MIN = 15;
 const CYCLE_MAX = 60;
 const PERIOD_MAX = 14;
@@ -58,6 +60,8 @@ export interface CyclePrediction {
   avgPeriod: number;
   /** records = 기록으로 낸 평균, default = 기록이 모자라 기본 28일 */
   basis: "records" | "default";
+  /** 생리 길이도 같은 뜻 — default 면 기본 5일이다(끝난 날을 적은 기간이 없다) */
+  periodBasis: "records" | "default";
   nextStart: Date;
   /** 다음 예정일까지 남은 날. 지났으면 음수 */
   daysUntilNext: number;
@@ -92,12 +96,32 @@ export function periodsFrom(events: CycleEventLike[]): Period[] {
   });
 }
 
-/** 다음 예정일·배란 예정일·가임기(전부 추정). 오늘까지의 시작 기록이 없으면 null. */
-export function predictCycle(events: CycleEventLike[], today: Date = new Date()): CyclePrediction | null {
+/**
+ * 다음 예정일·배란 예정일·가임기(전부 추정). 아래면 null — 화면은 "생리 시작일을 적으면…" 으로 돌아간다.
+ * - 오늘까지의 시작 기록이 없다.
+ * - `since`(임신을 끝내고 준비 단계로 돌아온 날, `JourneySettings.cycleSince`) 이후의 시작이 없다.
+ *   주기 기록은 임신 동안에도 지우지 않으므로, 돌아온 직후의 마지막 시작은 **임신 전** 생리다.
+ *   그걸 기준으로 삼으면 히어로가 "21일 지남" 을 날마다 키운다. 그래서 since 앞의 시작은
+ *   기준(lastStart)이 못 된다. 다만 평균(주기·생리 길이)에는 그대로 쓴다 — 임신을 건너는 간격은
+ *   대개 60일을 넘어 CYCLE_MAX 가 거른다(아주 이른 때 끝났으면 60일 안쪽일 수 있다 — 그 한 번은 평균에 든다).
+ * - 마지막 시작이 60일(CYCLE_MAX)보다 오래됐다(아래).
+ */
+export function predictCycle(
+  events: CycleEventLike[],
+  today: Date = new Date(),
+  since?: Date | string | null
+): CyclePrediction | null {
   const t = dayOf(today);
   // 미래 날짜로 잘못 적은 시작은 뺀다 — 그걸 기준으로 삼으면 "주기 -20일째" 가 된다.
   const periods = periodsFrom(events).filter((p) => p.start.getTime() <= t.getTime());
   if (periods.length === 0) return null;
+  // 날짜순이라 마지막이 가장 최근 시작이다. 그것마저 since 앞이면 기준으로 삼을 시작이 없다.
+  const lastStart = periods[periods.length - 1].start;
+  if (since && lastStart.getTime() < dayOf(since).getTime()) return null;
+  const cycleDay = differenceInCalendarDays(t, lastStart) + 1;
+  // 60일 넘게 새 시작이 없으면 기록이 끊긴 것이다(출생 뒤 준비로 돌아왔거나 한동안 안 적었다).
+  // 거기서 예정일을 세면 "90일 지남" 이 커다랗게 뜬다 — 예측이 아니라 오래된 기록일 뿐이다.
+  if (cycleDay > CYCLE_MAX) return null;
 
   const gaps: number[] = [];
   for (let i = 1; i < periods.length; i++) {
@@ -114,17 +138,17 @@ export function predictCycle(events: CycleEventLike[], today: Date = new Date())
     .slice(-RECENT);
   const avgPeriod = lengths.length > 0 ? Math.round(mean(lengths)) : DEFAULT_PERIOD;
 
-  const lastStart = periods[periods.length - 1].start;
   const nextStart = addDays(lastStart, avgCycle);
   const daysUntilNext = differenceInCalendarDays(nextStart, t);
   const ovulation = addDays(nextStart, -LUTEAL_DAYS);
 
   return {
     lastStart,
-    cycleDay: differenceInCalendarDays(t, lastStart) + 1,
+    cycleDay,
     avgCycle,
     avgPeriod,
     basis,
+    periodBasis: lengths.length > 0 ? "records" : "default",
     nextStart,
     daysUntilNext,
     lateDays: Math.max(0, -daysUntilNext),

@@ -29,7 +29,15 @@ export default async function BabyPage() {
     // 새 단계의 데이터(특히 그 단계의 체크리스트)로 다시 붙는다.
     <BabyClient
       key={active?.id ?? "prep"}
-      initial={{ showOnHome: settings?.showOnHome ?? false, active, entries, checklist, links, cycleEvents }}
+      initial={{
+        showOnHome: settings?.showOnHome ?? false,
+        active,
+        entries,
+        checklist,
+        links,
+        cycleEvents,
+        cycleSince: settings?.cycleSince ?? null,
+      }}
       members={members}
     />
   );

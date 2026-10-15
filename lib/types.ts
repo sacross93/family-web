@@ -61,4 +61,6 @@ export interface JourneyPageData {
   checklist: JourneyChecklistItem[];
   links: JourneyLink[];
   cycleEvents: CycleEvent[];
+  /** 준비 단계로 돌아온 날(`JourneySettings.cycleSince`). 주기 예측이 그 앞의 시작을 기준으로 삼지 않게 */
+  cycleSince: Date | null;
 }

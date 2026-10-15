@@ -73,6 +73,9 @@ export function BabyClient({ initial, members }: { initial: JourneyPageData; mem
   const [links, setLinks] = useState<JourneyLink[]>(initial.links);
   const [cycleEvents, setCycleEvents] = useState<CycleEvent[]>(initial.cycleEvents);
   const [showOnHome, setShowOnHome] = useState(initial.showOnHome);
+  // 준비 단계로 돌아온 날. 임신을 끝내면 key 가 바뀌어 새 값으로 다시 붙는다 — 상태로 드는 것은
+  // "처음부터 다시 시작" 때문이다: 준비 단계에서 지우면 key 가 그대로라 서버가 지운 값이 여기 안 온다.
+  const [cycleSince, setCycleSince] = useState<Date | null>(initial.cycleSince);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
@@ -84,7 +87,9 @@ export function BabyClient({ initial, members }: { initial: JourneyPageData; mem
 
   const stage = stageOf(active);
   // 주기 예측은 준비 단계에서만 — 임신 중에 "다음 생리 예정" 을 계산할 이유가 없다.
-  const prediction = stage === "prep" ? predictCycle(cycleEvents) : null;
+  // cycleSince 앞의 시작(임신 전 생리)은 기준이 못 된다 — 서버(journeyState)와 같은 계산이다.
+  // 임신 시작 창의 "마지막 생리일" 도 이 값(prediction.lastStart)에서 오므로 같이 비워진다.
+  const prediction = stage === "prep" ? predictCycle(cycleEvents, undefined, cycleSince) : null;
   // 준비 단계엔 아기 색이 없다 — 새로 만드는 것은 로즈로 시작한다(DESIGN §2).
   const color = active?.color ?? "rose";
 
@@ -193,6 +198,7 @@ export function BabyClient({ initial, members }: { initial: JourneyPageData; mem
     setChecklist([]);
     setLinks([]);
     setCycleEvents([]);
+    setCycleSince(null);
     setShowOnHome(false);
     setFilter("all");
     setEntryModal(null);

@@ -21,7 +21,9 @@ export async function journeyState(today: Date = new Date()): Promise<JourneySta
       include: { author: true },
     }),
     prisma.journeyEntry.findMany({
-      where: { kind: "checkup", date: { gte: t } },
+      // 끝난(남기기 한) 임신 때 잡아 둔 진료는 빼고 — 준비로 돌아온 뒤 달력에 "병원" 으로 남으면 안 된다.
+      // 아기 페이지 히어로의 "다음 진료"(`findNextCheckup`)와 같은 규칙이다.
+      where: { kind: "checkup", date: { gte: t }, OR: [{ pregnancyId: null }, { pregnancy: { endedAt: null } }] },
       orderBy: { date: "asc" },
       take: 20,
     }),
@@ -32,7 +34,8 @@ export async function journeyState(today: Date = new Date()): Promise<JourneySta
     active,
     stage,
     cycleEvents,
-    prediction: stage === "prep" ? predictCycle(cycleEvents, today) : null,
+    // cycleSince: 준비 단계로 돌아온 날 — 그 앞의 시작(임신 전 생리)은 예측의 기준이 못 된다.
+    prediction: stage === "prep" ? predictCycle(cycleEvents, today, settings?.cycleSince) : null,
     latestEntry,
     upcomingHospital,
     hasAnything: Boolean(active || latestEntry || cycleEvents.length > 0),

@@ -93,9 +93,12 @@ CREATE TABLE IF NOT EXISTS "CycleEvent" (
 );
 CREATE INDEX IF NOT EXISTS "CycleEvent_date_idx" ON "CycleEvent"("date");
 
+-- "cycleSince" 는 이 표가 운영에 생기기 **전에** 더했다(2026-10-16) — 그래서 아직 CREATE 한 줄로 충분하다.
+-- 표가 이미 있는 DB(로컬)는 IF NOT EXISTS 라 이 열이 안 들어간다 → 거기는 `npm run db:push`.
 CREATE TABLE IF NOT EXISTS "JourneySettings" (
     "id" TEXT NOT NULL DEFAULT 'main',
     "showOnHome" BOOLEAN NOT NULL DEFAULT false,
+    "cycleSince" TIMESTAMP(3),
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "JourneySettings_pkey" PRIMARY KEY ("id")
