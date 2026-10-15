@@ -5,10 +5,14 @@ import { Plus, Trash2, ChevronDown } from "lucide-react";
 import { Card, Checkbox, Input, Button, IconButton, Tag } from "@/components/ui";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
-import type { BabyChecklistItem } from "@/lib/types";
+import type { JourneyChecklistItem } from "@/lib/types";
 
-/** 준비 체크리스트. 모바일은 기본 접힘(헤더 탭으로 펼침), lg 이상은 항상 펼침 */
+/**
+ * 지금 단계의 체크리스트. 모바일은 기본 접힘(헤더 탭으로 펼침), lg 이상은 항상 펼침.
+ * 단계마다 따로다 — 준비 체크리스트와 임신 체크리스트는 서로 섞이지 않는다(page.tsx 가 지금 것만 읽는다).
+ */
 export function BabyChecklist({
+  title,
   items,
   color,
   onAdd,
@@ -16,11 +20,13 @@ export function BabyChecklist({
   onToggle,
   onRemove,
 }: {
-  items: BabyChecklistItem[];
+  title: string;
+  items: JourneyChecklistItem[];
   color: string;
   onAdd: (text: string) => void;
-  onAddDefaults: () => void;
-  onToggle: (item: BabyChecklistItem) => void;
+  /** 없으면 "기본 항목 넣기" 를 숨긴다 — 준비 단계에는 기본 항목이 없다(무엇을 넣어도 의료 조언이 된다). */
+  onAddDefaults?: () => void;
+  onToggle: (item: JourneyChecklistItem) => void;
   onRemove: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -45,7 +51,7 @@ export function BabyChecklist({
         className="flex min-h-11 w-full items-center gap-2.5 text-left lg:min-h-0 lg:pointer-events-none"
       >
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-lg", pal.soft)}>✅</span>
-        <h3 className="font-display text-lg font-bold text-ink">준비 체크리스트</h3>
+        <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
         {items.length > 0 && (
           <Tag color={color} className="font-num ml-auto">
             {doneCount}/{items.length}
@@ -60,9 +66,11 @@ export function BabyChecklist({
         {items.length === 0 ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink-faint">준비할 것을 적어두면 하나씩 지워가는 재미가 있어요.</p>
-            <Button variant="soft" size="sm" onClick={onAddDefaults}>
-              기본 항목 넣기
-            </Button>
+            {onAddDefaults && (
+              <Button variant="soft" size="sm" onClick={onAddDefaults}>
+                기본 항목 넣기
+              </Button>
+            )}
           </div>
         ) : (
           <ul className="flex flex-col">

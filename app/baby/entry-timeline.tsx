@@ -6,7 +6,7 @@ import { MarkdownView } from "@/components/markdown-view";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDate, toDateInput, fromDateInput, pregnancyProgress, weekLabel } from "@/lib/date";
-import type { BabyEntryWithAuthor } from "@/lib/types";
+import type { JourneyEntryWithAuthor, Pregnancy } from "@/lib/types";
 import { ENTRY_KINDS, KIND_META, kindMeta, type EntryKind } from "./baby-meta";
 
 export type EntryFilter = "all" | EntryKind;
@@ -17,8 +17,8 @@ const FILTER_OPTIONS: { value: EntryFilter; label: string }[] = [
 ];
 
 /** 날짜(yyyy-MM-dd)별 묶음, 최신 날짜 먼저. 같은 날 안에서는 넘어온 순서 유지 */
-function groupByDate(entries: BabyEntryWithAuthor[]) {
-  const map = new Map<string, BabyEntryWithAuthor[]>();
+function groupByDate(entries: JourneyEntryWithAuthor[]) {
+  const map = new Map<string, JourneyEntryWithAuthor[]>();
   for (const e of entries) {
     const key = toDateInput(e.date);
     if (!map.has(key)) map.set(key, []);
@@ -31,19 +31,18 @@ export function EntryTimeline({
   entries,
   filter,
   onFilterChange,
-  dueDate,
-  birthDate,
+  active,
   onEdit,
   onDelete,
   onCreate,
 }: {
-  entries: BabyEntryWithAuthor[];
+  entries: JourneyEntryWithAuthor[];
   filter: EntryFilter;
   onFilterChange: (f: EntryFilter) => void;
-  dueDate: Date | string;
-  birthDate: Date | string | null;
-  onEdit: (entry: BabyEntryWithAuthor) => void;
-  onDelete: (entry: BabyEntryWithAuthor) => void;
+  /** 진행 중인 임신(없으면 준비 단계). 주차 꼬리표를 정한다. */
+  active: Pregnancy | null;
+  onEdit: (entry: JourneyEntryWithAuthor) => void;
+  onDelete: (entry: JourneyEntryWithAuthor) => void;
   onCreate: () => void;
 }) {
   const visible = filter === "all" ? entries : entries.filter((e) => e.kind === filter);
@@ -73,7 +72,7 @@ export function EntryTimeline({
         <EmptyState
           emoji="🌱"
           title="첫 기록을 남겨볼까요?"
-          description="오늘의 몸 상태, 병원 이야기, 아기에게 한마디. 무엇이든 좋아요."
+          description="오늘의 마음, 병원 이야기, 아기에게 한마디. 무엇이든 좋아요."
           action={<Button onClick={onCreate}>+ 기록 남기기</Button>}
         />
       ) : groups.length === 0 ? (
@@ -81,13 +80,16 @@ export function EntryTimeline({
       ) : (
         groups.map(([dateKey, items]) => {
           const day = fromDateInput(dateKey);
-          const showWeek = !birthDate;
+          // 주차는 **진행 중인 임신에 도장 찍힌 기록**이 있는 날에만 단다. 준비 때 쓴 일기나
+          // 끝난 임신의 일기에 "5주 3일" 을 붙이면 그때 있지도 않던 주차를 지어내는 셈이다.
+          // 출생 뒤에는 주차가 없다(지금의 `!birthDate` 를 잇는다).
+          const showWeek = !!active && !active.birthDate && items.some((e) => e.pregnancyId === active.id);
           return (
             <section key={dateKey} className="flex flex-col gap-3">
               <div className="flex items-baseline gap-2 px-1">
                 <h3 className="text-sm font-bold text-ink">{kDate(day)}</h3>
-                {showWeek && (
-                  <span className="font-num text-xs text-ink-faint">{weekLabel(pregnancyProgress(dueDate, day))}</span>
+                {showWeek && active && (
+                  <span className="font-num text-xs text-ink-faint">{weekLabel(pregnancyProgress(active.dueDate, day))}</span>
                 )}
               </div>
               {items.map((e) => {

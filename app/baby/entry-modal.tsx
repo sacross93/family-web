@@ -6,7 +6,7 @@ import { Modal, Button, Field, Input, Segmented, Avatar } from "@/components/ui"
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { cn } from "@/lib/utils";
 import { toDateInput, fromDateInput, kDate } from "@/lib/date";
-import type { BabyEntryWithAuthor, FamilyMember } from "@/lib/types";
+import type { JourneyEntryWithAuthor, FamilyMember } from "@/lib/types";
 import { ENTRY_KINDS, KIND_META, MOODS, AUTHOR_STORAGE_KEY, type EntryKind } from "./baby-meta";
 import { writeMe } from "@/lib/me";
 
@@ -39,7 +39,7 @@ export function EntryModal({
   onDelete,
 }: {
   members: FamilyMember[];
-  initial?: BabyEntryWithAuthor | null;
+  initial?: JourneyEntryWithAuthor | null;
   onClose: () => void;
   onSave: (payload: EntryPayload) => Promise<boolean>;
   onDelete?: () => void;

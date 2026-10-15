@@ -6,7 +6,7 @@ import { Card, Input, Button, IconButton, Tag } from "@/components/ui";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { displayDomain } from "@/lib/url";
-import type { BabyLink } from "@/lib/types";
+import type { JourneyLink } from "@/lib/types";
 
 /** 참고 사이트 모음. 한 줄 설명이 링크가 되고, 주소는 도메인만 보여줍니다.
  *  모바일은 기본 접힘(헤더 탭으로 펼침), lg 이상은 항상 펼침 */
@@ -17,7 +17,7 @@ export function BabyLinks({
   onEditTitle,
   onRemove,
 }: {
-  items: BabyLink[];
+  items: JourneyLink[];
   color: string;
   onAdd: (url: string, title: string) => void;
   onEditTitle: (id: string, title: string) => void;
@@ -41,13 +41,13 @@ export function BabyLinks({
     setAdding(false);
   }
 
-  function startEdit(item: BabyLink) {
+  function startEdit(item: JourneyLink) {
     cancelRef.current = false;
     setEditingId(item.id);
     setDraft(item.title);
   }
 
-  function commitEdit(item: BabyLink) {
+  function commitEdit(item: JourneyLink) {
     setEditingId(null);
     if (cancelRef.current) {
       cancelRef.current = false;

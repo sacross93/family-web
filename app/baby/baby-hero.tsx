@@ -13,10 +13,10 @@ import {
   kDateShort,
   startOfDay,
 } from "@/lib/date";
-import type { Baby, BabyEntryWithAuthor } from "@/lib/types";
+import type { Pregnancy, JourneyEntryWithAuthor } from "@/lib/types";
 
-/** 오늘 이후(오늘 포함) 가장 가까운 검진 기록 */
-export function findNextCheckup(entries: BabyEntryWithAuthor[]): BabyEntryWithAuthor | null {
+/** 오늘 이후(오늘 포함) 가장 가까운 병원 기록. 준비·임신 두 히어로가 같이 쓴다. */
+export function findNextCheckup<T extends { kind: string; date: Date | string }>(entries: T[]): T | null {
   const today = startOfDay(new Date()).getTime();
   return (
     entries
@@ -37,18 +37,18 @@ export function findNextCheckup(entries: BabyEntryWithAuthor[]): BabyEntryWithAu
  * 오른쪽으로 간다는 뜻이 이미 있으니, 그 끝에 놓으면 설명이 필요 없다.
  */
 export function BabyHero({
-  baby,
+  pregnancy,
   entries,
   onOpenSettings,
 }: {
-  baby: Baby;
-  entries: BabyEntryWithAuthor[];
+  pregnancy: Pregnancy;
+  entries: JourneyEntryWithAuthor[];
   onOpenSettings: () => void;
 }) {
-  const pal = palette(baby.color);
+  const pal = palette(pregnancy.color);
   const nextCheckup = findNextCheckup(entries);
-  const born = !!baby.birthDate;
-  const p = pregnancyProgress(baby.dueDate);
+  const born = !!pregnancy.birthDate;
+  const p = pregnancyProgress(pregnancy.dueDate);
   const pct = Math.round(p.progress * 100);
 
   return (
@@ -66,22 +66,22 @@ export function BabyHero({
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xl">
-            {baby.emoji}
+            {pregnancy.emoji}
           </span>
           {/* 이 화면의 `h1`. 다른 화면은 `PageHeader` 가 만들어 주는데 여기는 자체 히어로라
               **h1 이 아예 없었다** — 스크린리더로 들어오면 이 화면이 무엇인지 말해 주는 줄이
               하나도 없다. 가장 큰 글자(주차)가 아니라 **이름**이 이 화면의 제목이다. */}
-          <h1 className="font-display text-lg font-bold text-chrome-ink">{baby.nickname}</h1>
+          <h1 className="font-display text-lg font-bold text-chrome-ink">{pregnancy.nickname}</h1>
         </div>
 
         {born ? (
           <div>
             <p className="font-display text-6xl font-bold leading-none text-chrome-ink sm:text-7xl">
-              {daysSinceBirth(baby.birthDate!)}
+              {daysSinceBirth(pregnancy.birthDate!)}
               <span className="ml-2 text-3xl sm:text-4xl">일째</span>
             </p>
             <p className="mt-3 text-sm text-chrome-faint">
-              {kDate(baby.birthDate!)}에 태어났어요
+              {kDate(pregnancy.birthDate!)}에 태어났어요
             </p>
           </div>
         ) : (
@@ -120,21 +120,21 @@ export function BabyHero({
                 className="pointer-events-none absolute -top-2.5 -translate-x-1/2 text-base transition-all"
                 style={{ left: `clamp(0.75rem, ${pct}%, calc(100% - 0.75rem))` }}
               >
-                {baby.emoji}
+                {pregnancy.emoji}
               </span>
             </div>
             {/* 막대의 양 끝이 곧 설명이다 — 왼쪽은 지금, 오른쪽은 만나는 날.
                 가운뎃점으로 이어 붙인 메타 줄보다 읽는 순서가 분명하다. */}
             <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-chrome-faint">
               <span>{p.trimester}분기</span>
-              <span className="font-num">{kDate(baby.dueDate)} 예정</span>
+              <span className="font-num">{kDate(pregnancy.dueDate)} 예정</span>
             </div>
           </div>
         )}
 
         {nextCheckup && (
           <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
-            <span className="text-chrome-ink">다음 검진</span>
+            <span className="text-chrome-ink">다음 진료</span>
             <span className="font-num">{kDateShort(nextCheckup.date)}</span>
             <span className="font-num text-ink-soft">{dday(nextCheckup.date).label}</span>
           </p>
