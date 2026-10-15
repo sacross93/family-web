@@ -152,6 +152,17 @@ Vercel은 파일을 서버에 저장할 수 없어서 사진은 Blob에 저장�
 
 에이전트의 두뇌는 ChatGPT(Codex) OAuth 토큰입니다. Vercel 은 파일을 쓸 수 없어서 토큰은 DB(`AgentAuth`)에 **암호화해서** 넣어 둡니다.
 
+**(가장 쉬움) 관리자 화면에서 연결** — 환경변수도 터미널도 필요 없습니다. 폰에서도 됩니다.
+
+1. 배포된 사이트에 **관리자 계정**으로 로그인 → `/admin` → 「AI 포동이 연결」 카드를 엽니다.
+2. **[다시 연결하기]**(처음이면 [연결하기]) → 새 탭에서 ChatGPT 로 로그인합니다. 탭이 안 열리면 카드의 **[ChatGPT 로그인 열기]** 를 누르세요.
+3. 로그인을 마치면 그 탭이 **"연결할 수 없음"** 화면이 됩니다(`localhost:1455` 로 돌아가서 그래요 — 정상입니다). 그 탭의 **주소창 주소를 통째로** 복사해 카드에 붙여넣고 **[연결]**.
+4. "연결됐어요 ✓" 가 뜨면 끝. 15분 안에 마쳐야 하고, 실패하면 처음부터 다시 하면 됩니다.
+
+운영 서버가 이미 운영 DB 와 `AUTH_SECRET` 을 갖고 있어서, 아래 ⚠️ 1 처럼 값을 맞출 일이 없습니다. 지금 연결된 것과 **다른 ChatGPT 계정**으로 로그인하면 저장하지 않고 멈춥니다 — 정말 바꿀 거면 카드의 "다른 ChatGPT 계정으로 바꿔도 돼요" 를 켜고 처음부터 하세요. (구조와 이유는 [PODONGI.md](PODONGI.md) 의 "다시 연결" 항목.)
+
+**터미널에서** — 관리자 화면을 쓸 수 없을 때(처음 배포 전 등):
+
 ```bash
 # (권장) 브라우저로 로그인해서 DB 에 바로 저장 — 평문 토큰 파일을 만들지 않습니다
 DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agent:login
@@ -193,7 +204,7 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 
 같은 계정의 refresh_token 을 사이트와 로컬 Codex CLI 가 **각자** 갱신하면, 회전된 토큰 때문에 뒤늦은 쪽이 `invalid_grant` 를 받을 수 있습니다. 실제로 지금 `~/.codex/auth.json` 의 만료 시각과 DB `AgentAuth.expiresAt` 이 달라, 같은 계정에 access_token 이 둘 살아 있습니다. 충돌 조건은 이미 있는 셈이에요.
 
-- 에이전트가 갑자기 토큰 오류를 내면 먼저 이걸 의심하세요. **회복은 `npm run agent:login` 으로 다시 로그인하는 것**입니다 — 새 토큰이 DB 에 바로 들어갑니다.
+- 에이전트가 갑자기 토큰 오류를 내면 먼저 이걸 의심하세요. **회복은 다시 로그인하는 것**입니다 — `/admin` 의 연결 카드(위)나 `npm run agent:login`. 새 토큰이 DB 에 바로 들어갑니다.
   예전 토큰 파일을 다시 넣는 것으로는 안 됩니다. `invalid_grant` 이 난 시점엔 그 파일의 refresh_token 도 이미 죽어 있어요.
   손에 쓸 만한 토큰 파일(`~/.codex/auth.json` 포함)이 있다면 `npm run agent:auth -- <경로>` 도 됩니다.
   프로덕션을 고치는 거라면 **`DATABASE_URL`·`AUTH_SECRET` 을 프로덕션 값으로** 붙여서 실행하세요.
@@ -223,7 +234,7 @@ DATABASE_URL="<Neon Direct>" AUTH_SECRET="<Vercel 의 AUTH_SECRET>" npm run agen
 - **사진 업로드 실패**: Blob 스토리지 Connect 후 **Redeploy** 했는지 확인.
 - **로그인 후 바로 튕김**: `AUTH_SECRET`이 설정됐는지 확인.
 - **에이전트가 "저장된 토큰을 읽지 못했어요"**: 토큰을 넣을 때와 `AUTH_SECRET`(또는 `KEY_DOMAIN`)이 달라진 경우예요 → 6절 ⚠️ 1·2.
-- **에이전트가 "토큰 갱신에 실패했어요 (HTTP 4xx · invalid_grant)"**: refresh_token 이 다른 곳에서 회전됐어요 → `npm run agent:login` 으로 다시 로그인 (6절 ⚠️ 3).
+- **에이전트가 "토큰 갱신에 실패했어요 (HTTP 4xx · invalid_grant)"**, 또는 대화가 **"ChatGPT 연결이 풀렸어요"**: refresh_token 이 죽었거나 다른 곳에서 회전됐어요 → `/admin` 의 연결 카드에서 다시 연결 (또는 `npm run agent:login`, 6절 ⚠️ 3).
 - **"물어보기" 버튼이 안 보임**: `AGENT_ENABLED=true` 인지 확인하고 Redeploy. 꺼져 있으면 버튼이 아예 렌더되지 않아요(정상 동작).
 - **질문을 보내거나 ☰ 기록을 열면 500** (창을 여는 것 자체는 멀쩡함): `AgentChat`·`AgentChatMessage` 테이블이 아직 없어요 → 2절의 `prisma db push` (6절 ⚠️ 4).
 - **에이전트가 뭘 추가했다는데 사이트에 안 보이거나 되돌리기가 안 됨**: `AGENT_ORIGIN` 이 배포 주소인지 확인하세요. 비어 있으면 `AUTH_URL`, 그것도 없으면 `localhost:3000` 으로 나갑니다 (3절 표의 ⚠️).

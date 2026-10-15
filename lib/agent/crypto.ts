@@ -10,29 +10,53 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 //       (참고 구현: .superpowers/sdd/2026-09-17-site-agent-engine/rekey.ts)
 //    로그인으로 받은 토큰 파일은 임시 폴더에 있다가 사라지기 쉬우니 2)를 먼저 고려한다.
 const KEY_DOMAIN = "agent-token-v1:";
+
+// 관리자 화면에서 ChatGPT 를 다시 연결하는 **도중**(PKCE verifier·state)을 쿠키에 봉해 두는 열쇠.
+// 토큰 열쇠(KEY_DOMAIN)와 **일부러 다르게** 파생한다 — 같으면 쿠키로 받은 덩어리가 토큰 자리에서도
+// 열린다(반대도). 이건 15분짜리라 바꿔도 잃는 것은 "진행 중이던 연결 한 번" 뿐이다.
+const PENDING_DOMAIN = "agent-oauth-pending-v1:";
+
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
-function key(): Buffer {
+function key(domain: string): Buffer {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET 이 설정되지 않았어요 (.env 확인).");
-  return createHash("sha256").update(KEY_DOMAIN).update(secret).digest();
+  return createHash("sha256").update(domain).update(secret).digest();
 }
 
-export function encryptSecret(plain: string): string {
+function seal(domain: string, plain: string): string {
   const iv = randomBytes(IV_BYTES);
-  const c = createCipheriv("aes-256-gcm", key(), iv);
+  const c = createCipheriv("aes-256-gcm", key(domain), iv);
   const enc = Buffer.concat([c.update(plain, "utf8"), c.final()]);
   return [iv, c.getAuthTag(), enc].map((b) => b.toString("base64url")).join(":");
 }
 
-export function decryptSecret(blob: string): string {
+function open(domain: string, blob: string): string {
   const [iv, tag, enc] = blob.split(":").map((p) => Buffer.from(p, "base64url"));
   // 빈 조각도 길이 0 Buffer(truthy)라 존재 검사만으로는 "::" 같은 입력이 통과한다 → 길이까지 본다.
   if (!iv || !tag || !enc || iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
     throw new Error("암호문 형식이 올바르지 않습니다.");
   }
-  const d = createDecipheriv("aes-256-gcm", key(), iv);
+  const d = createDecipheriv("aes-256-gcm", key(domain), iv);
   d.setAuthTag(tag);
   return Buffer.concat([d.update(enc), d.final()]).toString("utf8");
+}
+
+export function encryptSecret(plain: string): string {
+  return seal(KEY_DOMAIN, plain);
+}
+
+export function decryptSecret(blob: string): string {
+  return open(KEY_DOMAIN, blob);
+}
+
+/** 연결 도중의 값을 쿠키에 싣기 전에 봉한다. 토큰과 다른 열쇠를 쓴다. */
+export function sealPending(plain: string): string {
+  return seal(PENDING_DOMAIN, plain);
+}
+
+/** `sealPending` 으로 봉한 것만 열린다. 변조됐거나 토큰 암호문이면 던진다. */
+export function openPending(blob: string): string {
+  return open(PENDING_DOMAIN, blob);
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { GENERIC_ERROR, humanError } from "@/lib/agent/errors";
+import { AGENT_NAME } from "@/lib/agent/name";
 
 /**
  * 문구가 틀리면 **가족이 고칠 수 없는 일을 고치려고 애쓴다.** 그래서 문장 자체를 시험한다.
@@ -11,6 +12,13 @@ describe("공급자 오류를 사람 말로", () => {
     const msg = humanError(401);
     expect(msg).not.toContain("새로고침");
     expect(msg).toContain("연결");
+  });
+
+  it("401 은 고칠 자리를 알려 준다 — 관리자 화면에서 다시 연결", () => {
+    // 예전 문장은 "다시 연결해야 대답할 수 있어요" 에서 멈췄다 — 무엇이 끊겼는지는 말했지만
+    // **어디서** 잇는지는 몰랐고, 잇는 길이 터미널뿐이라 가족에게는 말할 곳도 없었다.
+    // 이제 /admin 의 연결 카드가 그 길이다. 문장 자체를 붙잡는다.
+    expect(humanError(401)).toBe(`${AGENT_NAME}가 ChatGPT 연결이 풀렸어요. 관리자 화면에서 다시 연결해 주세요.`);
   });
 
   it("403 도 같은 말을 한다 — 토큰이 죽은 것은 마찬가지다", () => {

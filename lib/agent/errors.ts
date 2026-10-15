@@ -16,9 +16,10 @@ export const GENERIC_ERROR = "잠깐 문제가 생겼어요. 다시 해볼까요
 export function humanError(status?: number): string {
   // 사용량 소진. 기다리면 풀리는 것이라 그렇게 말한다.
   if (status === 429) return "오늘 사용량을 다 썼어요. 잠시 뒤에 다시 해볼까요?";
-  // 토큰 만료·권한 없음. **가족이 새로고침으로 고칠 수 없다** — 다시 연결해야 한다고 말한다.
+  // 토큰 만료·권한 없음. **가족이 새로고침으로 고칠 수 없다** — 다시 연결해야 한다고 말하고,
+  // **어디서** 잇는지도 말한다: 관리자 화면(/admin)의 연결 카드(app/admin/agent-connect-card.tsx).
   if (status === 401 || status === 403) {
-    return `${AGENT_NAME}가 ChatGPT 연결이 풀렸어요. 다시 연결해야 대답할 수 있어요.`;
+    return `${AGENT_NAME}가 ChatGPT 연결이 풀렸어요. 관리자 화면에서 다시 연결해 주세요.`;
   }
   return GENERIC_ERROR;
 }

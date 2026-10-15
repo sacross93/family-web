@@ -4,6 +4,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret } from "@/lib/agent/crypto";
+import { CLIENT_ID, TOKEN_URL } from "@/lib/agent/oauth";
 
 /**
  * 토큰이 들어 있는 싱글턴 행의 id. 기본은 `"main"` 입니다.
@@ -17,9 +18,6 @@ import { decryptSecret, encryptSecret } from "@/lib/agent/crypto";
 export function authRowId(): string {
   return process.env.AGENT_AUTH_ROW_ID || "main";
 }
-
-const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
-const TOKEN_URL = "https://auth.openai.com/oauth/token";
 
 // 만료 이틀 전부터 갱신합니다.
 // 상류 Codex CLI 는 "JWT exp 5분 전"에 갱신하지만, 그건 **계속 떠 있는 프로세스가 주기적으로**
@@ -133,6 +131,18 @@ export async function getAccountId(): Promise<string | null> {
     select: { accountId: true },
   });
   return row?.accountId ?? null;
+}
+
+/**
+ * 관리자 화면(연결 카드)에 보일 연결 상태. **토큰 열은 고르지 않는다** — account_id 와 행이 마지막으로
+ * 바뀐 때뿐이다. `updatedAt` 은 다시 연결할 때만이 아니라 **자동 갱신 때도** 움직인다.
+ * 행이 없으면 null.
+ */
+export async function authStatus(): Promise<{ accountId: string | null; updatedAt: Date } | null> {
+  return prisma.agentAuth.findUnique({
+    where: { id: authRowId() },
+    select: { accountId: true, updatedAt: true },
+  });
 }
 
 /** 갱신 HTTP 를 대신 수행하는 함수. 테스트에서 주입합니다(네트워크를 타지 않게). */
