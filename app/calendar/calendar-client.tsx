@@ -42,6 +42,15 @@ import { palette, type PaletteKey } from "@/lib/colors";
 import { kDate, kDateRelative, kTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "@/lib/types";
+import type { JourneyMark } from "@/lib/journey-core";
+import {
+  MarkBars,
+  MarkRows,
+  UpcomingMarkRow,
+  interleaveMarks,
+  marksSpeech,
+  upcomingMarks,
+} from "./journey-marks";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_KEY = "yyyy-MM-dd";
@@ -85,8 +94,11 @@ function revive(e: CalendarEvent): CalendarEvent {
 
 export function CalendarClient({
   initialEvents,
+  marks,
 }: {
   initialEvents: CalendarEvent[];
+  /** 아기 페이지에서 오는 읽기 전용 표시(`journey-marks.tsx`). 일정이 아니라 고치거나 지울 수 없다. */
+  marks: JourneyMark[];
 }) {
   const { say } = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
@@ -122,6 +134,15 @@ export function CalendarClient({
     else byDay.set(key, [e]);
   }
 
+  // 날짜별 아기 페이지 표시. 서버가 `toDateInput`("yyyy-MM-dd") 으로 만든 날짜 글자를 그대로
+  // 키로 쓴다 — DAY_KEY 와 같은 꼴이라 격자 칸의 `format(day, DAY_KEY)` 와 바로 맞는다.
+  const marksByDay = new Map<string, JourneyMark[]>();
+  for (const m of marks) {
+    const list = marksByDay.get(m.date);
+    if (list) list.push(m);
+    else marksByDay.set(m.date, [m]);
+  }
+
   // 폰에서 무엇을 보여줄지. 55px 짜리 칸에는 일정 이름이 안 들어가서
   // 격자만으로는 "이번 주에 뭐 있지?" 를 답하지 못한다. 그래서 폰은 목록이 기본.
   // 데스크톱은 칸이 넓어 격자가 제 몫을 하므로 늘 격자 + 옆 목록 그대로다.
@@ -149,10 +170,23 @@ export function CalendarClient({
   }, [phoneView]);
 
   // 다가오는 일정 (오늘 이후)
-  const upcoming = [...events]
+  const upcomingAll = [...events]
     .filter((e) => startOfDay(new Date(e.start)).getTime() >= today.getTime())
-    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-    .slice(0, 8);
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  const upcoming = upcomingAll.slice(0, 8);
+  // 그 사이에 날짜순으로 끼우는 아기 페이지 표시(읽기 전용). 일정이 8개에서 잘렸으면
+  // 마지막으로 보이는 일정 날까지만 — 몇 달 뒤 예정일이 8번째 일정 바로 밑에 붙으면
+  // 그 사이에 아무 일정도 없는 것처럼 읽힌다.
+  const dayOf = (e: CalendarEvent) => format(new Date(e.start), DAY_KEY);
+  const upcomingRows = interleaveMarks(
+    upcoming,
+    dayOf,
+    upcomingMarks(
+      marks,
+      format(today, DAY_KEY),
+      upcomingAll.length > upcoming.length ? dayOf(upcoming[upcoming.length - 1]) : undefined
+    )
+  );
 
   function openNew(date: Date) {
     setEditingId(null);
@@ -242,6 +276,7 @@ export function CalendarClient({
   const selectedEvents = (byDay.get(format(selectedDate, DAY_KEY)) ?? []).sort(
     (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
   );
+  const selectedMarks = marksByDay.get(format(selectedDate, DAY_KEY)) ?? [];
 
   return (
     <div>
@@ -335,6 +370,7 @@ export function CalendarClient({
               const isToday = isSameDay(day, today);
               const dow = day.getDay();
               const dayEvents = byDay.get(format(day, DAY_KEY)) ?? [];
+              const dayMarks = marksByDay.get(format(day, DAY_KEY)) ?? [];
               const visible = dayEvents.slice(0, 3);
               const extra = dayEvents.length - visible.length;
 
@@ -348,7 +384,7 @@ export function CalendarClient({
                     !inMonth && "bg-paper/50",
                     isToday && "bg-primary-soft/40"
                   )}
-                  aria-label={`${format(day, "M월 d일", { locale: ko })} 일정 ${dayEvents.length}개`}
+                  aria-label={`${format(day, "M월 d일", { locale: ko })} 일정 ${dayEvents.length}개${marksSpeech(dayMarks)}`}
                 >
                   <span
                     className={cn(
@@ -413,6 +449,8 @@ export function CalendarClient({
                       </span>
                     )}
                   </span>
+                  {/* 아기 페이지 표시 — 칸 맨 아래 얇은 막대(일정은 점·칩이라 모양으로 갈린다) */}
+                  <MarkBars marks={dayMarks} dim={!inMonth} />
                 </button>
               );
             })}
@@ -425,7 +463,9 @@ export function CalendarClient({
             <div className="border-b border-line px-4 py-3">
               <p className="font-display text-lg font-bold text-ink">다가오는 일정</p>
             </div>
-            {upcoming.length === 0 ? (
+            {/* 비었는지는 끼운 표시까지 세서 본다 — 병원·예정 줄이 있는데 "잡힌 일정이 없어요" 가
+                같이 뜨지 않게. */}
+            {upcomingRows.length === 0 ? (
               /* "없어요." 한 줄로 끝나 있었다. 빈 화면은 초대다(DESIGN §8) —
                  무엇을 할 수 있는지 말하고 그 자리에서 할 수 있게 한다. */
               <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
@@ -441,45 +481,51 @@ export function CalendarClient({
               </div>
             ) : (
               <ul>
-                {upcoming.map((ev) => (
+                {upcomingRows.map((row, i) => {
+                  if (row.type === "mark") {
+                    return <UpcomingMarkRow key={`mark:${row.mark.date}:${i}`} mark={row.mark} />;
+                  }
+                  const ev = row.item;
                   // 수정·삭제가 달력 격자의 날짜 모달 안에만 있었다. 폰 기본이 목록이 된 뒤로는
                   // 이 줄에서 지울 방법이 없어, 지우려면 달력으로 바꿔 날짜를 찾아 들어가야 했다.
-                  <li
-                    key={ev.id}
-                    className="group flex items-center gap-1 border-b border-line pr-2 last:border-0"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => openEdit(ev)}
-                      className="flex min-w-0 flex-1 items-start gap-2.5 px-4 py-3 text-left transition hover:bg-sunken/60"
+                  return (
+                    <li
+                      key={ev.id}
+                      className="group flex items-center gap-1 border-b border-line pr-2 last:border-0"
                     >
-                      <span
-                        className={cn(
-                          "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
-                          palette(ev.color).dot
-                        )}
+                      <button
+                        type="button"
+                        onClick={() => openEdit(ev)}
+                        className="flex min-w-0 flex-1 items-start gap-2.5 px-4 py-3 text-left transition hover:bg-sunken/60"
+                      >
+                        <span
+                          className={cn(
+                            "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
+                            palette(ev.color).dot
+                          )}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[0.9375rem] font-semibold text-ink">
+                            {ev.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-ink-soft">
+                            {/* 날짜와 시각은 띄어 쓴다("오늘 종일", "9월 26일 (토) 오후 3:00").
+                                가운뎃점으로 잇는 메타 줄은 쓰지 않는다(DESIGN.md §3). */}
+                            {kDateRelative(ev.start)} {ev.allDay ? "종일" : kTime(ev.start)}
+                          </span>
+                        </span>
+                      </button>
+                      <ItemActions
+                        inline
+                        quiet
+                        actions={[
+                          { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
+                          { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },
+                        ]}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[0.9375rem] font-semibold text-ink">
-                          {ev.title}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-ink-soft">
-                          {/* 날짜와 시각은 띄어 쓴다("오늘 종일", "9월 26일 (토) 오후 3:00").
-                              가운뎃점으로 잇는 메타 줄은 쓰지 않는다(DESIGN.md §3). */}
-                          {kDateRelative(ev.start)} {ev.allDay ? "종일" : kTime(ev.start)}
-                        </span>
-                      </span>
-                    </button>
-                    <ItemActions
-                      inline
-                      quiet
-                      actions={[
-                        { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
-                        { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },
-                      ]}
-                    />
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>
@@ -498,12 +544,21 @@ export function CalendarClient({
           </Button>
         }
       >
+        {/* 아기 페이지 표시가 일정 위에 선다. 표시만 있는 날에는 빈 화면을 띄우지 않는다 —
+            "이 날은 일정이 없어요" 가 바로 위 병원 줄과 엇갈려 읽힌다(일정 추가는 아래 단추에 있다). */}
+        {selectedMarks.length > 0 && (
+          <div className={cn(selectedEvents.length > 0 && "mb-3")}>
+            <MarkRows marks={selectedMarks} />
+          </div>
+        )}
         {selectedEvents.length === 0 ? (
-          <EmptyState
-            emoji="🗓️"
-            title="이 날은 일정이 없어요"
-            description="아래에서 새 일정을 추가해 보세요."
-          />
+          selectedMarks.length === 0 && (
+            <EmptyState
+              emoji="🗓️"
+              title="이 날은 일정이 없어요"
+              description="아래에서 새 일정을 추가해 보세요."
+            />
+          )
         ) : (
           <ul className="flex flex-col gap-2">
             {selectedEvents.map((ev) => (
