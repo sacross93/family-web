@@ -22,10 +22,13 @@ export function BabySettingsModal({
   baby,
   onClose,
   onSave,
+  onReset,
 }: {
   baby: Baby;
   onClose: () => void;
   onSave: (patch: BabySettingsPatch) => Promise<void>;
+  /** 처음부터 다시 시작(모두 지우기). 묻고 지우는 일은 부모가 한다. */
+  onReset?: () => void;
 }) {
   const [nickname, setNickname] = useState(baby.nickname);
   const [emoji, setEmoji] = useState(baby.emoji);
@@ -115,6 +118,19 @@ export function BabySettingsModal({
             <span className="text-xs text-ink-soft">홈 화면에 주차와 최근 기록 카드를 띄워요.</span>
           </span>
         </label>
+        {/* 아래 단추줄이 아니라 본문 맨 끝에 둔다 — 취소·저장 옆에 세 번째 단추를 세우면
+            폰 폭에서 넘치고, 저장 바로 옆이라 잘못 누르기도 쉽다. 줄을 그어 따로 떼어 둔다. */}
+        {onReset && (
+          <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
+            <span className="text-[0.9375rem] font-semibold text-ink">처음부터 다시 시작</span>
+            <span className="text-xs text-ink-soft">
+              일기·체크리스트·참고 사이트와 올린 사진을 모두 지우고 처음 화면으로 돌아가요.
+            </span>
+            <Button variant="danger" size="sm" onClick={onReset} className="mt-1 self-start">
+              모두 지우기
+            </Button>
+          </div>
+        )}
       </div>
     </Modal>
   );

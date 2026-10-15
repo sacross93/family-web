@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader, useConfirm } from "@/components/ui";
 import type { BabyDetail, FamilyMember, Baby, BabyEntryWithAuthor, BabyChecklistItem, BabyLink } from "@/lib/types";
 import { fromDateInput } from "@/lib/date";
@@ -27,6 +28,7 @@ export function BabyClient({
   initialBaby: BabyDetail | null;
   members: FamilyMember[];
 }) {
+  const router = useRouter();
   const { confirm, dialog } = useConfirm();
   const [baby, setBaby] = useState<BabyDetail | null>(initialBaby);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -65,6 +67,31 @@ export function BabyClient({
     }
     const updated: Baby = await res.json();
     setBaby((b) => (b ? { ...b, ...updated } : b));
+  }
+
+  // 처음부터 다시 시작. 낙관적으로 지우지 않는다 — 한꺼번에 사라지는 양이 커서,
+  // 서버가 정말 지웠다고 답한 뒤에만 처음 화면으로 돌아간다.
+  async function resetBaby() {
+    // 설정 창 위에 묻는 창이 겹치지 않게 먼저 닫는다.
+    setSettingsOpen(false);
+    if (
+      !(await confirm({
+        title: "아기 기록을 모두 지울까요?",
+        description: "일기·체크리스트·참고 사이트와 올린 사진이 모두 사라지고, 다시 볼 수 없어요.",
+        confirmLabel: "모두 지우기",
+      }))
+    )
+      return;
+    const res = await fetch("/api/baby", { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      alert("지우지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+    setBaby(null);
+    setFilter("all");
+    setEntryModal(null);
+    // 홈의 아기 카드 같은 서버 화면이 지운 아기를 계속 들고 있지 않게.
+    router.refresh();
   }
 
   // ── 기록 ──
@@ -255,7 +282,12 @@ export function BabyClient({
       </div>
 
       {settingsOpen && (
-        <BabySettingsModal baby={baby} onClose={() => setSettingsOpen(false)} onSave={saveSettings} />
+        <BabySettingsModal
+          baby={baby}
+          onClose={() => setSettingsOpen(false)}
+          onSave={saveSettings}
+          onReset={resetBaby}
+        />
       )}
       {dialog}
       {entryModal && (
