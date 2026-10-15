@@ -34,7 +34,7 @@ export async function journeyState(today: Date = new Date()): Promise<JourneySta
     active,
     stage,
     cycleEvents,
-    // cycleSince: 준비 단계로 돌아온 날 — 그 앞의 시작(임신 전 생리)은 예측의 기준이 못 된다.
+    // cycleSince: 끝난 임신의 추정 시작 — 그 앞의 시작(임신 전 생리)은 예측의 기준이 못 된다.
     prediction: stage === "prep" ? predictCycle(cycleEvents, today, settings?.cycleSince) : null,
     latestEntry,
     upcomingHospital,

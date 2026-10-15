@@ -840,7 +840,7 @@ await step("생리 시작을 적으면 히어로에 예정일까지 남은 날(�
     const n0 = await cycleCount();
     // **오늘** 날짜로 적는다. 예전엔 과거 고정일(CYCLE_DAY)이라 시드의 예측이 "추정" 을 적기 전부터
     // 띄우고 있어 공허하게 통과했다. 오늘 시작이면 이것이 반드시 기준이 된다(더 늦은 시작은 없다).
-    // 며칠 전으로 적으면 안 된다 — 아래 '준비 단계로' 단계들이 cycleSince 를 오늘로 찍어서,
+    // 며칠 전으로 적으면 안 된다 — 아래 "준비 단계로 돌아간 뒤…" 단계가 cycleSince 를 오늘로 찍어서,
     // 같은 날 두 번째 판부터는 그 시작이 since 앞이라 예측이 아예 안 뜬다(lib/cycle.ts).
     const { row, fresh } = await recordCycle(/생리 시작/, null, TODAY_DAY);
     if (!fresh) throw alreadyThere("생리 시작", TODAY_DAY);
@@ -1049,12 +1049,16 @@ await step("'남기기' 는 일기를 남기고 준비로 돌아간다", async (
 
 // 이 흐름이 이 화면을 다시 만든 이유다. 임신이 끝나 준비로 돌아오면 주기 기록에는 **임신 전** 생리가
 // 마지막 시작으로 남아 있어, 그걸 기준으로 히어로가 "21일 지남" 을 60~72px 로 띄우고 날마다 키웠다.
-// 서버가 준비로 돌아온 날(JourneySettings.cycleSince)을 찍고, 그 앞의 시작은 예측의 기준이 못 된다.
-// 그래서 돌아온 직후 히어로는 "생리 시작일을 적으면…" 으로 돌아가야 하고, 임신 시작 창의
-// "마지막 생리일" 도 비어 있어야 한다(임신 전 날짜가 다음 임신의 마지막 생리일로 미리 채워지면 안 된다).
+// 서버가 끝난 임신의 추정 시작(JourneySettings.cycleSince = 예정일 − 266일, 오늘보다 뒤는 아니다)을
+// 찍고, 그 앞의 시작은 예측의 기준이 못 된다. 그 뒤에 시작이 없으면 히어로는 "생리 시작일을 적으면…"
+// 으로 돌아가야 하고, 임신 시작 창의 "마지막 생리일" 도 비어 있어야 한다.
 //
-// ⚠ 이 단계(와 위의 두 단계)는 로컬의 cycleSince 를 **오늘로 찍는다** — 의도한 동작이다. 그 뒤로는
-//   오늘 이후 날짜로 생리 시작을 적어야 예측이 뜬다(시드 견본의 12일 전 시작도 기준이 못 된다).
+// **로컬 기록과 상관없이 가르게** 예정일을 오늘 + 266일로 둔다 → since = 오늘 → 지금 있는 시작은
+// (시드 견본이든 개발자 것이든) 전부 그 앞이다. 그러니 배선이 하나라도 빠지면(라우트가 안 찍거나,
+// page.tsx·화면이 since 를 안 넘기면) 아래 50일 전 시작으로 예측이 떠서 걸린다.
+//
+// ⚠ 그래서 이 단계는 로컬의 cycleSince 를 **오늘로 찍는다** — 의도한 동작이다(뒤로 물러나지 않는 값이다).
+//   그 뒤로는 오늘 이후 날짜로 생리 시작을 적어야 예측이 뜬다(시드 견본의 12일 전 시작도 기준이 못 된다).
 //   되돌리려면 `npm run db:seed`(설정 표를 비운다).
 await step("준비 단계로 돌아간 뒤 히어로에 '지남' 이 없다", async () => {
   await requirePrep();
@@ -1062,7 +1066,8 @@ await step("준비 단계로 돌아간 뒤 히어로에 '지남' 이 없다", as
   let pregnancyId = null;
   try {
     // 50일 전 시작 = 임신 전 생리. 평균 28일이면 이것만으로는 "22일 지남" 이 된다(60일 한도 안이라
-    // 오래된 기록 거르기로는 안 가려진다 — since 만이 이것을 막는다).
+    // 오래된 기록 거르기로는 안 가려진다 — since 만이 이것을 막는다). 로컬에 기록이 하나도 없어도
+    // 예측이 뜰 거리가 있게 하려고 적는다 — 없으면 since 가 빠져도 "예측 없음" 으로 공허하게 통과한다.
     const FIFTY_AGO = ymd(new Date(Date.now() - 50 * 86400000));
     const t0 = Date.now();
     const c = await api("/api/cycle-events", "POST", { date: FIFTY_AGO, kind: "periodStart" });
@@ -1070,7 +1075,9 @@ await step("준비 단계로 돌아간 뒤 히어로에 '지남' 이 없다", as
     // 개발자가 그날을 진짜로 적어 두었으면 서버가 그 행을 돌려준다 — 그건 치우지 않는다(있어도 시험은 같다).
     if (new Date(c.json.createdAt).getTime() >= t0 - 5000) cycleId = c.json.id;
 
-    const started = await api("/api/pregnancy", "POST", { nickname: MARK + "셋", dueDate: DUE });
+    // 예정일 − 266일 = 오늘 → since 가 오늘이 된다(위 설명).
+    const DUE_SINCE_TODAY = ymd(new Date(Date.now() + 266 * 86400000));
+    const started = await api("/api/pregnancy", "POST", { nickname: MARK + "셋", dueDate: DUE_SINCE_TODAY });
     pregnancyId = started.json?.id ?? null;
     if (started.status !== 200 || !pregnancyId) throw new Error(`임신을 못 시작했다 — ${started.status}`);
 

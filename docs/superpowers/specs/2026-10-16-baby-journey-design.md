@@ -125,9 +125,10 @@ model CycleEvent {
 
 /// 페이지 설정(싱글턴 id="main"). 단계와 무관한 홈 표시 스위치.
 model JourneySettings {
-  id         String   @id @default("main")
-  showOnHome Boolean  @default(false)
-  updatedAt  DateTime @updatedAt
+  id         String    @id @default("main")
+  showOnHome Boolean   @default(false)
+  cycleSince DateTime? // 끝난 임신의 추정 시작(§3)
+  updatedAt  DateTime  @updatedAt
 }
 ```
 `FamilyMember.babyEntries` 관계 필드는 `journeyEntries JourneyEntry[]` 로 바꾼다(관계 필드는 DB 열이 아니므로
@@ -150,16 +151,27 @@ model JourneySettings {
 - **배란 예정일** = 다음 예정일 − 14일. **가임기** = 배란 예정일 −5일 ~ +1일.
 - **지금 주기 며칠째** = 오늘 − 마지막 시작 + 1.
 - 시작 기록이 하나도 없으면 `null`(화면은 첫 기록을 권한다).
+- **임신이 끝난 뒤(`since`)**: 주기 기록은 임신 동안에도 지우지 않으므로, 준비로 돌아온 직후의 마지막 시작은
+  **임신 전** 생리다. 그걸 기준으로 삼으면 히어로가 "21일 지남" 을 날마다 키운다(실제로 그랬다, 2026-10-16 리뷰).
+  그래서 `JourneySettings.cycleSince` 앞의 시작은 **기준(마지막 시작)이 못 된다**(평균에는 그대로 쓴다 — 임신을
+  건너는 간격은 대개 60일을 넘어 걸러진다). 그 뒤 시작이 없으면 `null`. `cycleSince` 는 "준비 단계로" 를 누른 날이
+  **아니라** 끝난 임신의 추정 시작 = `예정일 − 266일`(280 − 14: 계산상 마지막 생리일 + 14일. 초음파로 예정일이
+  며칠 움직여도 적어 둔 마지막 생리일은 그 앞에 남는다) — 끝나고 며칠 뒤에 눌러도 그 사이에 시작한 생리가
+  기준이 되어야 하기 때문이다. 오늘보다 뒤로 가지 않고, 앞서 찍힌 값보다 앞으로 물러나지 않는다
+  (`cycleSinceAfter(dueDate, today, prev)`, `POST /api/pregnancy/[id]/end` 가 남기기·지우기 모두 찍는다).
+- **오래된 기록**: 마지막 시작이 60일(간격 상한과 같은 값)보다 오래면 `null` — 출생 뒤 준비로 돌아왔거나
+  한동안 안 적었으면 "90일 지남" 은 예측이 아니다.
 
 ```ts
 export interface CyclePrediction {
   lastStart: Date; cycleDay: number;
-  avgCycle: number; avgPeriod: number; basis: "records" | "default";
+  avgCycle: number; avgPeriod: number; basis: "records" | "default"; periodBasis: "records" | "default";
   nextStart: Date; daysUntilNext: number; lateDays: number; // 지났으면 lateDays>0, daysUntilNext<0
   ovulation: Date; fertileStart: Date; fertileEnd: Date;
 }
 export function periodsFrom(events): { start: Date; end: Date | null }[]
-export function predictCycle(events, today = new Date()): CyclePrediction | null
+export function predictCycle(events, today = new Date(), since?: Date | string | null): CyclePrediction | null
+export function cycleSinceAfter(dueDate, today = new Date(), prev?): Date // max(prev, min(오늘, 예정일 − 266일))
 ```
 날짜는 전부 `startOfDay`·`differenceInCalendarDays`(로컬 자정 규칙, `lib/date.ts` 와 같다).
 
@@ -178,10 +190,10 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 - **임신 / 출생**: 지금 히어로 그대로(태명·주차·막대·다음 검진). ⚙ = 임신 설정.
 
 ### 4.2 주기 카드 (`cycle-card.tsx`) — 준비 단계에서만 펼쳐 보인다
-- 버튼 셋: [생리 시작] [생리 끝] [테스트기] → 작은 모달(날짜, 기본 오늘 · 테스트기는 결과 셋 중 하나).
+- 버튼 셋: [생리 시작] [생리 끝] [배란 테스트기](그냥 "테스트기" 는 임신 테스트기로 읽힌다) → 작은 모달(날짜, 기본 오늘 · 테스트기는 결과 셋 중 하나).
 - 최근 기간 목록: "10월 2일 ~ 10월 6일 · 5일" (끝 모르면 "~ ?"), 그 사이 주기 길이. 테스트기 결과는 날짜·결과 태그.
 - 각 줄 `ItemActions`(삭제). 지우기는 묻지 않는다(다시 적기 3초) — 장보기와 같은 규칙.
-- 평균 주기·생리 길이 한 줄, `basis: "default"` 면 "기록이 두 번 쌓이면 더 맞아져요".
+- 평균 주기·생리 길이 한 줄 — 기록으로 낸 숫자만(`periodBasis` 가 default 면 생리 길이는 뺀다). `basis: "default"` 면 숫자 대신 "평균 주기는 기록이 두 번 쌓이면 계산돼요".
 - **임신 단계에서는 접힌 한 줄**("준비 때 주기 기록 N개 ▸")로만 보이고, 펼치면 같은 카드(읽기·삭제).
 
 ### 4.3 일기 (지금 타임라인 그대로)
@@ -234,7 +246,7 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 | `DELETE /api/baby` | **처음부터 다시 시작**: 여섯 표를 모두 지우고 일기 사진 sweep |
 | `POST /api/pregnancy` | 임신 확인 `{ nickname?, emoji?, color?, dueDate | lmpDate }`. 진행 중이 있으면 409 |
 | `PATCH /api/pregnancy/[id]` | 임신 설정(태명·이모지·색·예정일·출생일) |
-| `POST /api/pregnancy/[id]/end` | `{ keep: boolean }`. 남기기 = `endedAt` 이 비었을 때만 찍는다(이미 끝났으면 그대로 200). 지우기 = **끝났든 아니든 언제나** `deleteMany` → cascade(일기·체크리스트) + 사진 sweep. 없는 id 도 200 |
+| `POST /api/pregnancy/[id]/end` | `{ keep: boolean }`. 남기기 = `endedAt` 이 비었을 때만 찍는다(이미 끝났으면 그대로 200). 지우기 = **끝났든 아니든 언제나** `deleteMany` → cascade(일기·체크리스트) + 사진 sweep. 없는 id 도 200. 둘 다 **끝내기 전에** 그 임신의 예정일을 읽어 `JourneySettings.cycleSince = cycleSinceAfter(예정일, 오늘, 지금 값)` 을 찍는다(§3). 없는 id 면 안 건드린다 |
 | `POST /api/baby-entries` · `PATCH/DELETE /[id]` | 일기. POST 는 서버가 진행 중인 임신을 도장으로 찍는다(babyId 안 받음) |
 | `POST /api/baby-checklist` · `PATCH/DELETE /[id]` | `{ text }` 또는 `{ texts }`. 서버가 지금 단계(진행 중 임신 id 또는 null)를 찍는다 |
 | `POST /api/baby-links` · `PATCH/DELETE /[id]` | 참고 사이트(babyId 안 받음) |

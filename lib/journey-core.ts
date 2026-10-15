@@ -20,7 +20,7 @@ export interface JourneyState {
   stage: Stage;
   /** 날짜순 전부(작은 표다) */
   cycleEvents: CycleEvent[];
-  /** 준비 단계일 때만 계산한다. 임신 중에는 null. 준비로 돌아온 뒤(cycleSince) 새 시작이 없거나 마지막 시작이 60일 넘었어도 null */
+  /** 준비 단계일 때만 계산한다. 임신 중에는 null. 끝난 임신 뒤(cycleSince) 새 시작이 없거나 마지막 시작이 60일 넘었어도 null */
   prediction: CyclePrediction | null;
   latestEntry: (JourneyEntry & { author: FamilyMember | null }) | null;
   /** 오늘 이후 병원 기록(가까운 순, 20개까지). 끝난 임신 때 적은 것은 뺀다(`findNextCheckup` 과 같은 규칙) */

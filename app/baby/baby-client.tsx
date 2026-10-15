@@ -73,7 +73,7 @@ export function BabyClient({ initial, members }: { initial: JourneyPageData; mem
   const [links, setLinks] = useState<JourneyLink[]>(initial.links);
   const [cycleEvents, setCycleEvents] = useState<CycleEvent[]>(initial.cycleEvents);
   const [showOnHome, setShowOnHome] = useState(initial.showOnHome);
-  // 준비 단계로 돌아온 날. 임신을 끝내면 key 가 바뀌어 새 값으로 다시 붙는다 — 상태로 드는 것은
+  // 끝난 임신의 추정 시작(cycleSince, 예정일 − 266일). 임신을 끝내면 key 가 바뀌어 새 값으로 다시 붙는다 — 상태로 드는 것은
   // "처음부터 다시 시작" 때문이다: 준비 단계에서 지우면 key 가 그대로라 서버가 지운 값이 여기 안 온다.
   const [cycleSince, setCycleSince] = useState<Date | null>(initial.cycleSince);
 

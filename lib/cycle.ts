@@ -5,7 +5,7 @@
 // **여기서 나온 날짜만** 예외로 보여 준다(AGENTS.md) — 날짜와 "추정" 표시뿐, 권하는 문장은 없다.
 import { addDays } from "date-fns";
 import type { PaletteKey } from "@/lib/colors";
-import { startOfDay, differenceInCalendarDays } from "@/lib/date";
+import { startOfDay, differenceInCalendarDays, PREGNANCY_DAYS } from "@/lib/date";
 
 export type CycleKind = "periodStart" | "periodEnd" | "ovulationTest";
 export type TestResult = "negative" | "faint" | "positive";
@@ -37,6 +37,8 @@ const RECENT = 6;
 const LUTEAL_DAYS = 14;
 const FERTILE_BEFORE = 5;
 const FERTILE_AFTER = 1;
+// 예정일 − 280일 = 마지막 생리일, 거기서 14일 = 추정 임신(수정) 시작.
+const CONCEPTION_AFTER_LMP = 14;
 
 export interface CycleEventLike {
   date: Date | string;
@@ -99,7 +101,7 @@ export function periodsFrom(events: CycleEventLike[]): Period[] {
 /**
  * 다음 예정일·배란 예정일·가임기(전부 추정). 아래면 null — 화면은 "생리 시작일을 적으면…" 으로 돌아간다.
  * - 오늘까지의 시작 기록이 없다.
- * - `since`(임신을 끝내고 준비 단계로 돌아온 날, `JourneySettings.cycleSince`) 이후의 시작이 없다.
+ * - `since`(`JourneySettings.cycleSince` — 끝난 임신의 추정 시작, `cycleSinceAfter`) 이후의 시작이 없다.
  *   주기 기록은 임신 동안에도 지우지 않으므로, 돌아온 직후의 마지막 시작은 **임신 전** 생리다.
  *   그걸 기준으로 삼으면 히어로가 "21일 지남" 을 날마다 키운다. 그래서 since 앞의 시작은
  *   기준(lastStart)이 못 된다. 다만 평균(주기·생리 길이)에는 그대로 쓴다 — 임신을 건너는 간격은
@@ -156,4 +158,28 @@ export function predictCycle(
     fertileStart: addDays(ovulation, -FERTILE_BEFORE),
     fertileEnd: addDays(ovulation, FERTILE_AFTER),
   };
+}
+
+/**
+ * 임신을 끝내고 준비 단계로 돌아올 때 찍는 `JourneySettings.cycleSince` — 이 날 앞의 생리 시작은
+ * 예측의 기준이 못 된다(`predictCycle` 의 since).
+ *
+ * **버튼을 누른 날이 아니다.** 가족은 끝나고 며칠 뒤에야 "준비 단계로" 를 누를 수 있고, 그 사이에
+ * 시작한 생리를 (누른 날보다 앞선 날짜로) 적는다 — 그 시작이 기준이 되어야 한다. 빼야 하는 것은
+ * **임신 전** 시작(마지막 생리일과 그 앞)뿐이고, 수정 뒤의 생리 시작은 임신이 끝난 뒤의 것일 수밖에 없다.
+ * 그래서 추정 수정일 = 예정일 − 266일(= 280 − 14)로 잡는다. 계산상 마지막 생리일보다 14일 뒤라,
+ * 초음파로 예정일이 며칠 당겨지거나 밀려도 적어 둔 마지막 생리일은 여전히 그 앞에 남아 빠진다.
+ * - 오늘보다 뒤로는 안 간다(예정일을 아주 멀리 적었어도 오늘 이후의 시작은 기준이 된다).
+ * - 앞서 찍힌 값(`prev`)보다 앞으로 물러나지 않는다 — 지난 임신의 기록을 나중에 지워도 그 전 생리가 되살아나지 않게.
+ */
+export function cycleSinceAfter(
+  dueDate: Date | string,
+  today: Date = new Date(),
+  prev?: Date | string | null
+): Date {
+  const conception = addDays(dayOf(dueDate), -(PREGNANCY_DAYS - CONCEPTION_AFTER_LMP));
+  const t = dayOf(today);
+  const since = conception.getTime() < t.getTime() ? conception : t;
+  const p = prev ? dayOf(prev) : null;
+  return p && p.getTime() > since.getTime() ? p : since;
 }

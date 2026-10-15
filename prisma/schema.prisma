@@ -421,8 +421,8 @@ model CycleEvent {
 }
 
 /// 아기 페이지 설정(싱글턴 id="main"). 단계와 무관한 홈 표시 스위치.
-/// cycleSince = 임신을 끝내고 준비 단계로 돌아온 날(하루 단위). 주기 예측이 이 날 앞의 생리 시작
-/// — 곧 임신 전 생리 — 를 기준으로 삼지 않게 한다(lib/cycle.ts 의 predictCycle `since`).
+/// cycleSince = 끝난 임신의 추정 시작(예정일 − 266일, 하루 단위 — lib/cycle.ts 의 cycleSinceAfter).
+/// 주기 예측이 이 날 앞의 생리 시작 — 곧 임신 전 생리 — 를 기준으로 삼지 않게 한다(predictCycle `since`).
 model JourneySettings {
   id         String    @id @default("main")
   showOnHome Boolean   @default(false)

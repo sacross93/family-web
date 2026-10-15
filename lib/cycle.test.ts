@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { periodsFrom, predictCycle, DEFAULT_CYCLE, DEFAULT_PERIOD } from "./cycle";
+import { periodsFrom, predictCycle, cycleSinceAfter, DEFAULT_CYCLE, DEFAULT_PERIOD } from "./cycle";
 
 const d = (s: string) => {
   const [y, m, day] = s.split("-").map(Number);
@@ -93,8 +93,8 @@ describe("predictCycle", () => {
 });
 
 // 임신이 끝나 준비 단계로 돌아오면 그 전 생리 시작이 마지막 기록으로 남는다 — 그걸 기준으로 삼으면
-// 히어로가 "21일 지남" 을 날마다 키운다. `since`(준비로 돌아온 날) 이전의 시작은 기준이 못 된다.
-describe("predictCycle — since(준비 단계로 돌아온 날)", () => {
+// 히어로가 "21일 지남" 을 날마다 키운다. `since`(끝난 임신의 추정 시작) 이전의 시작은 기준이 못 된다.
+describe("predictCycle — since(끝난 임신의 추정 시작)", () => {
   const before = [start("2026-08-01"), start("2026-08-29")];
 
   it("since 뒤에 시작 기록이 없으면 null — 임신 전 생리를 기준으로 '지남' 을 세지 않는다", () => {
@@ -139,5 +139,42 @@ describe("predictCycle — 60일 넘게 새 시작이 없으면 예측하지 않
   it("60일째까지는 예측, 61일째부터 null", () => {
     expect(predictCycle([start("2026-08-01")], d("2026-09-29"))!.cycleDay).toBe(60);
     expect(predictCycle([start("2026-08-01")], d("2026-09-30"))).toBeNull();
+  });
+});
+
+// cycleSince 는 버튼을 누른 날이 아니라 **임신 추정 시작**(예정일 − 266일)이다. 끝난 뒤 며칠 지나
+// "준비 단계로" 를 눌러도, 그 사이에 시작한 생리(누르기 전 날짜)가 기준이 되어야 한다.
+describe("cycleSinceAfter", () => {
+  // 마지막 생리일 8/1 → 예정일 8/1+280 = 2027-05-08 → 266일 전 = 8/15
+  const due = d("2027-05-08");
+
+  it("예정일 − 266일(= 마지막 생리일 + 14일)", () => {
+    expect(ymd(cycleSinceAfter(due, d("2026-10-01")))).toBe("2026-08-15");
+  });
+  it("오늘보다 뒤로는 안 간다", () => {
+    // 예정일을 아주 멀리 적었으면(266일보다 멀면) 오늘에서 멈춘다
+    expect(ymd(cycleSinceAfter(d("2027-12-01"), d("2026-10-01")))).toBe("2026-10-01");
+  });
+  it("앞서 찍힌 값보다 뒤로 물러나지 않는다", () => {
+    expect(ymd(cycleSinceAfter(due, d("2026-10-01"), d("2026-09-20")))).toBe("2026-09-20");
+    expect(ymd(cycleSinceAfter(due, d("2026-10-01"), d("2026-08-01")))).toBe("2026-08-15");
+    expect(ymd(cycleSinceAfter(due, d("2026-10-01"), null))).toBe("2026-08-15");
+  });
+  it("Date 로도 문자열로도 받고, 하루 단위(자정)로 낸다", () => {
+    const fromString = cycleSinceAfter(due.toISOString(), d("2026-10-01"), d("2026-08-01").toISOString());
+    expect(fromString).toEqual(cycleSinceAfter(due, d("2026-10-01"), d("2026-08-01")));
+    const late = cycleSinceAfter(new Date(2027, 4, 8, 15, 30), new Date(2026, 9, 1, 23, 59));
+    expect([late.getHours(), late.getMinutes()]).toEqual([0, 0]);
+  });
+
+  it("끝나고 며칠 뒤에 눌러도 그 사이 시작이 기준이 된다 — 임신 전 생리(마지막 생리일 이전)는 아니다", () => {
+    const beforePregnancy = [start("2026-06-06"), start("2026-07-04"), start("2026-08-01")]; // 8/1 = 마지막 생리일
+    const since = cycleSinceAfter(due, d("2026-10-01")); // 10/1 에 "준비 단계로"
+    // 버튼을 누르기 전(9/10)에 시작한 생리를 그 뒤에 적었다
+    const p = predictCycle([...beforePregnancy, start("2026-09-10")], d("2026-10-01"), since)!;
+    expect(ymd(p.lastStart)).toBe("2026-09-10");
+    expect(p.cycleDay).toBe(22);
+    // 임신 뒤의 시작이 아직 없으면 예측하지 않는다 — 8/1 기준 "N일 지남" 을 세지 않는다
+    expect(predictCycle(beforePregnancy, d("2026-10-01"), since)).toBeNull();
   });
 });
