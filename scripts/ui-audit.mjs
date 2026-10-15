@@ -233,9 +233,18 @@ const probeOcclusion = (interactiveOnly = false) => {
   return out;
 };
 
-/** 펼친 `…` 메뉴의 항목이 잘리거나 화면 밖으로 나가지 않았는가. */
-const probeMenu = () => {
-  const menu = document.querySelector("[data-item-menu]");
+/**
+ * 펼친 `…` 메뉴의 항목이 잘리거나 화면 밖으로 나가지 않았는가.
+ * `sel` 은 아래 카나리아가 제가 심은 메뉴를 짚을 때만 넘긴다(평소엔 진짜 메뉴).
+ *
+ * **축마다 따로 본다.** 예전엔 `overflow` 묶음 값이 visible 이 아니면 네 변을 다 잘린다고 봤다.
+ * 그런데 `<html>` 은 `overflow: clip visible`(가로만 자른다) + `h-full` 이라 상자가 첫 화면 한 장
+ * 높이다 — 한 화면 넘게 내려가서 연 메뉴는 멀쩡히 보이는데도 "잘림" 으로 올라왔다.
+ * 위아래 변은 `overflowY` 가, 좌우 변은 `overflowX` 가 visible 이 아닌 조상에만 대 본다.
+ * (`overflow-x: hidden` 만 걸면 브라우저가 `overflowY` 를 auto 로 바꿔 돌려주므로 그 경우도 잡힌다.)
+ */
+const probeMenu = (sel = "[data-item-menu]") => {
+  const menu = document.querySelector(sel);
   if (!menu) return [];
   const bad = [];
   for (const b of menu.querySelectorAll("button")) {
@@ -247,9 +256,13 @@ const probeMenu = () => {
     }
     for (let el = b.parentElement; el; el = el.parentElement) {
       const s = getComputedStyle(el);
-      if (s.overflow === "visible" || s.overflow === "") continue;
+      const clipY = s.overflowY !== "visible" && s.overflowY !== "";
+      const clipX = s.overflowX !== "visible" && s.overflowX !== "";
+      if (!clipY && !clipX) continue;
       const pr = el.getBoundingClientRect();
-      if (r.bottom > pr.bottom + 1 || r.right > pr.right + 1 || r.top < pr.top - 1) {
+      const cutY = clipY && (r.bottom > pr.bottom + 1 || r.top < pr.top - 1);
+      const cutX = clipX && (r.right > pr.right + 1 || r.left < pr.left - 1);
+      if (cutY || cutX) {
         bad.push({ label, why: "조상의 overflow 에 잘림" });
         break;
       }
@@ -446,6 +459,60 @@ const rows = [];
     for (const [n, want] of stale) console.error(`  ${n}: 화면 "${probe[n]}" ≠ globals.css "${want}"`);
     console.error("  옛 서버가 포트를 잡고 있는지 보세요:  lsof -nP -iTCP:3000 -sTCP:LISTEN");
     console.error("  운영을 재는 중이면 배포가 끝났는지 먼저 보세요.");
+    process.exit(1);
+  }
+}
+
+// ── 카나리아: `…` 메뉴 검사가 눈을 뜨고 있는가 ────────────────
+// 검사는 "잘림 0건" 이라고만 말한다 — 그 0이 **못 본 것** 인지 **없는 것** 인지는 검사 스스로
+// 알려 주지 않는다. 그래서 진짜 페이지를 재기 전에 답을 아는 두 판을 심어 본다(로그인 화면, GET 만).
+//   1. 잘린 메뉴: 높이 20px·overflow:hidden 상자 안의 40px 단추 → 반드시 "조상의 overflow 에 잘림".
+//   2. 멀쩡한 메뉴: 페이지를 세 화면으로 늘려 두 화면 내린 자리에 띄운 단추 → 반드시 0건.
+//      예전 검사는 여기서 `<html>`(overflow: clip visible, 높이 한 화면)을 보고 "잘림" 이라 했다.
+// 둘 중 하나라도 틀리면 아래 `…` 결과는 거짓이므로 재기 전에 멈춘다. 심은 것은 다 걷어낸다.
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  // 심은 판은 진짜 검사 함수(probeMenu) 그대로 잰다 — 판마다 따로 흉내 낸 검사를 돌리면 카나리아가 아니다.
+  const unplant = () =>
+    page.evaluate(() => {
+      for (const n of document.querySelectorAll("[data-audit-canary]")) n.remove();
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  await page.evaluate(() => {
+    const box = document.createElement("div");
+    box.setAttribute("data-audit-canary", "");
+    box.style.cssText = "position:fixed;top:120px;left:16px;width:200px;height:20px;overflow:hidden;z-index:2147483647";
+    box.innerHTML = '<div data-audit-menu><button type="button" style="display:block;height:40px">카나리아</button></div>';
+    document.body.append(box);
+  });
+  const cut = await page.evaluate(probeMenu, "[data-audit-menu]");
+  await unplant();
+  const scrolled = await page.evaluate(() => {
+    const tall = document.createElement("div");
+    tall.setAttribute("data-audit-canary", "");
+    tall.style.cssText = "height:300vh";
+    document.body.append(tall);
+    window.scrollTo({ top: innerHeight * 2, behavior: "instant" });
+    const menu = document.createElement("div");
+    menu.setAttribute("data-audit-canary", "");
+    menu.setAttribute("data-audit-menu", "");
+    menu.style.cssText = `position:absolute;top:${scrollY + 120}px;left:16px;z-index:2147483647`;
+    menu.innerHTML = '<button type="button" style="display:block;height:40px">카나리아</button>';
+    document.body.append(menu);
+    return scrollY > innerHeight;
+  });
+  const clear = { scrolled, bad: await page.evaluate(probeMenu, "[data-audit-menu]") };
+  await unplant();
+  await page.close();
+  const fails = [];
+  if (!cut.some((b) => b.why === "조상의 overflow 에 잘림"))
+    fails.push(`잘린 메뉴를 못 잡는다 — ${JSON.stringify(cut)}`);
+  if (!clear.scrolled) fails.push("멀쩡한 메뉴 판을 못 세웠다 — 페이지가 두 화면 넘게 내려가지 않는다");
+  else if (clear.bad.length) fails.push(`한 화면 넘게 내려가 연 멀쩡한 메뉴를 잘렸다고 한다 — ${JSON.stringify(clear.bad)}`);
+  if (fails.length) {
+    console.error("`…` 메뉴 검사가 카나리아에서 틀렸습니다 — 그 결과는 거짓이므로 멈춥니다.");
+    for (const f of fails) console.error("  " + f);
     process.exit(1);
   }
 }

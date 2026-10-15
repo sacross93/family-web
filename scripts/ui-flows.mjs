@@ -793,6 +793,7 @@ const CYCLE_DAY = "2026-01-05"; // 과거 고정 — 로컬 기록과 겹치지 
 const ymd = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const DUE = ymd(new Date(Date.now() + 200 * 86400000)); // 200일 뒤 예정 → 11주쯤
+const TODAY_DAY = ymd(new Date());
 /** 주기 카드의 "모든 기록 N개". 컬렉션에 GET 이 없어서 화면의 이 숫자가 유일한 눈이다. */
 const cycleCount = async () => Number((await text()).match(/모든 기록\s*(\d+)개/)?.[1] ?? 0);
 /**
@@ -800,12 +801,12 @@ const cycleCount = async () => Number((await text()).match(/모든 기록\s*(\d+
  * 같은 날 같은 기록이면 서버는 **있던 행**을 돌려준다 — 개발자가 그날을 진짜로 적어 두었다면
  * 그건 지우면 안 되니, 이번에 새로 생긴 행인지(`fresh`)를 만든 시각으로 가른다.
  */
-const recordCycle = async (button, beforeSave) => {
+const recordCycle = async (button, beforeSave, day = CYCLE_DAY) => {
   const t0 = Date.now();
   await page.getByRole("button", { name: button }).first().click();
   await page.waitForTimeout(500);
   const dlg = page.locator('[role="dialog"]').last();
-  await dlg.locator('input[type="date"]').fill(CYCLE_DAY);
+  await dlg.locator('input[type="date"]').fill(day);
   if (beforeSave) await beforeSave(dlg);
   const saved = page.waitForResponse(
     (r) => r.url().includes("/api/cycle-events") && r.request().method() === "POST",
@@ -818,21 +819,42 @@ const recordCycle = async (button, beforeSave) => {
   if (!res.ok() || !row?.id) throw new Error(`저장이 안 됐다 — ${res.status()}`);
   return { row, fresh: new Date(row.createdAt).getTime() >= t0 - 5000 };
 };
-const alreadyThere = (what) => new Error(`${CYCLE_DAY} 에 이미 ${what} 기록이 있다 — 검사 날짜(CYCLE_DAY)를 바꿀 것`);
+const alreadyThere = (what, day = CYCLE_DAY) =>
+  new Error(
+    `${day} 에 이미 ${what} 기록이 있다 — ` +
+      (day === CYCLE_DAY ? "검사 날짜(CYCLE_DAY)를 바꿀 것" : "그 기록을 두고는 이 단계를 가를 수 없다")
+  );
+/** 준비 단계 히어로(h1 "아기 준비" 가 든 판)의 글. */
+const prepHeroText = () =>
+  page
+    .locator("section", { has: page.getByRole("heading", { level: 1, name: "아기 준비", exact: true }) })
+    .last()
+    .innerText();
 
-await step("생리 시작을 적으면 히어로에 '추정' 예정일이 뜬다", async () => {
+await step("생리 시작을 적으면 히어로에 예정일까지 남은 날(추정)이 뜬다", async () => {
   await requirePrep();
   let made = null;
   try {
     await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
     await page.waitForTimeout(400);
     const n0 = await cycleCount();
-    const { row, fresh } = await recordCycle(/생리 시작/);
-    if (!fresh) throw alreadyThere("생리 시작");
+    // **오늘** 날짜로 적는다. 예전엔 과거 고정일(CYCLE_DAY)이라 시드의 예측이 "추정" 을 적기 전부터
+    // 띄우고 있어 공허하게 통과했다. 오늘 시작이면 이것이 반드시 기준이 된다(더 늦은 시작은 없다).
+    // 며칠 전으로 적으면 안 된다 — 아래 '준비 단계로' 단계들이 cycleSince 를 오늘로 찍어서,
+    // 같은 날 두 번째 판부터는 그 시작이 since 앞이라 예측이 아예 안 뜬다(lib/cycle.ts).
+    const { row, fresh } = await recordCycle(/생리 시작/, null, TODAY_DAY);
+    if (!fresh) throw alreadyThere("생리 시작", TODAY_DAY);
     made = row.id;
     await page.waitForTimeout(1200);
-    if (!(await text()).includes("추정")) throw new Error("예측이 안 보인다");
-    // 시드에 이미 예측이 있으면 위 줄은 적기 전부터 참이다 — 기록 수가 늘었는지로 저장을 따로 본다.
+    // 큰 숫자는 제목("아기 준비") **바로 다음 줄**이다. "D-" 글자만 찾으면 아래 "다음 진료 … D-9"
+    // (flex 칸이라 innerText 에서 제 줄을 갖는다)에도 걸려, 예측이 사라져도 통과한다.
+    // 오늘 시작했으니 예정일은 평균 주기(15일 이상) 뒤 — "오늘" 도 "지남" 도 나올 수 없다.
+    const hero = await prepHeroText();
+    const lines = hero.split("\n").map((l) => l.trim()).filter(Boolean);
+    const big = lines[lines.indexOf("아기 준비") + 1] ?? "";
+    if (!/^D-\d+$/.test(big)) throw new Error(`제목 아래 큰 숫자가 D-N 이 아니다 — "${big.slice(0, 40)}"`);
+    if (!hero.includes("추정")) throw new Error("예측에 '추정' 이 없다");
+    // 저장은 따로 본다 — 화면만 바뀌고 서버에 안 남았을 수 있다.
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(400);
     const n1 = await cycleCount();
@@ -842,24 +864,24 @@ await step("생리 시작을 적으면 히어로에 '추정' 예정일이 뜬다
   }
 });
 
-await step("테스트기는 결과를 골라야 저장된다", async () => {
+await step("배란 테스트기는 결과를 골라야 저장된다", async () => {
   await requirePrep();
   let made = null;
   try {
     await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
     await page.waitForTimeout(400);
-    const { row, fresh } = await recordCycle(/테스트기/, async (dlg) => {
+    const { row, fresh } = await recordCycle(/배란 테스트기/, async (dlg) => {
       // 결과를 미리 골라 두면 안 고르고 저장해 실제와 다른 결과가 남는다.
       if (!(await dlg.getByRole("button", { name: "저장", exact: true }).isDisabled()))
         throw new Error("결과를 안 골랐는데 저장이 켜져 있다");
       await dlg.getByRole("button", { name: "양성", exact: true }).click();
     });
-    if (!fresh) throw alreadyThere("테스트기 양성");
+    if (!fresh) throw alreadyThere("배란 테스트기 양성");
     made = row.id;
     if (row.kind !== "ovulationTest" || row.result !== "positive")
       throw new Error(`${row.kind}/${row.result} 로 남았다 — ovulationTest/positive 여야`);
   } finally {
-    if (made) await tidy("테스트기 기록", () => api(`/api/cycle-events/${made}`, "DELETE"));
+    if (made) await tidy("배란 테스트기 기록", () => api(`/api/cycle-events/${made}`, "DELETE"));
   }
 });
 
@@ -1022,6 +1044,80 @@ await step("'남기기' 는 일기를 남기고 준비로 돌아간다", async (
     if (pregnancyId)
       await tidy("남긴 임신", () => api(`/api/pregnancy/${pregnancyId}/end`, "POST", { keep: false }));
     if (entryId) await tidy("남길 일기", () => api(`/api/baby-entries/${entryId}`, "DELETE"));
+  }
+});
+
+// 이 흐름이 이 화면을 다시 만든 이유다. 임신이 끝나 준비로 돌아오면 주기 기록에는 **임신 전** 생리가
+// 마지막 시작으로 남아 있어, 그걸 기준으로 히어로가 "21일 지남" 을 60~72px 로 띄우고 날마다 키웠다.
+// 서버가 준비로 돌아온 날(JourneySettings.cycleSince)을 찍고, 그 앞의 시작은 예측의 기준이 못 된다.
+// 그래서 돌아온 직후 히어로는 "생리 시작일을 적으면…" 으로 돌아가야 하고, 임신 시작 창의
+// "마지막 생리일" 도 비어 있어야 한다(임신 전 날짜가 다음 임신의 마지막 생리일로 미리 채워지면 안 된다).
+//
+// ⚠ 이 단계(와 위의 두 단계)는 로컬의 cycleSince 를 **오늘로 찍는다** — 의도한 동작이다. 그 뒤로는
+//   오늘 이후 날짜로 생리 시작을 적어야 예측이 뜬다(시드 견본의 12일 전 시작도 기준이 못 된다).
+//   되돌리려면 `npm run db:seed`(설정 표를 비운다).
+await step("준비 단계로 돌아간 뒤 히어로에 '지남' 이 없다", async () => {
+  await requirePrep();
+  let cycleId = null;
+  let pregnancyId = null;
+  try {
+    // 50일 전 시작 = 임신 전 생리. 평균 28일이면 이것만으로는 "22일 지남" 이 된다(60일 한도 안이라
+    // 오래된 기록 거르기로는 안 가려진다 — since 만이 이것을 막는다).
+    const FIFTY_AGO = ymd(new Date(Date.now() - 50 * 86400000));
+    const t0 = Date.now();
+    const c = await api("/api/cycle-events", "POST", { date: FIFTY_AGO, kind: "periodStart" });
+    if (c.status !== 200 || !c.json?.id) throw new Error(`생리 시작을 못 적었다 — ${c.status}`);
+    // 개발자가 그날을 진짜로 적어 두었으면 서버가 그 행을 돌려준다 — 그건 치우지 않는다(있어도 시험은 같다).
+    if (new Date(c.json.createdAt).getTime() >= t0 - 5000) cycleId = c.json.id;
+
+    const started = await api("/api/pregnancy", "POST", { nickname: MARK + "셋", dueDate: DUE });
+    pregnancyId = started.json?.id ?? null;
+    if (started.status !== 200 || !pregnancyId) throw new Error(`임신을 못 시작했다 — ${started.status}`);
+
+    // 끝내기는 화면으로 — 서버가 바꾼 뒤 router.refresh 로 다시 붙은 화면도 since 를 받아야 한다.
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "임신 설정" }).click();
+    await page.waitForTimeout(600);
+    await page.locator('[role="dialog"]').last().getByRole("button", { name: "준비 단계로", exact: true }).click();
+    await page.waitForTimeout(600);
+    const dlg = page.locator('[role="dialog"]').last();
+    await dlg.getByRole("radio", { name: /이 기간의 기록 지우기/ }).click();
+    await dlg.getByRole("button", { name: "준비 단계로", exact: true }).click();
+    await page
+      .getByRole("heading", { level: 1, name: "아기 준비", exact: true })
+      .waitFor({ timeout: 8000 })
+      .catch(() => {
+        throw new Error("준비 단계로 안 돌아간다");
+      });
+    await page.waitForTimeout(400);
+
+    const check = async (when) => {
+      const hero = await prepHeroText();
+      if (hero.includes("지남")) throw new Error(`${when}: 히어로에 '지남' — ${hero.replace(/\s+/g, " ").slice(0, 60)}`);
+      // "없음" 만 보면 히어로가 통째로 안 그려져도 통과한다 — 있어야 할 문장을 같이 본다.
+      if (!hero.includes("생리 시작일을 적으면"))
+        throw new Error(`${when}: 예측이 남아 있다(임신 전 생리를 기준으로 셌다) — ${hero.replace(/\s+/g, " ").slice(0, 60)}`);
+    };
+    await check("돌아온 직후");
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    if (!(await page.getByRole("heading", { level: 1, name: "아기 준비", exact: true }).count()))
+      throw new Error("새로고침하니 h1 이 '아기 준비' 가 아니다");
+    await check("새로고침 뒤");
+
+    // 임신 시작 창의 "마지막 생리일" 도 임신 전 날짜로 미리 채워지면 안 된다(예측과 같은 값에서 온다).
+    await page.getByRole("button", { name: "임신을 확인했어요" }).click();
+    await page.waitForTimeout(600);
+    const start = page.locator('[role="dialog"]').last();
+    const prefilled = await start.locator('input[type="date"]').inputValue();
+    await start.getByRole("button", { name: "취소", exact: true }).click();
+    if (prefilled) throw new Error(`임신 시작 창에 ${prefilled} 이 미리 채워져 있다`);
+  } finally {
+    // 둘 다 몇 번을 불러도 같은 결과다 — 화면에서 지웠어도 한 번 더.
+    if (pregnancyId)
+      await tidy("시험용 임신", () => api(`/api/pregnancy/${pregnancyId}/end`, "POST", { keep: false }));
+    if (cycleId) await tidy("50일 전 생리 시작", () => api(`/api/cycle-events/${cycleId}`, "DELETE"));
   }
 });
 
