@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Modal, Button, Field, Input, ColorPicker, Checkbox } from "@/components/ui";
 import type { PaletteKey } from "@/lib/colors";
 import { toDateInput } from "@/lib/date";
-import type { Baby } from "@/lib/types";
+import type { Pregnancy } from "@/lib/types";
+import { ResetSection } from "./journey-settings-modal";
 
 export interface BabySettingsPatch {
   nickname: string;
@@ -14,28 +15,36 @@ export interface BabySettingsPatch {
   dueDate: string;
   /** "yyyy-MM-dd" 또는 null(지움) */
   birthDate: string | null;
-  showOnHome: boolean;
 }
 
-/** 부모가 `{open && <BabySettingsModal/>}` 로 마운트하므로 열릴 때마다 baby 값으로 초기화됨 */
+/**
+ * 임신 설정. 부모가 `{open && <BabySettingsModal/>}` 로 마운트하므로 열릴 때마다 pregnancy 값으로 초기화됨.
+ * 홈 표시는 단계와 무관한 페이지 설정이라 이 폼의 저장과 따로 간다 — 누르는 즉시 저장된다.
+ */
 export function BabySettingsModal({
-  baby,
+  pregnancy,
+  showOnHome,
   onClose,
   onSave,
+  onToggleHome,
+  onBackToPrep,
   onReset,
 }: {
-  baby: Baby;
+  pregnancy: Pregnancy;
+  showOnHome: boolean;
   onClose: () => void;
   onSave: (patch: BabySettingsPatch) => Promise<void>;
+  onToggleHome: (v: boolean) => void;
+  /** 준비 단계로 돌아가기 — 남길지 지울지 묻는 창은 부모가 연다. */
+  onBackToPrep: () => void;
   /** 처음부터 다시 시작(모두 지우기). 묻고 지우는 일은 부모가 한다. */
-  onReset?: () => void;
+  onReset: () => void;
 }) {
-  const [nickname, setNickname] = useState(baby.nickname);
-  const [emoji, setEmoji] = useState(baby.emoji);
-  const [color, setColor] = useState<PaletteKey>(baby.color as PaletteKey);
-  const [dueStr, setDueStr] = useState(toDateInput(baby.dueDate));
-  const [birthStr, setBirthStr] = useState(baby.birthDate ? toDateInput(baby.birthDate) : "");
-  const [showOnHome, setShowOnHome] = useState(baby.showOnHome);
+  const [nickname, setNickname] = useState(pregnancy.nickname);
+  const [emoji, setEmoji] = useState(pregnancy.emoji);
+  const [color, setColor] = useState<PaletteKey>(pregnancy.color as PaletteKey);
+  const [dueStr, setDueStr] = useState(toDateInput(pregnancy.dueDate));
+  const [birthStr, setBirthStr] = useState(pregnancy.birthDate ? toDateInput(pregnancy.birthDate) : "");
   const [busy, setBusy] = useState(false);
 
   const canSave = nickname.trim().length > 0 && dueStr.length > 0 && !busy;
@@ -50,7 +59,6 @@ export function BabySettingsModal({
         color,
         dueDate: dueStr,
         birthDate: birthStr || null,
-        showOnHome,
       });
       onClose();
     } finally {
@@ -62,7 +70,7 @@ export function BabySettingsModal({
     <Modal
       open
       onClose={onClose}
-      title="아기 설정"
+      title="임신 설정"
       emoji={emoji || "🌱"}
       footer={
         <>
@@ -112,25 +120,24 @@ export function BabySettingsModal({
           </div>
         </Field>
         <label className="flex cursor-pointer items-center gap-3 rounded-md bg-sunken px-4 py-3">
-          <Checkbox checked={showOnHome} onChange={setShowOnHome} color={color} label="홈에 보여주기" />
+          <Checkbox checked={showOnHome} onChange={onToggleHome} color={color} label="홈에 보여주기" />
           <span className="flex flex-col">
             <span className="text-[0.9375rem] font-semibold text-ink">홈에 보여주기</span>
             <span className="text-xs text-ink-soft">홈 화면에 주차와 최근 기록 카드를 띄워요.</span>
           </span>
         </label>
-        {/* 아래 단추줄이 아니라 본문 맨 끝에 둔다 — 취소·저장 옆에 세 번째 단추를 세우면
-            폰 폭에서 넘치고, 저장 바로 옆이라 잘못 누르기도 쉽다. 줄을 그어 따로 떼어 둔다. */}
-        {onReset && (
-          <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
-            <span className="text-[0.9375rem] font-semibold text-ink">처음부터 다시 시작</span>
-            <span className="text-xs text-ink-soft">
-              일기·체크리스트·참고 사이트와 올린 사진을 모두 지우고 처음 화면으로 돌아가요.
-            </span>
-            <Button variant="danger" size="sm" onClick={onReset} className="mt-1 self-start">
-              모두 지우기
-            </Button>
-          </div>
-        )}
+        {/* 단계를 바꾸는 두 구역은 아래 단추줄(취소·저장)이 아니라 본문 맨 끝에 줄을 그어 떼어 둔다
+            — 저장 옆에 세우면 폰 폭에서 넘치고, 잘못 누르기도 쉽다. */}
+        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
+          <span className="text-[0.9375rem] font-semibold text-ink">준비 단계로 돌아가기</span>
+          <span className="text-xs text-ink-soft">
+            주기 기록과 준비 때 일기는 그대로예요. 이 기간의 기록은 남길지 지울지 다음 화면에서 골라요.
+          </span>
+          <Button variant="outline" size="sm" onClick={onBackToPrep} className="mt-1 self-start">
+            준비 단계로
+          </Button>
+        </div>
+        <ResetSection onReset={onReset} />
       </div>
     </Modal>
   );
