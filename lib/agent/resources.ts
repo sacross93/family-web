@@ -1,10 +1,12 @@
-// 에이전트가 다루는 리소스 16종. 목차(catalog)·상세(detail)·추가(create)가 모두 여기서 파생된다.
-// 규칙: LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범/계획은 제목으로, 아기는 1명으로,
+// 에이전트가 다루는 리소스 18종. 목차(catalog)·상세(detail)·추가(create)가 모두 여기서 파생된다.
+// 규칙: LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범/계획은 제목으로, 아기 페이지는 한 쪽(단계는 서버가 정한다)으로,
 // 가족 구성원은 이름(또는 역할)으로 찾아 toBody 가 채운다.
 // 값 검증은 기존 API 라우트가 하므로 여기서 중복하지 않는다(빈 값은 undefined 로 넘겨 기본값을 살린다).
 
 import { prisma } from "@/lib/prisma";
 import { kindMeta } from "@/app/baby/baby-meta";
+import { CYCLE_KIND_META, TEST_RESULT_META, type CycleKind, type TestResult } from "@/lib/cycle";
+import { journeyState } from "@/lib/journey";
 // 날짜는 `kDateShortYear` 로. 다른 해면 해를 밝힌다 — 포동이가 "내일" 을 2020년으로
 // 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
 import { dday, kDateShortYear, kTime, startOfDay } from "@/lib/date";
@@ -43,19 +45,6 @@ function firstLine(text: string, max = 40): string {
 function hintOf(parts: (string | null | undefined | false)[]): string | undefined {
   const s = parts.filter(Boolean).join(" · ");
   return s || undefined;
-}
-
-/** 아기는 1명만 다룬다(UI 규칙과 동일). 없으면 null. */
-async function currentBabyId(): Promise<string | null> {
-  const baby = await prisma.baby.findFirst({ orderBy: { createdAt: "desc" }, select: { id: true } });
-  return baby?.id ?? null;
-}
-
-/** 아기 관련 추가는 아기가 등록되어 있어야 한다. */
-async function requireBabyId(): Promise<string> {
-  const babyId = await currentBabyId();
-  if (!babyId) throw new Error("아기 정보가 아직 없어요. 아기 페이지에서 먼저 등록해 주세요.");
-  return babyId;
 }
 
 /** 제목으로 앨범 찾기. 대소문자만 무시하고 정확히 일치(부분 일치는 엉뚱한 앨범을 고를 수 있다). */
@@ -685,32 +674,36 @@ export const RESOURCES: AgentResource[] = [
     label: "아기",
     listPath: "/baby",
     async catalog() {
-      const baby = await prisma.baby.findFirst({
-        orderBy: { createdAt: "desc" },
-        select: { nickname: true, dueDate: true, birthDate: true, _count: { select: { entries: true } } },
-      });
-      if (!baby) return [];
+      const s = await journeyState();
+      if (s.active) {
+        return [{
+          title: s.active.nickname,
+          hint: s.active.birthDate ? `출생 ${kDateShortYear(s.active.birthDate)}` : `예정일 ${kDateShortYear(s.active.dueDate)}`,
+        }];
+      }
+      // 준비 단계 — 예측은 반드시 "추정" 으로 말한다(모델이 사실처럼 옮기지 않게).
+      const p = s.prediction;
       return [{
-        title: baby.nickname,
-        hint: [
-          baby.birthDate ? `출생 ${kDateShortYear(baby.birthDate)}` : `예정일 ${kDateShortYear(baby.dueDate)}`,
-          `기록 ${baby._count.entries}`,
-        ].join(" · "),
+        title: "아기 준비",
+        hint: p ? `다음 생리 예정 ${kDateShortYear(p.nextStart)}(추정) · 가임기 ${kDateShortYear(p.fertileStart)}~${kDateShortYear(p.fertileEnd)}(추정)` : "주기 기록 없음",
       }];
     },
-    // 아기는 1명이라 상세 경로(/baby/:id)가 없다 → open_page("/baby") 가 id 없이 부른다.
+    // /baby 에는 id 가 없다 → open_page("/baby") 가 id 없이 부른다.
     async detail() {
-      return prisma.baby.findFirst({
-        orderBy: { createdAt: "desc" },
-        include: {
-          // 기록은 최근 것만 싣는다. 몇 개를 못 실었는지는 _count 로 함께 알려 준다
-          // (잘린 줄 모르면 "기록은 이게 전부"라고 답해 버린다).
-          entries: { orderBy: { date: "desc" }, take: LIST_TAKE, include: { author: true } },
-          checklist: { orderBy: { sortOrder: "asc" } },
-          links: { orderBy: { sortOrder: "asc" } },
-          _count: { select: { entries: true } },
-        },
-      });
+      const s = await journeyState();
+      const [entries, count, checklist, links] = await Promise.all([
+        prisma.journeyEntry.findMany({ orderBy: { date: "desc" }, take: LIST_TAKE, include: { author: true } }),
+        prisma.journeyEntry.count(),
+        prisma.journeyChecklistItem.findMany({ where: { pregnancyId: s.active?.id ?? null }, orderBy: { sortOrder: "asc" } }),
+        prisma.journeyLink.findMany({ orderBy: { sortOrder: "asc" } }),
+      ]);
+      return {
+        stage: s.stage,
+        pregnancy: s.active,
+        // 잘린 줄 모르면 "기록은 이게 전부" 라고 답한다 — 전체 수를 같이 준다.
+        entries, entryCount: count, checklist, links,
+        cycle: s.prediction && { ...s.prediction, note: "날짜는 모두 달력 계산으로 낸 추정이다" },
+      };
     },
     // 아기 자체는 agent 가 만들지 않는다(예정일 등은 사람이 정한다).
   },
@@ -722,7 +715,7 @@ export const RESOURCES: AgentResource[] = [
     // 개수만 세어 주던 자리다. 부부가 주고받는 교환일기인데 에이전트가 "12개" 라는 것밖에
     // 몰라서, 자기가 적어 준 기록조차 다시 읽지 못했다.
     async catalog() {
-      const rows = await prisma.babyEntry.findMany({
+      const rows = await prisma.journeyEntry.findMany({
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         select: { id: true, kind: true, date: true, mood: true, content: true, author: { select: { name: true } } },
         take: LIST_TAKE,
@@ -740,7 +733,7 @@ export const RESOURCES: AgentResource[] = [
     create: {
       api: "/api/baby-entries",
       describe:
-        "아기 페이지에 기록을 남긴다. diary=일상, checkup=검진, letter=아기에게 쓰는 편지.",
+        "아기 페이지에 기록을 남긴다. diary=일상, checkup=병원, letter=아기에게 쓰는 편지. 임신 준비 중에도 쓸 수 있다.",
       schema: {
         type: "object",
         properties: {
@@ -760,8 +753,8 @@ export const RESOURCES: AgentResource[] = [
         required: ["content"],
       },
       async toBody(args) {
+        // 단계(임신 중이면 그 임신, 아니면 준비)는 서버가 찍는다 — 여기서 보내지 않는다.
         return {
-          babyId: await requireBabyId(),
           content: String(args.content ?? "").trim(),
           date: optStr(args.date),
           kind: optStr(args.kind),
@@ -775,18 +768,22 @@ export const RESOURCES: AgentResource[] = [
 
   {
     key: "babyChecklist",
-    label: "아기 준비 체크리스트",
+    label: "아기 체크리스트",
     listPath: "/baby",
     async catalog() {
+      // 지금 단계 것만 센다 — 화면도 지금 단계 체크리스트만 보여 준다(임신 중이면 그 임신, 아니면 준비).
+      // journeyState() 는 다섯 쿼리라 id 하나만 읽는다.
+      const active = await prisma.pregnancy.findFirst({ where: { endedAt: null }, select: { id: true } });
+      const pregnancyId = active?.id ?? null;
       const [count, done] = await Promise.all([
-        prisma.babyChecklistItem.count(),
-        prisma.babyChecklistItem.count({ where: { done: true } }),
+        prisma.journeyChecklistItem.count({ where: { pregnancyId } }),
+        prisma.journeyChecklistItem.count({ where: { pregnancyId, done: true } }),
       ]);
-      return count ? [{ title: `아기 준비 항목 ${count}개`, hint: `완료 ${done}` }] : [];
+      return count ? [{ title: `아기 체크리스트 항목 ${count}개`, hint: `완료 ${done}` }] : [];
     },
     create: {
       api: "/api/baby-checklist",
-      describe: "아기 맞이 준비 체크리스트에 항목 하나를 추가한다.",
+      describe: "아기 페이지의 지금 단계(준비 또는 임신) 체크리스트에 항목 하나를 추가한다.",
       schema: {
         type: "object",
         properties: {
@@ -795,7 +792,7 @@ export const RESOURCES: AgentResource[] = [
         required: ["text"],
       },
       async toBody(args) {
-        return { babyId: await requireBabyId(), text: String(args.text ?? "").trim() };
+        return { text: String(args.text ?? "").trim() };
       },
       undoApi: (id) => `/api/baby-checklist/${id}`,
     },
@@ -806,13 +803,13 @@ export const RESOURCES: AgentResource[] = [
     label: "아기 참고 사이트",
     listPath: "/baby",
     async catalog() {
-      const count = await prisma.babyLink.count();
+      const count = await prisma.journeyLink.count();
       return count ? [{ title: `참고 사이트 ${count}개` }] : [];
     },
     create: {
       api: "/api/baby-links",
       describe:
-        "아기 페이지의 참고 사이트에 링크를 추가한다. 임신·육아 관련 자료 URL을 저장할 때 쓴다.",
+        "아기 페이지의 참고 사이트에 링크를 추가한다. 임신 준비·임신·육아 관련 자료 URL을 저장할 때 쓴다.",
       schema: {
         type: "object",
         properties: {
@@ -822,10 +819,44 @@ export const RESOURCES: AgentResource[] = [
         required: ["url"],
       },
       async toBody(args) {
-        const babyId = await requireBabyId();
-        return { babyId, url: String(args.url ?? "").trim(), title: String(args.title ?? "").trim() };
+        return { url: String(args.url ?? "").trim(), title: String(args.title ?? "").trim() };
       },
       undoApi: (id) => `/api/baby-links/${id}`,
+    },
+  },
+
+  {
+    key: "cycle",
+    label: "주기 기록",
+    listPath: "/baby",
+    async catalog() {
+      const rows = await prisma.cycleEvent.findMany({ orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: LIST_TAKE });
+      return capped(
+        rows.map((e) => ({
+          id: e.id,
+          title: `${CYCLE_KIND_META[e.kind as CycleKind]?.label ?? e.kind} ${kDateShortYear(e.date)}`,
+          hint: e.result ? TEST_RESULT_META[e.result as TestResult]?.label : undefined,
+        })),
+        LIST_TAKE
+      );
+    },
+    create: {
+      api: "/api/cycle-events",
+      describe:
+        "아기 페이지의 주기 기록에 하루짜리 사건을 남긴다. periodStart=생리 시작, periodEnd=생리 끝, ovulationTest=배란 테스트기 결과.",
+      schema: {
+        type: "object",
+        properties: {
+          kind: { type: "string", description: "무엇을 적는지", enum: ["periodStart", "periodEnd", "ovulationTest"] },
+          date: { type: "string", description: "날짜 yyyy-MM-dd. 비우면 오늘" },
+          result: { type: "string", description: "테스트기 결과(ovulationTest 일 때만)", enum: ["negative", "faint", "positive"] },
+        },
+        required: ["kind"],
+      },
+      async toBody(args) {
+        return { kind: optStr(args.kind), date: optStr(args.date), result: optStr(args.result) };
+      },
+      undoApi: (id) => `/api/cycle-events/${id}`,
     },
   },
 
@@ -888,7 +919,7 @@ export const RESOURCES: AgentResource[] = [
         select: { id: true, text: true, by: true, createdAt: true },
         take: MEMORY_TAKE,
       });
-      // 다른 16종과 같은 규칙으로 꼬리("…더 있음")를 단다 — 잘린 것을 전부인 척하지 않는다.
+      // 다른 17종과 같은 규칙으로 꼬리("…더 있음")를 단다 — 잘린 것을 전부인 척하지 않는다.
       return capped(
         rows.map((m) => ({
           id: m.id,
