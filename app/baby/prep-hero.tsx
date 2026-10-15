@@ -4,10 +4,10 @@ import { Settings } from "lucide-react";
 import { Button, IconButton } from "@/components/ui";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
-import { kDate, kDateShort, dday, differenceInCalendarDays } from "@/lib/date";
+import { kDate, kDateShort, differenceInCalendarDays } from "@/lib/date";
 import type { CyclePrediction } from "@/lib/cycle";
 import type { JourneyEntryWithAuthor } from "@/lib/types";
-import { findNextCheckup } from "./baby-hero";
+import { NextVisitLine } from "./baby-hero";
 
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 
@@ -35,8 +35,6 @@ export function PrepHero({
   onRecordStart: () => void;
   onStartPregnancy: () => void;
 }) {
-  const nextCheckup = findNextCheckup(entries);
-
   return (
     <section className="on-chrome relative overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
       <IconButton
@@ -67,15 +65,11 @@ export function PrepHero({
           </div>
         )}
 
-        {nextCheckup && (
-          <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
-            <span className="text-chrome-ink">다음 진료</span>
-            <span className="font-num">{kDateShort(nextCheckup.date)}</span>
-            <span className="font-num text-ink-soft">{dday(nextCheckup.date).label}</span>
-          </p>
-        )}
+        <NextVisitLine entries={entries} />
 
-        <Button variant="soft" onClick={onStartPregnancy} disabled={starting} className="self-start">
+        {/* outline(흰 채움) — 이 로즈 판 위에서 soft(primary-soft)는 ΔE 9.1 로 채움이 거의 안 보였다.
+            같은 판의 "생리 시작 적기" 와 같은 모양이다. */}
+        <Button variant="outline" onClick={onStartPregnancy} disabled={starting} className="self-start">
           임신을 확인했어요
         </Button>
       </div>

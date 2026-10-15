@@ -374,47 +374,60 @@ export function BabyClient({ initial, members }: { initial: JourneyPageData; mem
         <BabyHero pregnancy={active} entries={entries} onOpenSettings={() => setSettingsOpen(true)} />
       )}
 
-      {/* 폰에서는 **일기가 먼저**다. 전에는 접힌 카드 두 장(준비 체크리스트·참고 사이트)이
-          히어로 바로 밑에 붙어, 한 줄씩 보여 주려고 160px 을 쓰고 정작 읽으러 온 일기를
-          아래로 밀어냈다. 데스크톱은 옆에 나란히 서므로 지금대로가 맞다. */}
+      {/* 폰에서는 **일기가 먼저**다(준비 단계의 주기 카드만 그 앞). 전에는 접힌 카드 두 장(준비
+          체크리스트·참고 사이트)이 히어로 바로 밑에 붙어, 한 줄씩 보여 주려고 160px 을 쓰고 정작
+          읽으러 온 일기를 아래로 밀어냈다. 데스크톱은 옆에 나란히 서므로 지금대로가 맞다. */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="order-2 min-w-0 lg:order-2">
-          <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-6">
-            {/* 준비 단계: 펼친 주기 카드가 사이드 맨 위. */}
+        {/* 사이드. **폰에서는 껍데기 두 겹이 `contents` 로 사라져** 안의 묶음이 바깥 격자의 칸이 된다 —
+            그래야 준비 단계의 주기 카드만 order 로 일기 **앞**에 세울 수 있다(준비 때 가장 자주 하는 일이
+            "생리 시작 적기" 인데, 사이드 통째로 일기 뒤에 두면 일기를 다 지나야 닿았다).
+            데스크톱은 전과 같다: 사이드가 한 덩어리로 오른쪽 칸에 붙어(sticky) 주기 카드가 맨 위. */}
+        <div className="contents lg:order-2 lg:block lg:min-w-0">
+          <div className="contents lg:sticky lg:top-6 lg:flex lg:min-w-0 lg:flex-col lg:gap-6">
+            {/* 준비 단계: 펼친 주기 카드. 폰은 히어로 바로 밑(일기 앞), 데스크톱은 사이드 맨 위.
+                `lg:order-none` 이 꼭 있어야 한다 — 데스크톱에서는 아래 묶음이 `contents` 라 그 order-3 이
+                사라지고 카드들이 order 0 이 되는데, 이 칸만 1 이면 기둥의 **맨 아래**로 내려간다. */}
             {stage === "prep" && (
-              <CycleCard
-                events={cycleEvents}
-                prediction={prediction}
-                color={color}
-                onAdd={setCycleModal}
-                onRemove={removeCycleEvent}
-              />
+              <div className="order-1 min-w-0 lg:order-none">
+                <CycleCard
+                  events={cycleEvents}
+                  prediction={prediction}
+                  color={color}
+                  onAdd={setCycleModal}
+                  onRemove={removeCycleEvent}
+                />
+              </div>
             )}
-            <BabyChecklist
-              title="준비 체크리스트"
-              items={checklist}
-              color={color}
-              onAdd={addCheck}
-              // 준비 단계엔 기본 항목이 없다 — 무엇을 넣어도 의료 조언이 된다.
-              onAddDefaults={stage === "prep" ? undefined : addDefaultChecks}
-              onToggle={toggleCheck}
-              onRemove={removeCheck}
-            />
-            <BabyLinks items={links} color={color} onAdd={addLink} onEditTitle={editLinkTitle} onRemove={removeLink} />
-            {/* 임신·출생 단계: 준비 때 기록은 접힌 한 줄로만(읽기·지우기). */}
-            {stage !== "prep" && cycleEvents.length > 0 && (
-              <CycleCard
-                collapsed
-                events={cycleEvents}
-                prediction={null}
+            {/* 나머지 사이드는 폰에서 일기 **뒤**. 데스크톱에서는 이 묶음도 `contents` 라 카드들이
+                sticky 기둥의 칸으로 그대로 이어진다(간격 gap-6 도 기둥의 것). */}
+            <div className="order-3 flex min-w-0 flex-col gap-6 lg:contents">
+              <BabyChecklist
+                // 단계마다 따로인 목록이라 이름도 따로 — 준비 때 적은 것과 아기를 맞을 준비는 다른 일이다.
+                title={stage === "prep" ? "준비 체크리스트" : "아기 맞이 체크리스트"}
+                items={checklist}
                 color={color}
-                onAdd={setCycleModal}
-                onRemove={removeCycleEvent}
+                onAdd={addCheck}
+                // 준비 단계엔 기본 항목이 없다 — 무엇을 넣어도 의료 조언이 된다.
+                onAddDefaults={stage === "prep" ? undefined : addDefaultChecks}
+                onToggle={toggleCheck}
+                onRemove={removeCheck}
               />
-            )}
+              <BabyLinks items={links} color={color} onAdd={addLink} onEditTitle={editLinkTitle} onRemove={removeLink} />
+              {/* 임신·출생 단계: 준비 때 기록은 접힌 한 줄로만(읽기·지우기). */}
+              {stage !== "prep" && cycleEvents.length > 0 && (
+                <CycleCard
+                  collapsed
+                  events={cycleEvents}
+                  prediction={null}
+                  color={color}
+                  onAdd={setCycleModal}
+                  onRemove={removeCycleEvent}
+                />
+              )}
+            </div>
           </div>
         </div>
-        <div className="order-1 lg:order-1 lg:col-span-2">
+        <div className="order-2 min-w-0 lg:order-1 lg:col-span-2">
           <EntryTimeline
             entries={entries}
             filter={filter}

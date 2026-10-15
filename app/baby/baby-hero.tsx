@@ -25,6 +25,19 @@ export function findNextCheckup<T extends { kind: string; date: Date | string }>
   );
 }
 
+/** 히어로 맨 아래 "다음 진료" 한 줄(미래 병원 기록이 있을 때만). 준비·임신 두 히어로가 같은 모양으로 쓴다. */
+export function NextVisitLine({ entries }: { entries: { kind: string; date: Date | string }[] }) {
+  const next = findNextCheckup(entries);
+  if (!next) return null;
+  return (
+    <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
+      <span className="text-chrome-ink">다음 진료</span>
+      <span className="font-num">{kDateShort(next.date)}</span>
+      <span className="font-num text-ink-soft">{dday(next.date).label}</span>
+    </p>
+  );
+}
+
 /**
  * 이 사이트에서 가장 중요한 한 가지.
  *
@@ -46,7 +59,6 @@ export function BabyHero({
   onOpenSettings: () => void;
 }) {
   const pal = palette(pregnancy.color);
-  const nextCheckup = findNextCheckup(entries);
   const born = !!pregnancy.birthDate;
   const p = pregnancyProgress(pregnancy.dueDate);
   const pct = Math.round(p.progress * 100);
@@ -56,7 +68,7 @@ export function BabyHero({
       <IconButton
         variant="ghost"
         size="sm"
-        aria-label="아기 설정"
+        aria-label="임신 설정"
         onClick={onOpenSettings}
         className="absolute right-4 top-4 z-20 text-chrome-faint hover:bg-chrome-soft hover:text-chrome-ink"
       >
@@ -132,13 +144,7 @@ export function BabyHero({
           </div>
         )}
 
-        {nextCheckup && (
-          <p className="flex items-baseline gap-2 border-t border-ink/20 pt-4 text-sm text-chrome-faint">
-            <span className="text-chrome-ink">다음 진료</span>
-            <span className="font-num">{kDateShort(nextCheckup.date)}</span>
-            <span className="font-num text-ink-soft">{dday(nextCheckup.date).label}</span>
-          </p>
-        )}
+        <NextVisitLine entries={entries} />
       </div>
     </section>
   );
