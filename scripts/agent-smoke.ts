@@ -14,6 +14,7 @@ import { createFakeProvider } from "../lib/agent/llm/fake";
 import { runAgent } from "../lib/agent/loop";
 import { RESOURCES } from "../lib/agent/resources";
 import { prisma } from "../lib/prisma";
+import { AGENT_NAME } from "../lib/agent/name";
 
 const BASE = process.argv[2] || "http://localhost:3001";
 
@@ -60,7 +61,7 @@ async function main() {
     [{ type: "text", delta: "다 했어요." }, { type: "done" }],
   ]);
 
-  console.log(`인공 포동이 연기 시험 — ${BASE} (모델 호출 0회)\n`);
+  console.log(`${AGENT_NAME} 연기 시험 — ${BASE} (모델 호출 0회)\n`);
   const seen: string[] = [];
   let listed = false;
   let stored: { title: string; hint?: string } | null = null;

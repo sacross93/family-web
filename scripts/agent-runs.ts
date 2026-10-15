@@ -4,6 +4,7 @@
 // 여기 뜨는 것이 로그에 남는 것의 **전부**다 — 내용은 담지 않는다(run-log.ts 주석).
 
 import { prisma } from "../lib/prisma";
+import { AGENT_NAME } from "../lib/agent/name";
 
 const MARK: Record<string, string> = { ok: "✓", error: "✗", aborted: "…" };
 
@@ -20,7 +21,7 @@ async function main() {
   const runs = await prisma.agentRun.findMany({ orderBy: { createdAt: "desc" }, take });
 
   if (runs.length === 0) {
-    console.log("아직 기록이 없어요. (인공 포동이에게 한 번 물어보면 여기에 남습니다)");
+    console.log(`아직 기록이 없어요. (${AGENT_NAME}에게 한 번 물어보면 여기에 남습니다)`);
     return;
   }
 

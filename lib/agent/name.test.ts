@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { AGENT_NAME, MEMORY_BY, byLabel, isMemoryBy } from "@/lib/agent/name";
 
 /**
- * 이름은 **바뀐다.** 실제로 바뀌었다 — "포동이" 였다가 2026-09-22 에 "인공 포동이" 가 됐고,
+ * 이름은 **바뀐다.** 실제로 바뀌었다 — "포동이" 였다가 2026-09-22 에 "인공 포동이", 2026-10-16 에 "AI 포동이" 가 됐고,
  * 그때 20개 파일에 흩어진 83군데를 찾아다녀야 했다. 다시 바뀔 때 또 그러지 않게 잡아 둔다.
  */
 const SCAN = [

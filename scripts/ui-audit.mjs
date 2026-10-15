@@ -766,11 +766,14 @@ await Promise.all(
       await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
       await page.getByRole("button", { name: /기념일 추가|첫 기념일/ }).first().click();
     }, ".fixed.inset-0.z-50"],
-    ["인공 포동이 시트", async () => {
+    // 이름은 바뀐다(lib/agent/name.ts) — 이 스크립트는 TS 를 못 읽으니 **끝말**로 찾는다.
+    // 전에는 "인공 포동이에게 물어보기" 를 글자 그대로 찾아서, 이름이 바뀌자 버튼을 못 찾고
+    // "skip" 으로 **조용히 건너뛸** 뻔했다(2026-10-16, "AI 포동이" 로 바꿀 때).
+    ["포동이 시트", async () => {
       await page.goto(BASE + "/", { waitUntil: "networkidle" });
-      const b = page.getByRole("button", { name: "인공 포동이에게 물어보기" });
+      const b = page.getByRole("button", { name: /포동이에게 물어보기$/ });
       if (await b.count()) await b.first().click(); else throw new Error("skip");
-    }, '[role="dialog"][aria-label="인공 포동이에게 물어보기"]'],
+    }, '[role="dialog"][aria-label$="포동이에게 물어보기"]'],
   ];
   for (const [name, openIt, sel] of traps) {
     try {

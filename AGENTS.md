@@ -73,7 +73,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 화면 문구는 임신이 끝난 이유를 암시하지 않는다(두 리셋: "준비 단계로" = 그 임신만, "처음부터 다시 시작" = 전부).
 - 홈 노출은 `JourneySettings.showOnHome` 일 때만. `BabyLink` 시절의 참고 사이트 규칙(`lib/url.ts`, 도메인만 표시)은 그대로.
 
-## 사이트 에이전트 (인공 포동이)
+## 사이트 에이전트 (AI 포동이)
 
 **`lib/agent/`·`components/agent/`·`app/api/agent/` 를 고치기 전에 [PODONGI.md](PODONGI.md) 필독.**
 (이 파일 `AGENTS.md` 와 한 글자 차이로 헷갈리지 않게 포동이 이름을 붙였다.)
