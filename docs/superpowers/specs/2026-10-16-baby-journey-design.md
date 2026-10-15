@@ -171,7 +171,7 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 
 ### 4.1 히어로 — 단계마다 다르다 (지금의 진한 판을 그대로 쓴다)
 - **준비**: `h1` 은 "아기 준비". 예측이 있으면 큰 글씨로 **"다음 생리 예정 D-12"**(지났으면 "예정일에서 3일 지났어요"),
-  아래 줄에 `10월 28일 예정 · 추정`. 막대는 이번 주기 진행(며칠째 / 평균 주기)이고 그 위에 **가임기 구간**을
+  아래 줄에 `10월 28일 예정 · 추정`. 미래 병원 기록이 있으면 임신 단계처럼 "다음 진료" 줄도 단다. 막대는 이번 주기 진행(며칠째 / 평균 주기)이고 그 위에 **가임기 구간**을
   옅게 깐다. 그 아래 "가임기 10/30~11/5 · 배란 예정 11/4 (추정)". 예측이 없으면 "생리 시작일을 적으면 다음
   예정일과 가임기를 추정해 드려요" + [생리 시작 적기].
   오른쪽 위 ⚙ = 페이지 설정. 아래쪽에 **[임신을 확인했어요]** 버튼.
@@ -186,7 +186,8 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 
 ### 4.3 일기 (지금 타임라인 그대로)
 - 종류 셋 그대로: 일상 · **병원**(지금 "검진" — 준비 단계에도 맞게 이름만 "병원" 으로) · 편지.
-- 주차 꼬리표는 **진행 중인 임신에 도장 찍힌 기록**의 날짜 묶음에만 단다. 준비 때 기록·끝난 임신의 기록에는 없다.
+- 주차 꼬리표는 **임신 단계(출생일 없음)일 때, 진행 중인 임신에 도장 찍힌 기록**의 날짜 묶음에만 단다.
+  준비 때 기록·끝난 임신의 기록·출생 단계에는 없다(지금의 `showWeek = !birthDate` 를 잇는다).
 - 다음 진료(미래 날짜의 병원 기록)는 단계와 상관없이 히어로 아래에 보인다.
 
 ### 4.4 체크리스트 · 참고 사이트
@@ -233,13 +234,22 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 | `DELETE /api/baby` | **처음부터 다시 시작**: 여섯 표를 모두 지우고 일기 사진 sweep |
 | `POST /api/pregnancy` | 임신 확인 `{ nickname?, emoji?, color?, dueDate | lmpDate }`. 진행 중이 있으면 409 |
 | `PATCH /api/pregnancy/[id]` | 임신 설정(태명·이모지·색·예정일·출생일) |
-| `POST /api/pregnancy/[id]/end` | `{ keep: boolean }` 남기기=endedAt, 지우기=행 삭제+cascade+사진 sweep. 이미 끝났거나 없으면 200 |
+| `POST /api/pregnancy/[id]/end` | `{ keep: boolean }`. 남기기 = `endedAt` 이 비었을 때만 찍는다(이미 끝났으면 그대로 200). 지우기 = **끝났든 아니든 언제나** `deleteMany` → cascade(일기·체크리스트) + 사진 sweep. 없는 id 도 200 |
 | `POST /api/baby-entries` · `PATCH/DELETE /[id]` | 일기. POST 는 서버가 진행 중인 임신을 도장으로 찍는다(babyId 안 받음) |
 | `POST /api/baby-checklist` · `PATCH/DELETE /[id]` | `{ text }` 또는 `{ texts }`. 서버가 지금 단계(진행 중 임신 id 또는 null)를 찍는다 |
 | `POST /api/baby-links` · `PATCH/DELETE /[id]` | 참고 사이트(babyId 안 받음) |
 | `POST /api/cycle-events` · `DELETE /[id]` | 주기 기록 `{ date?, kind, result? }`(§2.3 중복 방지) |
 
 `lib/uploads.ts` 의 `sweepUploads` 는 `babyEntry` 대신 `journeyEntry` 를 센다.
+
+**사진 정리 순서(두 삭제 길 모두):** cascade 로 일기가 사라지면 본문을 읽을 수 없다. 그러니
+① 지울 일기의 본문에서 `imageUrlsIn()` 으로 주소를 **먼저** 모으고(임신 지우기 = `where: { pregnancyId: id }`,
+처음부터 다시 시작 = 전체), ② `deleteMany`, ③ `sweepUploads(urls)`. (지금 `DELETE /api/baby` 와 같은 순서.)
+
+**서버 조회는 한 곳에서:** `lib/journey.ts` 의 `journeyState()` 가 설정 · 진행 중인 임신 · 주기 기록 전부(작은 표) ·
+최근 일기 1개 · 오늘 이후 병원 기록을 읽는다. **홈 · 달력 · 포동이 `baby` 리소스가 모두 이것을 부른다**(아기 페이지는
+일기 전체가 필요해 따로 읽는다). 단계·예측·`journeyMarks()` 는 이 결과에서 계산한다. 홈은 요청당 SQL 이 16개로
+재여 있다(2026-09-23) — 이 도우미로 늘어나는 수를 재서 적는다.
 
 ## 8. 포동이 (`lib/agent/resources.ts`)
 키는 그대로 두고(옛 대화의 되돌리기·시험이 키로 찾는다) 안을 바꾼다. 17종 → **18종**.
@@ -256,12 +266,16 @@ export function predictCycle(events, today = new Date()): CyclePrediction | null
 ## 9. 검증
 - **vitest**: `lib/cycle.ts`(기간 짝짓기, 15~60 거르기, 기본 28, 지난 예정일, 배란·가임기 경계, 같은 날 두 기록),
   `journeyMarks`(단계별로 무엇이 나오는지), 포동이 리소스 시험 갱신(`resources.test.ts`·`catalog.test.ts`).
-- **ensure.sql 대조**: 로컬 DB 에서 새 여섯 표를 지우고 `ensure.sql` 로 다시 만든 뒤
-  `prisma migrate diff --from-url <로컬> --to-schema-datamodel prisma/schema.prisma` 가 **비어 있어야** 한다.
-  두 번 돌려도 오류 없음.
+- **ensure.sql 대조**(리드가 직접): Prisma 는 FK 를 따로 `ALTER TABLE … ADD CONSTRAINT` 로 내지만
+  `ensure-tables.mjs` 는 ALTER 로 시작하는 줄을 거부한다 → **FK 는 `CREATE TABLE` 안에 Prisma 와 같은 이름·같은
+  `ON DELETE … ON UPDATE CASCADE` 로** 적는다. 확인: 운영처럼 `FamilyMember` 와 옛 `Baby*` 표가 이미 있는 빈 DB 에
+  `ensure.sql` 을 **두 번** 돌리고(오류 없음), `prisma migrate diff --from-url <그 DB> --to-schema-datamodel prisma/schema.prisma`
+  의 새 여섯 표 관련 줄이 **0줄**이어야 한다(옛 표를 지우라는 줄만 나와야 한다).
 - **ui:flows**(로컬): 아기 흐름을 새로 쓴다 — 준비 단계에서 일기 쓰기·지우기, 생리 시작 → 히어로에 "추정",
   테스트기 결과, 임신 확인 → 주차, 그 상태에서 일기 하나 → "준비 단계로 · 지우기" → 그 일기만 사라지고 준비 때
-  일기는 남는다, "남기기" 도 한 번, 홈 표시 켜고 끄기(돌려놓기). **처음부터 다시 시작은 돌리지 않는다**
+  일기는 남는다, "남기기" 도 한 번(끝나면 `keep:false` 로 그 임신을 지워 치운다), 홈 표시 켜고 끄기(돌려놓기).
+  시작할 때 지난 판의 찌꺼기 — 태명에 MARK 가 붙은 임신 — 를 `keep:false` 로 지운다(안 지우면 로컬이 임신 단계로
+  남아 다음 판이 단계 흐름을 조용히 건너뛴다). **처음부터 다시 시작은 돌리지 않는다**
   (개발자 로컬 기록이 다 지워진다). 진행 중인 임신이 로컬에 이미 있으면 단계 흐름은 건너뛰고 그렇게 알린다.
 - `npm run agent:smoke`, `npm run lint` 0건, `npx tsc --noEmit`, `npm run ui:audit`(로컬) — 390px 에서 가로 넘침 없음.
 - 달력: 준비 단계 데이터로 격자·하루 모달·폰 목록에 표시가 나오는지 화면으로 본다.
