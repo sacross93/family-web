@@ -48,9 +48,11 @@ DATABASE_URL="<Neon Direct 문자열>" npm run db:seed
 DATABASE_URL="<Neon Direct>" npx prisma db push
 ```
 
-안 하면 새 테이블을 쓰는 페이지가 열리지 않아요. 예: 아기 페이지(`Baby`·`BabyEntry`·`BabyChecklistItem`).
+안 하면 새 테이블을 쓰는 페이지가 열리지 않아요. 예: 아기 페이지(`Pregnancy`·`JourneyEntry`·`JourneyChecklistItem`·`JourneyLink`·`CycleEvent`·`JourneySettings`).
 사이트 에이전트도 같습니다 — `AgentAuth`·`AgentRun`·`AgentChat`·`AgentChatMessage` **네 테이블**을 **코드 배포 전에** 먼저 만들어 주세요(6절).
 특히 `AgentChat`·`AgentChatMessage` 는 대화 기록을 담는 테이블이라, 코드가 먼저 올라가면 **첫 질문을 보내는 순간 500** 이 납니다.
+
+2026-10 아기 페이지 재설계 이후 옛 `Baby`·`BabyEntry`·`BabyChecklistItem`·`BabyLink` 표는 쓰이지 않는다. 비어 있으면 Neon 콘솔에서 `DROP TABLE "BabyLink", "BabyChecklistItem", "BabyEntry", "Baby";` 로 지워도 된다(사람 손으로 한 번 — `ensure.sql` 에 넣지 말 것).
 
 ---
 

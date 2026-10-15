@@ -24,7 +24,7 @@ export interface NavItem {
  */
 export const NAV: NavItem[] = [
   { href: "/", label: "홈", emoji: "🏠", color: "lavender", desc: "우리 가족 한눈에" },
-  { href: "/baby", label: "아기", emoji: "🌱", color: "rose", desc: "함께 쓰는 아기 일기" },
+  { href: "/baby", label: "아기", emoji: "🌱", color: "rose", desc: "준비부터 출산까지 함께 쓰는 기록" },
   { href: "/shopping", label: "장보기", emoji: "🛒", color: "mint", desc: "공유 장보기 목록" },
   { href: "/plans", label: "계획", emoji: "🗺️", color: "mint", desc: "여행·주말 계획 짜기" },
   { href: "/calendar", label: "캘린더", emoji: "📅", color: "peach", desc: "가족 일정 달력" },

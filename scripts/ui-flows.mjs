@@ -21,9 +21,9 @@
 // **로컬에서만 돌릴 것.** 실제로 만들고 지운다. 만든 것은 각 흐름 끝에서 되돌린다.
 // playwright 찾는 방법은 ui-audit.mjs 와 같다.
 
-import { existsSync, readdirSync, writeFileSync, unlinkSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { deflateSync } from "node:zlib";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
 const BASE = process.argv[2] || "http://localhost:3000";
@@ -207,6 +207,15 @@ await page.waitForURL(BASE + "/");
         await fetch(`/api/${path}/${it.id}`, { method: "DELETE" }).catch(() => {});
         n++;
       }
+    }
+    // 태명에 MARK 가 붙은 임신 = 지난 판의 찌꺼기. 남으면 로컬이 임신 단계로 굳어
+    // 다음 판의 단계 흐름이 조용히 건너뛰어진다. 지우기(keep:false)로 치운다.
+    const b = await fetch("/api/baby").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (b?.active?.nickname?.includes(mark)) {
+      await fetch(`/api/pregnancy/${b.active.id}/end`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keep: false }),
+      }).catch(() => {});
+      n++;
     }
     return n;
   }, MARK);
@@ -634,7 +643,7 @@ await step("기록 남기기를 열면 **쓰는 칸이 맨 위**에 있다", asy
 // 만든 기록의 id 를 잡아 둔다 — 지우기 단계가 실패해도 찌꺼기를 남기지 않으려고.
 // (컬렉션에 GET 이 없어서 나중에 id 로 찾을 방법이 없다. 만들 때 받아 두는 수밖에.)
 let babyEntryId = null;
-page.on("response", async (res) => {
+const catchBabyEntry = async (res) => {
   if (res.request().method() !== "POST" || !res.url().includes("/api/baby-entries")) return;
   try {
     const j = await res.json();
@@ -642,7 +651,8 @@ page.on("response", async (res) => {
   } catch {
     /* 본문이 없을 수도 있다 */
   }
-});
+};
+page.on("response", catchBabyEntry);
 
 await step("한 줄 적고 저장하면 일기에 남는다", async () => {
   await page.locator('[role="dialog"] textarea').first().fill(MARK + " 오늘 입덧이 좀 나아졌어요");
@@ -684,20 +694,21 @@ await step("기록 지우기 — 새로고침해도 안 되살아난다", async 
 });
 
 await step("아기가 홈에 없으면 한 번 눌러 켤 수 있다", async () => {
-  // `Baby.showOnHome` 의 기본값은 false 다 — 배포본이 실제로 그랬다.
+  // `JourneySettings.showOnHome` 의 기본값은 false 다 — 배포본이 실제로 그랬다.
   // 태명·예정일을 다 넣어 두고도 홈에서는 아기가 안 보였고, 끄기로 정한 게 아니라
   // 그런 스위치가 있는 줄 몰랐을 뿐이다.
   const baby = await page.evaluate(() => fetch("/api/baby").then((r) => r.json()));
   const before = baby.showOnHome;
+  // 설정은 페이지에 하나뿐이라 id 가 없다.
   const set = (v) =>
     page.evaluate(
-      ([id, showOnHome]) =>
+      (showOnHome) =>
         fetch("/api/baby", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, showOnHome }),
+          body: JSON.stringify({ showOnHome }),
         }).then((r) => r.ok),
-      [baby.id, v]
+      v
     );
   if ((await set(false)) !== true) throw new Error("끄기가 안 먹혔다");
   try {
@@ -723,7 +734,6 @@ await step("아기가 홈에 없으면 한 번 눌러 켤 수 있다", async () 
   }
 });
 
-// ── 꾸미기 스티커 ────────────────────────────────────────
 // 지우기 단계가 어떤 이유로든 실패했으면 여기서 확실히 치운다.
 if (babyEntryId) {
   const gone = await page.evaluate(
@@ -732,7 +742,299 @@ if (babyEntryId) {
   );
   if (gone === 200 || gone === 204) console.log("  (남아 있던 아기 기록을 치웠어요)");
 }
+// 아래 단계들은 일기를 **page 안의 fetch 로** 만든다 — 그것도 response 로 잡혀서,
+// 귀를 열어 두면 babyEntryId 가 엉뚱한 일기로 바뀐다. 위에서 다 치웠으니 뗀다.
+page.off("response", catchBabyEntry);
 
+// ── 아기 단계: 준비 → 임신 → 다시 준비 ─────────────────────
+//
+// 단계 흐름은 **로컬이 준비 단계일 때만** 돈다 — 개발자가 임신 단계로 써 두었으면 건드리지 않는다.
+// (그때는 단계마다 "건너뜀" 으로 실패해서 알린다. 조용히 통과시키면 안 돌았다는 걸 아무도 모른다.)
+console.log("아기 단계");
+const api = (path, method, body) =>
+  page.evaluate(
+    ([p, m, b]) =>
+      fetch(p, { method: m, headers: { "Content-Type": "application/json" }, body: b && JSON.stringify(b) }).then(
+        async (r) => ({ status: r.status, json: await r.json().catch(() => null) })
+      ),
+    [path, method, body]
+  );
+/** 단계를 다시 읽는다 — 앞 단계가 어디서 멈췄는지에 따라 지금이 달라질 수 있어서 한 번 찍어 두지 않는다. */
+const requirePrep = async () => {
+  const b = (await api("/api/baby", "GET")).json;
+  if (b?.stage === "prep") return;
+  if (b?.active?.nickname?.includes(MARK)) throw new Error("앞 단계의 시험용 임신이 안 치워졌다");
+  throw new Error("로컬이 준비 단계가 아니라 건너뜀 — 임신을 끝내고 다시");
+};
+/** 태명에 MARK 가 붙은 진행 중 임신을 지운다(없으면 아무것도 안 한다). 시작할 때의 청소와 같은 규칙. */
+const endMarkPregnancy = async () => {
+  const a = (await api("/api/baby", "GET")).json?.active;
+  return a?.nickname?.includes(MARK) ? api(`/api/pregnancy/${a.id}/end`, "POST", { keep: false }) : null;
+};
+/** 치우기가 실패해도 그 단계의 원래 오류를 덮지 않는다 — 대신 크게 알린다. 조용히 남기는 것이 제일 나쁘다. */
+const tidy = async (what, fn) => {
+  try {
+    const r = await fn();
+    if (r && r.status >= 400) console.log(`      ⚠ 못 치웠다(${what}) — ${r.status}`);
+  } catch (e) {
+    console.log(`      ⚠ 못 치웠다(${what}) — ${String(e).split("\n")[0].slice(0, 80)}`);
+  }
+};
+/** 게시판 단계가 쓰는 그 8×8 PNG(IMG)를 올리고 주소를 받는다. */
+const uploadImg = () =>
+  page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const fd = new FormData();
+    fd.append("file", new File([bytes], "ui-flows.png", { type: "image/png" }));
+    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    return r.ok ? ((await r.json()).urls?.[0] ?? null) : null;
+  }, readFileSync(IMG).toString("base64"));
+const CYCLE_DAY = "2026-01-05"; // 과거 고정 — 로컬 기록과 겹치지 않게
+const ymd = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const DUE = ymd(new Date(Date.now() + 200 * 86400000)); // 200일 뒤 예정 → 11주쯤
+/** 주기 카드의 "모든 기록 N개". 컬렉션에 GET 이 없어서 화면의 이 숫자가 유일한 눈이다. */
+const cycleCount = async () => Number((await text()).match(/모든 기록\s*(\d+)개/)?.[1] ?? 0);
+/**
+ * 주기 카드(또는 히어로)의 단추로 기록 하나를 적고, 서버가 돌려준 행을 받는다.
+ * 같은 날 같은 기록이면 서버는 **있던 행**을 돌려준다 — 개발자가 그날을 진짜로 적어 두었다면
+ * 그건 지우면 안 되니, 이번에 새로 생긴 행인지(`fresh`)를 만든 시각으로 가른다.
+ */
+const recordCycle = async (button, beforeSave) => {
+  const t0 = Date.now();
+  await page.getByRole("button", { name: button }).first().click();
+  await page.waitForTimeout(500);
+  const dlg = page.locator('[role="dialog"]').last();
+  await dlg.locator('input[type="date"]').fill(CYCLE_DAY);
+  if (beforeSave) await beforeSave(dlg);
+  const saved = page.waitForResponse(
+    (r) => r.url().includes("/api/cycle-events") && r.request().method() === "POST",
+    { timeout: 8000 }
+  );
+  saved.catch(() => {}); // 누르기가 실패하면 아무도 안 기다린다 — 처리 안 된 거부로 판 전체가 죽지 않게
+  await dlg.getByRole("button", { name: "저장", exact: true }).click();
+  const res = await saved;
+  const row = await res.json().catch(() => null);
+  if (!res.ok() || !row?.id) throw new Error(`저장이 안 됐다 — ${res.status()}`);
+  return { row, fresh: new Date(row.createdAt).getTime() >= t0 - 5000 };
+};
+const alreadyThere = (what) => new Error(`${CYCLE_DAY} 에 이미 ${what} 기록이 있다 — 검사 날짜(CYCLE_DAY)를 바꿀 것`);
+
+await step("생리 시작을 적으면 히어로에 '추정' 예정일이 뜬다", async () => {
+  await requirePrep();
+  let made = null;
+  try {
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    const n0 = await cycleCount();
+    const { row, fresh } = await recordCycle(/생리 시작/);
+    if (!fresh) throw alreadyThere("생리 시작");
+    made = row.id;
+    await page.waitForTimeout(1200);
+    if (!(await text()).includes("추정")) throw new Error("예측이 안 보인다");
+    // 시드에 이미 예측이 있으면 위 줄은 적기 전부터 참이다 — 기록 수가 늘었는지로 저장을 따로 본다.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    const n1 = await cycleCount();
+    if (n1 !== n0 + 1) throw new Error(`새로고침하니 기록 수가 ${n0} → ${n1}`);
+  } finally {
+    if (made) await tidy("생리 시작 기록", () => api(`/api/cycle-events/${made}`, "DELETE"));
+  }
+});
+
+await step("테스트기는 결과를 골라야 저장된다", async () => {
+  await requirePrep();
+  let made = null;
+  try {
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    const { row, fresh } = await recordCycle(/테스트기/, async (dlg) => {
+      // 결과를 미리 골라 두면 안 고르고 저장해 실제와 다른 결과가 남는다.
+      if (!(await dlg.getByRole("button", { name: "저장", exact: true }).isDisabled()))
+        throw new Error("결과를 안 골랐는데 저장이 켜져 있다");
+      await dlg.getByRole("button", { name: "양성", exact: true }).click();
+    });
+    if (!fresh) throw alreadyThere("테스트기 양성");
+    made = row.id;
+    if (row.kind !== "ovulationTest" || row.result !== "positive")
+      throw new Error(`${row.kind}/${row.result} 로 남았다 — ovulationTest/positive 여야`);
+  } finally {
+    if (made) await tidy("테스트기 기록", () => api(`/api/cycle-events/${made}`, "DELETE"));
+  }
+});
+
+await step("같은 날 같은 기록은 한 줄 — 두 번 지워도 200", async () => {
+  // 포동이와 사람이 같은 날을 두 번 적어도 줄이 늘면 안 된다(평균 주기가 흔들린다).
+  // 지우기는 두 폰이 동시에 누를 수 있다 — 뒤쪽이 500 이면 화면이 지운 줄을 되살린다.
+  await requirePrep();
+  const made = new Set();
+  try {
+    const t0 = Date.now();
+    const a = await api("/api/cycle-events", "POST", { date: CYCLE_DAY, kind: "periodStart" });
+    if (a.status !== 200 || !a.json?.id) throw new Error(`못 적었다 — ${a.status}`);
+    if (new Date(a.json.createdAt).getTime() < t0 - 5000) throw alreadyThere("생리 시작");
+    made.add(a.json.id);
+    const b = await api("/api/cycle-events", "POST", { date: CYCLE_DAY, kind: "periodStart" });
+    if (b.json?.id) made.add(b.json.id);
+    if (b.json?.id !== a.json.id) throw new Error("같은 날을 다시 적었더니 줄이 늘었다");
+    const first = await api(`/api/cycle-events/${a.json.id}`, "DELETE");
+    const second = await api(`/api/cycle-events/${a.json.id}`, "DELETE");
+    if (first.status !== 200) throw new Error(`첫 삭제가 ${first.status}`);
+    if (second.status !== 200) throw new Error(`두 번째 삭제가 ${second.status} — 화면은 이걸 보고 지운 줄을 되살린다`);
+  } finally {
+    // 지우기는 몇 번을 불러도 같다 — 위에서 지웠어도 한 번 더 부른다.
+    for (const id of made) await tidy("주기 기록", () => api(`/api/cycle-events/${id}`, "DELETE"));
+  }
+});
+
+// 준비 때 일기 하나를 **임신 확인 전에** 적어 둔다 — "준비 단계로 · 지우기" 는 이것을 남겨야 한다.
+// 단계 하나에 넣지 않는 이유: 임신 확인 단계가 끝나도 지우면 안 되고, 다음 단계가 치운다.
+let prepEntryId = null;
+if ((await api("/api/baby", "GET").catch(() => null))?.json?.stage === "prep") {
+  const r = await api("/api/baby-entries", "POST", { content: MARK + " 준비 때" }).catch(() => null);
+  prepEntryId = r?.json?.id ?? null;
+}
+
+await step("임신 확인 → 주차, 두 번째 확인은 409", async () => {
+  await requirePrep();
+  let ok = false;
+  try {
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "임신을 확인했어요" }).click();
+    await page.waitForTimeout(600);
+    const dlg = page.locator('[role="dialog"]').last();
+    await dlg.getByPlaceholder("비워 두면 '우리 아기'").fill(MARK + "콩");
+    // 생리 기록이 있으면 "마지막 생리일" 이 미리 채워진 채로 열린다 — 예정일 칸으로 바꿔 넣는다.
+    await dlg.getByRole("button", { name: "출산 예정일", exact: true }).click();
+    await dlg.locator('input[type="date"]').fill(DUE);
+    await dlg.getByRole("button", { name: "시작하기", exact: true }).click();
+    // 서버가 바꾼 뒤 화면을 다시 받아 온다(router.refresh) — 걸리는 시간이 그때그때라
+    // 고정 시간으로 재지 않고 h1 이 태명으로 바뀔 때까지 기다린다.
+    await page
+      .getByRole("heading", { level: 1, name: MARK + "콩" })
+      .waitFor({ timeout: 8000 })
+      .catch(() => {
+        throw new Error("히어로가 임신 단계로 안 바뀐다");
+      });
+    // "주" 한 글자는 "주기 기록" 에도 있다 — 히어로 안에서 "N주 N일" 꼴을 찾는다.
+    const hero = await page.locator("section", { has: page.locator("h1") }).last().innerText();
+    if (!/\d+주 \d+일/.test(hero)) throw new Error(`주차가 안 보인다 — ${hero.slice(0, 40)}`);
+    // 두 폰에서 동시에 누른 셈. 태명에 MARK 를 붙여 둔다 — 잘못 만들어지면 다음 판 청소가 잡도록.
+    const again = await api("/api/pregnancy", "POST", { nickname: MARK + "둘째확인", dueDate: "2027-01-01" });
+    if (again.status !== 409) {
+      if (again.json?.id)
+        await tidy("두 번째 임신", () => api(`/api/pregnancy/${again.json.id}/end`, "POST", { keep: false }));
+      throw new Error(`두 번째 확인이 ${again.status} — 진행 중인 임신이 둘이 된다`);
+    }
+    ok = true; // 다음 단계가 이 임신을 쓴다 — 통과했으면 여기서 치우지 않는다
+  } finally {
+    if (!ok) await tidy("시험용 임신", endMarkPregnancy);
+  }
+});
+
+await step("임신 중에 쓴 일기만 '준비 단계로 · 지우기' 로 사라진다", async () => {
+  let duringId = null;
+  let photo = null;
+  try {
+    const now = (await api("/api/baby", "GET")).json;
+    if (now?.active && !now.active.nickname?.includes(MARK))
+      throw new Error("로컬이 준비 단계가 아니라 건너뜀 — 임신을 끝내고 다시");
+    if (!now?.active) throw new Error("앞 단계에서 임신을 못 시작했다");
+    if (!prepEntryId) throw new Error("준비 때 일기를 못 적어 두었다");
+
+    // 임신 중 일기 — 사진을 품게 한다. 지우기가 사진 파일까지 치우는지 보려고.
+    const base = fileCount();
+    photo = await uploadImg();
+    if (!photo) throw new Error("사진을 못 올렸다");
+    if (fileCount() !== base + 1) throw new Error("올렸는데 파일이 안 생겼다");
+    const during = await api("/api/baby-entries", "POST", { content: `${MARK} 임신 중\n\n![](${photo})` });
+    duringId = during.json?.id ?? null;
+    if (!duringId) throw new Error(`임신 중 일기를 못 적었다 — ${during.status}`);
+
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "임신 설정" }).click();
+    await page.waitForTimeout(600);
+    await page.locator('[role="dialog"]').last().getByRole("button", { name: "준비 단계로", exact: true }).click();
+    await page.waitForTimeout(600);
+    // 설정 창과 확인 창의 단추 이름이 같다("준비 단계로") — 지금 맨 위 창 안에서만 찾는다.
+    const dlg = page.locator('[role="dialog"]').last();
+    if (!(await dlg.innerText()).includes("준비 단계로 돌아갈까요?")) throw new Error("남길지 지울지 묻는 창이 안 뜬다");
+    await dlg.getByRole("radio", { name: /이 기간의 기록 지우기/ }).click();
+    await dlg.getByRole("button", { name: "준비 단계로", exact: true }).click();
+    await page
+      .getByRole("heading", { level: 1, name: "아기 준비", exact: true })
+      .waitFor({ timeout: 8000 })
+      .catch(() => {
+        throw new Error("준비 단계로 안 돌아간다");
+      });
+
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    const t = await text();
+    if (t.includes(MARK + " 임신 중")) throw new Error("임신 중에 쓴 일기가 남았다");
+    if (!t.includes(MARK + " 준비 때")) throw new Error("준비 때 일기까지 지워졌다");
+    if (!(await page.getByRole("heading", { level: 1, name: "아기 준비", exact: true }).count()))
+      throw new Error("새로고침하니 준비 단계가 아니다");
+    if (fileCount() !== base) throw new Error(`사진 파일이 남았다 — ${base + 1}개 → ${fileCount()}개`);
+  } finally {
+    await tidy("시험용 임신", endMarkPregnancy);
+    if (duringId) await tidy("임신 중 일기", () => api(`/api/baby-entries/${duringId}`, "DELETE"));
+    // 일기에 못 붙은 사진은 아무도 안 치운다(주인이 없다) — 로컬 파일이니 직접 지운다.
+    if (photo?.startsWith("/uploads/")) {
+      const f = join(uploadDir, basename(photo));
+      if (existsSync(f)) unlinkSync(f);
+    }
+    if (prepEntryId) await tidy("준비 때 일기", () => api(`/api/baby-entries/${prepEntryId}`, "DELETE"));
+  }
+});
+
+await step("'남기기' 는 일기를 남기고 준비로 돌아간다", async () => {
+  await requirePrep();
+  let pregnancyId = null;
+  let entryId = null;
+  try {
+    const started = await api("/api/pregnancy", "POST", { nickname: MARK + "둘", dueDate: DUE });
+    pregnancyId = started.json?.id ?? null;
+    if (started.status !== 200 || !pregnancyId) throw new Error(`임신을 못 시작했다 — ${started.status}`);
+    const e = await api("/api/baby-entries", "POST", { content: MARK + " 남길 일기" });
+    entryId = e.json?.id ?? null;
+    if (!entryId) throw new Error(`일기를 못 적었다 — ${e.status}`);
+    const kept = await api(`/api/pregnancy/${pregnancyId}/end`, "POST", { keep: true });
+    if (kept.status !== 200) throw new Error(`남기기가 ${kept.status}`);
+
+    await page.goto(BASE + "/baby", { waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    if (!(await page.getByRole("heading", { level: 1, name: "아기 준비", exact: true }).count()))
+      throw new Error("준비 단계로 안 돌아갔다");
+    if (!(await text()).includes(MARK + " 남길 일기")) throw new Error("남기기를 골랐는데 일기가 사라졌다");
+
+    // 치우기 겸 확인 — 이미 끝난(남긴) 임신도 keep:false 로 지워지고 그 기간 일기가 같이 사라진다.
+    // 안 그러면 한 번 남긴 기간은 "처음부터 다시 시작" 말고는 지울 길이 없다.
+    const gone = await api(`/api/pregnancy/${pregnancyId}/end`, "POST", { keep: false });
+    if (gone.status !== 200) throw new Error(`끝난 임신 지우기가 ${gone.status}`);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    if ((await text()).includes(MARK + " 남길 일기")) throw new Error("끝난 임신을 지웠는데 그 기간 일기가 남았다");
+  } finally {
+    // 둘 다 몇 번을 불러도 같은 결과다 — 위에서 지웠어도 한 번 더.
+    if (pregnancyId)
+      await tidy("남긴 임신", () => api(`/api/pregnancy/${pregnancyId}/end`, "POST", { keep: false }));
+    if (entryId) await tidy("남길 일기", () => api(`/api/baby-entries/${entryId}`, "DELETE"));
+  }
+});
+
+// "처음부터 다시 시작"(`DELETE /api/baby`)은 돌리지 않는다 — 개발자 로컬의 아기 페이지 기록
+// (주기 기록·일기·체크리스트·참고 사이트·올린 사진)이 MARK 와 상관없이 전부 지워진다.
+
+// 단계 흐름이 어디서 멈췄든 로컬을 임신 단계로 남기지 않는다.
+{
+  const r = await endMarkPregnancy().catch(() => null);
+  if (r) console.log("  (남아 있던 시험용 임신을 치웠어요)");
+}
+
+// ── 꾸미기 스티커 ────────────────────────────────────────
 console.log("꾸미기");
 await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {
   // 자리는 xPct(가운데, %)로 저장된다. 같은 값이 화면 폭에 따라 다른 자리를 뜻한다:

@@ -63,12 +63,14 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 새 계정: `npm run user:add`. 공유 계정 `wlsdud022`(관리자). 모든 IP 접속: `npm run dev:lan`.
 - `proxy.ts`(Next 16 에서 `middleware` 가 이 이름으로 바뀜)는 `lib/session.ts`만 import (jose). prisma/next-headers/bcrypt는 route(nodejs)에서만 — v16 부터 proxy 가 Node 런타임이 기본이라도 여기는 가볍게 둔다.
 
-## 아기 페이지 (`/baby`)
-- 모델 `Baby`(태명·예정일·출생일·showOnHome) · `BabyEntry`(kind: diary|checkup|letter, 작성자=FamilyMember) · `BabyChecklistItem`. 사진은 마크다운 이미지로.
-- `BabyLink`(참고 사이트 — url + 사용자가 쓴 한 줄 설명, 표시는 도메인만): 주소 정규화·도메인 추출은 `lib/url.ts`의 `normalizeUrl`·`displayDomain` (vitest). 카드는 `app/baby/baby-links.tsx`, API는 `/api/baby-links`.
-- 주차 계산은 `lib/date.ts`의 `pregnancyProgress(dueDate)`·`weekLabel`·`daysSinceBirth`·`dueDateFromLmp` (vitest: `npm test`). 분기 경계 14주/28주.
-- UI 파일은 `app/baby/*` 책임별 분리(setup·hero·settings-modal·entry-modal·entry-timeline·checklist). 종류 메타·기본 체크리스트는 `app/baby/baby-meta.ts`.
-- 의료 시기·국가 제도 문구를 UI에 넣지 않는다. 홈 노출은 `showOnHome` 토글일 때만. 스펙: `docs/superpowers/specs/2026-09-08-baby-page-design.md`.
+## 아기 페이지 (`/baby`) — 준비부터 출산까지
+- 스펙 `docs/superpowers/specs/2026-10-16-baby-journey-design.md`. 기록(`JourneyEntry`·`JourneyChecklistItem`·`JourneyLink`·`CycleEvent`)은 **페이지의 것**, 임신(`Pregnancy`)은 그 아래 0..n. 진행 중 = `endedAt` 없음(최대 1개, `POST /api/pregnancy` 가 409 로 지킨다).
+- **도장은 서버가 찍는다**: 진행 중인 임신이 있을 때 만든 일기·체크리스트에 `pregnancyId`. "준비 단계로 · 지우기" 가 지울 범위가 이 값이라 클라이언트 값을 받지 않는다. 단계는 `stageOf()` 로 계산(저장 안 함).
+- 서버 조회는 `lib/journey.ts` 의 `journeyState()` 한 곳(홈·달력·포동이). 예측은 `lib/cycle.ts`(vitest).
+- 옛 `Baby`·`BabyEntry`·`BabyChecklistItem`·`BabyLink` 표는 **쓰지 않는다**(운영에 남아 있을 수 있다 — DEPLOY.md). `ensure.sql` 이 ALTER 를 못 해서 새 표로 옮겼다.
+- **의료 문구 원칙과 그 예외 하나**: 의료 시기·국가 제도 문구를 UI 에 넣지 않는다. **예외는 주기 계산 날짜(다음 생리 예정·배란 예정·가임기)뿐** — 날짜와 "추정" 표시만, **권하는 문장 금지.** 준비 체크리스트에 기본 항목을 넣지 않는 것도 같은 이유다.
+- 화면 문구는 임신이 끝난 이유를 암시하지 않는다(두 리셋: "준비 단계로" = 그 임신만, "처음부터 다시 시작" = 전부).
+- 홈 노출은 `JourneySettings.showOnHome` 일 때만. `BabyLink` 시절의 참고 사이트 규칙(`lib/url.ts`, 도메인만 표시)은 그대로.
 
 ## 사이트 에이전트 (인공 포동이)
 
@@ -76,7 +78,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 (이 파일 `AGENTS.md` 와 한 글자 차이로 헷갈리지 않게 포동이 이름을 붙였다.)
 여기에는 **모르고 어기기 쉬운 것**만 남긴다 — 나머지는 다 그 문서에 있다.
 
-- 도구는 **4개 고정**. 새 기능이 생기면 도구가 아니라 **리소스를 추가**한다(`lib/agent/resources.ts` 한 곳, 현재 17종).
+- 도구는 **4개 고정**. 새 기능이 생기면 도구가 아니라 **리소스를 추가**한다(`lib/agent/resources.ts` 한 곳, 현재 18종).
 - **추가 전용.** 수정·삭제 도구를 만들지 않는다. 되돌리기는 `create.undoApi` 화이트리스트로 서버만 실행.
 - 숫자·모델명은 `lib/agent/config.ts`(환경변수)에서만, **이름은 `lib/agent/name.ts` 에서만**. 코드에 박지 않는다.
 - 고친 뒤에는 **`npm run agent:smoke`** — 모델 없이 엔진·DB·라우트를 끝까지 한 번 돌린다(로컬 전용). 안내문·도구·나가는 본문을 글로 읽으려면 `npm run agent:prompt [경로] [사람이름]`, 실행 기록은 `npm run agent:runs`. 셋 다 모델을 부르지 않는다.

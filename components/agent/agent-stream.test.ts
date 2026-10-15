@@ -190,7 +190,7 @@ describe("visibleResults", () => {
   });
 
   it("같은 경로로 만든 것 여럿을 하나로 합치지 않는다", () => {
-    // 16종 중 14종은 detailPattern 이 없어 만든 항목의 path 가 목록 경로로 전부 같다.
+    // 18종 중 16종은 detailPattern 이 없어 만든 항목의 path 가 목록 경로로 전부 같다.
     // 여기서 접으면 "장보기에 우유·계란·빵" 의 둘째·셋째가 되돌리기와 함께 사라진다.
     const kept = visibleResults([
       made("장보기 · 우유", "/shopping", "a"),

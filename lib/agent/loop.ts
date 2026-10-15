@@ -155,7 +155,7 @@ export async function memoryLines(
   }
   if (entries.length === 0) return null;
 
-  // 목록 상한에 걸려 꼬리가 달려 왔을 수 있다(다른 16종과 같은 규칙). 그 꼬리는 줄로 세지 않고
+  // 목록 상한에 걸려 꼬리가 달려 왔을 수 있다(다른 17종과 같은 규칙). 그 꼬리는 줄로 세지 않고
   // **"더 있다"는 사실**로만 쓴다 — 아래에서 우리 말로 한 번에 알린다.
   const capped = entries.some((e) => e.title === MORE_TITLE);
   const real = entries.filter((e) => e.title !== MORE_TITLE);
