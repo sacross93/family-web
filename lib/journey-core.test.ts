@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stageOf, journeyMarks, firstLineOf } from "./journey";
+import { stageOf, journeyMarks, firstLineOf } from "./journey-core";
 import { predictCycle } from "./cycle";
 
 const d = (s: string) => {

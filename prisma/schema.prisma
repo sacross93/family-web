@@ -17,18 +17,18 @@ datasource db {
 // 가족 구성원
 // ─────────────────────────────────────────────
 model FamilyMember {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  emoji     String   @default("🙂")
-  color     String   @default("lavender") // 팔레트 키
+  emoji     String    @default("🙂")
+  color     String    @default("lavender") // 팔레트 키
   role      String? // 예: "엄마", "아빠", "첫째"
   birthday  DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  todos         Todo[]
-  boardPosts    BoardPost[]
-  shoppingItems ShoppingItem[]
-  anniversaries Anniversary[]
+  todos          Todo[]
+  boardPosts     BoardPost[]
+  shoppingItems  ShoppingItem[]
+  anniversaries  Anniversary[]
   journeyEntries JourneyEntry[]
 
   // 나중에 Google 로그인 시 연결 (선택)
@@ -40,30 +40,30 @@ model FamilyMember {
 // 사진첩 (테마별 앨범)
 // ─────────────────────────────────────────────
 model Album {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
-  emoji       String   @default("📸")
-  color       String   @default("peach")
+  emoji       String    @default("📸")
+  color       String    @default("peach")
   coverUrl    String?
   takenOn     DateTime? // 여행/이벤트 날짜
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   photos Photo[]
 }
 
 model Photo {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   albumId   String
-  album     Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  album     Album     @relation(fields: [albumId], references: [id], onDelete: Cascade)
   url       String
   caption   String?
   width     Int?
   height    Int?
   takenAt   DateTime?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
 
   @@index([albumId])
 }
@@ -72,38 +72,38 @@ model Photo {
 // 계획 (여행/주말 등 날짜 기반 일정 만들기)
 // ─────────────────────────────────────────────
 model Plan {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
-  type        String   @default("여행") // 여행 | 주말 | 이벤트 | 기타
-  emoji       String   @default("🗺️")
-  color       String   @default("sky")
+  type        String    @default("여행") // 여행 | 주말 | 이벤트 | 기타
+  emoji       String    @default("🗺️")
+  color       String    @default("sky")
   description String?
   location    String?
   startDate   DateTime?
   endDate     DateTime?
-  tzOffsetMin Int      @default(0) // 현지시간 - 한국시간 (분). 예: 발리 -60, 미국서부 -960
-  memo        String   @default("") // 자유 아이디어 메모장 (링크·사진·메모 복붙)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  tzOffsetMin Int       @default(0) // 현지시간 - 한국시간 (분). 예: 발리 -60, 미국서부 -960
+  memo        String    @default("") // 자유 아이디어 메모장 (링크·사진·메모 복붙)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   items     PlanItem[]
   checklist PlanChecklistItem[]
 }
 
 model PlanItem {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   planId    String
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   dayDate   DateTime? // 이 항목이 속한 날짜
   time      String? // "09:30" 자유 형식
-  tz        String   @default("local") // 이 시각의 기준: "local"(현지) | "home"(한국)
+  tz        String    @default("local") // 이 시각의 기준: "local"(현지) | "home"(한국)
   title     String
   note      String?
   location  String?
-  category  String   @default("mint") // 색 태그 (활동/식사/이동 등 자유)
-  done      Boolean  @default(false)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  category  String    @default("mint") // 색 태그 (활동/식사/이동 등 자유)
+  done      Boolean   @default(false)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
 
   @@index([planId])
 }
@@ -126,18 +126,18 @@ model PlanChecklistItem {
 // 캘린더 이벤트
 // ─────────────────────────────────────────────
 model CalendarEvent {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   title         String
   description   String?
   start         DateTime
   end           DateTime?
-  allDay        Boolean  @default(false)
-  color         String   @default("lavender")
+  allDay        Boolean   @default(false)
+  color         String    @default("lavender")
   location      String?
   googleEventId String? // 나중에 Google Calendar 동기화용
-  source        String   @default("local") // local | google
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  source        String    @default("local") // local | google
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([start])
 }
@@ -146,20 +146,20 @@ model CalendarEvent {
 // 할일 (그날그날 TODO → 캘린더 동기화 + 알림)
 // ─────────────────────────────────────────────
 model Todo {
-  id            String   @id @default(cuid())
-  title         String
-  done          Boolean  @default(false)
-  date          DateTime // 할 날짜 (하루 단위)
-  dueTime       String? // "14:00"
-  priority      String   @default("normal") // low | normal | high
-  remindAt      DateTime? // 알림 시각
-  googleEventId String? // 캘린더 동기화 시 채워짐
-  syncedToGoogle Boolean @default(false)
-  memberId      String?
-  member        FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String        @id @default(cuid())
+  title          String
+  done           Boolean       @default(false)
+  date           DateTime // 할 날짜 (하루 단위)
+  dueTime        String? // "14:00"
+  priority       String        @default("normal") // low | normal | high
+  remindAt       DateTime? // 알림 시각
+  googleEventId  String? // 캘린더 동기화 시 채워짐
+  syncedToGoogle Boolean       @default(false)
+  memberId       String?
+  member         FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([date])
   @@index([memberId])
@@ -169,32 +169,32 @@ model Todo {
 // 기념일 / 생일 (D-day)
 // ─────────────────────────────────────────────
 model Anniversary {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   title     String
   date      DateTime
-  type      String   @default("anniversary") // birthday | anniversary | memorial | etc
-  recurring Boolean  @default(true) // 매년 반복
-  emoji     String   @default("🎉")
-  color     String   @default("rose")
+  type      String        @default("anniversary") // birthday | anniversary | memorial | etc
+  recurring Boolean       @default(true) // 매년 반복
+  emoji     String        @default("🎉")
+  color     String        @default("rose")
   note      String?
   memberId  String?
   member    FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
+  createdAt DateTime      @default(now())
 }
 
 // ─────────────────────────────────────────────
 // 가족 게시판 (한마디 / 공지 / 메모)
 // ─────────────────────────────────────────────
 model BoardPost {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   content   String
-  emoji     String   @default("💬")
-  color     String   @default("butter")
-  pinned    Boolean  @default(false)
+  emoji     String        @default("💬")
+  color     String        @default("butter")
+  pinned    Boolean       @default(false)
   authorId  String?
   author    FamilyMember? @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@index([createdAt])
 }
@@ -203,15 +203,15 @@ model BoardPost {
 // 장보기 목록 (공유 쇼핑 리스트)
 // ─────────────────────────────────────────────
 model ShoppingItem {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   name      String
   quantity  String? // "2개", "1L" 등 자유
-  category  String   @default("mint") // 색 태그
-  done      Boolean  @default(false)
+  category  String        @default("mint") // 색 태그
+  done      Boolean       @default(false)
   addedById String?
   addedBy   FamilyMember? @relation(fields: [addedById], references: [id], onDelete: SetNull)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
 
   @@index([done])
 }
@@ -432,15 +432,15 @@ model JourneySettings {
 // 지금은 사용하지 않지만, 나중에 바로 켤 수 있도록 준비.
 // ─────────────────────────────────────────────
 model User {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   name          String?
-  email         String?  @unique
+  email         String?       @unique
   emailVerified DateTime?
   image         String?
   accounts      Account[]
   sessions      Session[]
   member        FamilyMember?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime      @default(now())
 }
 
 model Account {
