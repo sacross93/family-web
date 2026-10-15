@@ -13,8 +13,11 @@ import {
   weekLabel,
   daysSinceBirth,
 } from "@/lib/date";
+import { format } from "date-fns";
 import { kindMeta } from "@/app/baby/baby-meta";
 import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
+import { journeyState } from "@/lib/journey";
+import type { CyclePrediction } from "@/lib/cycle";
 import { getSiteConfig } from "@/lib/site";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -33,6 +36,25 @@ function firstLine(md: string): string {
     .map((l) => l.replace(/^[#>*\-\s]+/, "").trim())
     .find((l) => l.length > 0);
   return line ?? "사진을 남겼어요 📷";
+}
+
+/**
+ * 준비 단계의 "다음 생리 예정" 한 줄. 초대 줄과 카드가 **이 하나에서** 글자를 받는다 —
+ * 두 자리가 따로 만들면 언젠가 서로 다른 말을 한다.
+ * 기록으로 낸 **추정**이라 늘 "추정" 을 붙이고, 날짜와 그 표시 말고는 아무 말도 하지 않는다.
+ * 예정일이 지났으면 다음 달로 굴리지 않고 지난 날수만 말한다(`lib/cycle.ts` 와 같은 규칙).
+ */
+function prepCountdown(p: CyclePrediction): {
+  label: string;
+  value: string;
+  line: string;
+} {
+  if (p.lateDays > 0) {
+    const value = `${p.lateDays}일 지남`;
+    return { label: "예정일에서", value, line: `예정일에서 ${value} · 추정` };
+  }
+  const value = p.daysUntilNext === 0 ? "오늘" : `D-${p.daysUntilNext}`;
+  return { label: "다음 생리 예정", value, line: `다음 생리 예정 ${value} · 추정` };
 }
 
 function greeting() {
@@ -60,7 +82,7 @@ async function getData() {
     posts,
     shopping,
     plan,
-    baby,
+    journey,
   ] = await Promise.all([
     prisma.familyMember.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.todo.findMany({
@@ -94,20 +116,10 @@ async function getData() {
       orderBy: { startDate: "asc" },
       include: { _count: { select: { items: true } } },
     }),
-    // `showOnHome` 으로 거르지 않는다 — 꺼져 있는 경우에도 "홈에서도 볼까요?" 한 줄을
-    // 띄우려면 아기가 있는지부터 알아야 한다(기본값이 false 라 대개 꺼져 있다).
-    prisma.baby
-      .findFirst({
-        orderBy: { createdAt: "desc" },
-        include: {
-          entries: {
-            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-            take: 1,
-            include: { author: true },
-          },
-        },
-      })
-      .catch(() => null),
+    // 표가 아직 없는 배포 직후에도 홈은 떠야 한다 — 못 읽으면 아기 칸을 빼고 그린다.
+    // `showOnHome` 이 꺼져 있어도 읽는다 — "홈에서도 보기" 한 줄을 띄우려면 무엇이든
+    // 기록이 있는지부터 알아야 한다(기본값이 false 라 대개 꺼져 있다).
+    journeyState().catch(() => null),
   ]);
 
   const upcomingAnnis = annis
@@ -125,7 +137,7 @@ async function getData() {
     posts,
     shopping,
     plan,
-    baby,
+    journey,
   };
 }
 
@@ -225,7 +237,7 @@ export default async function HomePage() {
       posts,
       shopping,
       plan,
-      baby,
+      journey,
     },
     site,
   ] = await Promise.all([getData(), getSiteConfig()]);
@@ -258,6 +270,28 @@ export default async function HomePage() {
   if (posts.length === 0)
     empty.push({ href: "/board", emoji: "💬", label: "한마디" });
   if (!plan) empty.push({ href: "/plans", emoji: "🗺️", label: "계획" });
+
+  // 홈에 안 보이는 아기 칸을 켜는 한 줄. 진행 중인 임신이 있으면 태명·주차(또는 태어난 지),
+  // 없으면 준비 단계 — `stageOf` 와 같은 갈림이다.
+  const active = journey?.active ?? null;
+  const invite =
+    journey && journey.hasAnything && !journey.showOnHome
+      ? active
+        ? {
+            emoji: active.emoji,
+            title: active.nickname,
+            summary: active.birthDate
+              ? `태어난 지 ${daysSinceBirth(active.birthDate)}일`
+              : weekLabel(pregnancyProgress(active.dueDate)),
+          }
+        : {
+            emoji: "🌱",
+            title: "아기 준비",
+            summary: journey.prediction
+              ? prepCountdown(journey.prediction).line
+              : "준비 중",
+          }
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -310,21 +344,10 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 아기가 있는데 홈에 안 보이는 경우 — 기본값이 false 라 대개 그렇다.
-          "지금 이 집에서 가장 중요한 숫자" 가 아무도 본 적 없는 스위치 때문에
-          숨어 있지 않게, 한 번 눌러 켤 수 있는 줄을 둔다. */}
-      {baby && !baby.showOnHome && (
-        <BabyHomeInvite
-          id={baby.id}
-          emoji={baby.emoji}
-          nickname={baby.nickname}
-          summary={
-            baby.birthDate
-              ? `태어난 지 ${daysSinceBirth(baby.birthDate)}일`
-              : weekLabel(pregnancyProgress(baby.dueDate))
-          }
-        />
-      )}
+      {/* 아기 페이지에 무엇이든 기록이 있는데 홈에 안 보이는 경우 — `JourneySettings.showOnHome`
+          기본값이 false 라 대개 그렇다. "지금 이 집에서 가장 중요한 숫자" 가 아무도 본 적 없는
+          스위치 때문에 숨어 있지 않게, 한 번 눌러 켤 수 있는 줄을 둔다. */}
+      {invite && <BabyHomeInvite {...invite} />}
 
       {/* ── 대시보드 그리드 ──
           열 수는 **나란히 설 카드 수**를 따른다. 늘 3열이면 카드가 하나뿐인 날(운영이 대개
@@ -333,24 +356,78 @@ export default async function HomePage() {
           "한 줄 전체" 는 `col-span-full` 로 쓴다 — `col-span-2` 를 1열 격자에 두면
           보이지 않는 열이 하나 더 생긴다. */}
       <div className={cn("grid gap-4", gridCols(sideBySide))}>
-        {/* 아기 (홈 표시가 켜진 경우만) */}
-        {baby?.showOnHome &&
+        {/* 아기 (홈 표시가 켜진 경우만). 진행 중인 임신이 있으면 임신·출생 카드,
+            없으면 준비 단계 카드 — `stageOf` 와 같은 갈림이다. */}
+        {journey?.showOnHome &&
           (() => {
-            const born = !!baby.birthDate;
-            const p = pregnancyProgress(baby.dueDate);
-            const latest = baby.entries[0];
+            const latest = journey.latestEntry;
+            const latestLine = latest ? (
+              <p className="min-w-0 flex-1 truncate text-sm text-ink-soft">
+                <span className="mr-1">{kindMeta(latest.kind).emoji}</span>
+                {latest.author && (
+                  <span className="mr-1 font-semibold text-ink">
+                    {latest.author.name}
+                  </span>
+                )}
+                {firstLine(latest.content)}
+              </p>
+            ) : (
+              <p className="text-sm text-ink-faint">
+                아직 기록이 없어요. 첫 이야기를 남겨볼까요?
+              </p>
+            );
+
+            if (!active) {
+              const pr = journey.prediction;
+              const c = pr && prepCountdown(pr);
+              return (
+                <DashCard
+                  href="/baby"
+                  emoji="🌱"
+                  title="아기 준비"
+                  action="일기 보기"
+                  className="col-span-full"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+                    {/* 예측이 없으면 숫자 자리를 통째로 뺀다 — 빈 "D-" 나 홀로 남은 "추정" 은 없다.
+                        읽으면 초대 줄과 같은 글자가 되게 나눠 그린다(`prepCountdown`).
+                        큰 값만 `font-display` 이고 앞뒤 작은 글자는 본문 글꼴이다(제목 글꼴 하한 18px). */}
+                    {pr && c && (
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2 sm:shrink-0">
+                        <span className="text-sm text-ink-soft">{c.label}</span>
+                        <span className="font-display text-3xl font-bold leading-none text-ink">
+                          {c.value}
+                        </span>
+                        <span className="text-sm text-ink-soft">· 추정</span>
+                        {/* 예정일이 지났으면 가임기를 말하지 않는다 — 지난 날짜에 "가임기" 를
+                            붙이는 셈이다(아기 페이지 히어로·달력과 같은 규칙). */}
+                        {pr.lateDays === 0 && (
+                          <Tag color="mint" className="font-num">
+                            {`가임기 ${format(pr.fertileStart, "M/d")}~${format(pr.fertileEnd, "M/d")} · 추정`}
+                          </Tag>
+                        )}
+                      </div>
+                    )}
+                    {latestLine}
+                  </div>
+                </DashCard>
+              );
+            }
+
+            const born = !!active.birthDate;
+            const p = pregnancyProgress(active.dueDate);
             return (
               <DashCard
                 href="/baby"
-                emoji={baby.emoji}
-                title={baby.nickname}
+                emoji={active.emoji}
+                title={active.nickname}
                 action="일기 보기"
                 className="col-span-full"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
                   <div className="flex items-baseline gap-3">
                     {born && (
-                      <Tag color={baby.color} className="font-num">
+                      <Tag color={active.color} className="font-num">
                         태어난 지
                       </Tag>
                     )}
@@ -360,32 +437,16 @@ export default async function HomePage() {
                         위라 주아가 뭉치지 않는다. 자릿수 정렬(tnum)은 한 줄짜리라 필요 없다. */}
                     <span className="font-display text-3xl font-bold leading-none text-ink">
                       {born
-                        ? `${daysSinceBirth(baby.birthDate!)}일`
+                        ? `${daysSinceBirth(active.birthDate!)}일`
                         : weekLabel(p)}
                     </span>
                     {!born && (
-                      <Tag color={baby.color} className="font-num">
+                      <Tag color={active.color} className="font-num">
                         출산 {p.dueLabel}
                       </Tag>
                     )}
                   </div>
-                  {latest ? (
-                    <p className="min-w-0 flex-1 truncate text-sm text-ink-soft">
-                      <span className="mr-1">
-                        {kindMeta(latest.kind).emoji}
-                      </span>
-                      {latest.author && (
-                        <span className="mr-1 font-semibold text-ink">
-                          {latest.author.name}
-                        </span>
-                      )}
-                      {firstLine(latest.content)}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-ink-faint">
-                      아직 기록이 없어요. 첫 이야기를 남겨볼까요?
-                    </p>
-                  )}
+                  {latestLine}
                 </div>
               </DashCard>
             );

@@ -8,7 +8,7 @@ import { Button, useToast } from "@/components/ui";
 /**
  * 홈에 "아기 소식을 여기서도 볼까요?" 한 줄.
  *
- * `Baby.showOnHome` 의 기본값은 `false` 다. 그래서 가족이 태명·예정일을 다 넣어 두고도
+ * `JourneySettings.showOnHome` 의 기본값은 `false` 다. 그래서 가족이 태명·예정일을 다 넣어 두고도
  * **홈에서는 아기가 아예 안 보인다** — 끄기로 정한 게 아니라, 그런 스위치가 있는 줄
  * 몰랐을 뿐이다(설정 모달 안에 있다). 이 사이트에서 지금 가장 중요한 숫자가
  * 아무도 본 적 없는 기본값 때문에 숨어 있었다.
@@ -17,15 +17,14 @@ import { Button, useToast } from "@/components/ui";
  * 다시 끄고 싶으면 아기 페이지의 설정(⚙)에서 끄면 된다.
  */
 export function BabyHomeInvite({
-  id,
   emoji,
-  nickname,
+  title,
   summary,
 }: {
-  id: string;
   emoji: string;
-  nickname: string;
-  /** 지금 상태 한 줄 — "8주 1일" 또는 "태어난 지 12일" */
+  /** 링크 글자 — 임신·출생이면 태명, 준비 단계면 "아기 준비" */
+  title: string;
+  /** 지금 상태 한 줄 — "8주 1일" · "태어난 지 12일" · "다음 생리 예정 D-12 · 추정" · "준비 중" */
   summary: string;
 }) {
   const router = useRouter();
@@ -37,7 +36,7 @@ export function BabyHomeInvite({
     const res = await fetch("/api/baby", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, showOnHome: true }),
+      body: JSON.stringify({ showOnHome: true }),
     }).catch(() => null);
     if (!res || !res.ok) {
       setBusy(false);
@@ -54,7 +53,7 @@ export function BabyHomeInvite({
       </span>
       <p className="min-w-0 flex-1 text-sm text-ink-soft">
         <Link href="/baby" className="font-semibold text-ink hover:underline">
-          {nickname}
+          {title}
         </Link>{" "}
         <span className="font-num">{summary}</span>
       </p>
