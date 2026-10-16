@@ -3,6 +3,7 @@ import {
   createPkce,
   buildAuthorizeUrl,
   readCallback,
+  inspectCallback,
   exchangeCode,
   extractAccountId,
   TokenExchangeError,
@@ -66,6 +67,26 @@ describe("콜백 해석", () => {
 
   it("사용자가 거부하면 그 사유를 알려준다", () => {
     expect(() => readCallback(`/auth/callback?error=access_denied&state=${STATE}`, STATE)).toThrow(/access_denied/);
+  });
+
+  // 관리자 화면은 터미널 문구("이 실행에서…")를 쓰지 않고 **이 코드로** 제 문장을 고른다.
+  // 터미널 쪽 kind·reason 은 그대로다(위 시험들).
+  it("실패마다 고정된 코드를 같이 준다", () => {
+    const failure = (url: string) => {
+      const r = inspectCallback(url, STATE);
+      return r.kind === "ok" ? "ok" : r.failure;
+    };
+    expect(failure("http://[")).toBe("bad_url"); // URL 로 못 읽음
+    expect(failure("아무 글자")).toBe("bad_url"); // state 가 아예 없음 — 콜백 주소가 아니다
+    expect(failure(`/auth/callback?code=C`)).toBe("bad_url");
+    expect(failure(`/auth/callback?code=C&state=다른값`)).toBe("state"); // 다른 로그인의 주소
+    expect(failure(`/auth/callback?error=access_denied&state=${STATE}`)).toBe("denied");
+    expect(failure(`/auth/callback?state=${STATE}`)).toBe("no_code");
+    expect(failure(`/auth/callback?code=C&state=${STATE}`)).toBe("ok");
+    // 터미널의 갈래(무시하고 계속 기다림 / 끝냄)는 그대로다.
+    expect(inspectCallback("아무 글자", STATE).kind).toBe("ignore");
+    expect(inspectCallback(`/auth/callback?code=C&state=다른값`, STATE).kind).toBe("ignore");
+    expect(inspectCallback(`/auth/callback?state=${STATE}`, STATE).kind).toBe("denied");
   });
 });
 
@@ -136,6 +157,21 @@ describe("토큰 교환", () => {
       expect(err).toBeInstanceOf(TokenExchangeError);
       expect(err).toBeInstanceOf(Error);
     }
+  });
+
+  // 화면은 HTTP 숫자 대신 짧은 OAuth 코드만 괄호로 보인다 — 그 코드를 따로 들고 있어야 한다.
+  it("OAuth 오류 코드를 따로 들고 있다 (safeCode 를 거친 것만)", async () => {
+    const coded = vi.fn(async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }));
+    const e1 = (await exchangeCode("C", "V", coded as unknown as typeof fetch).catch((e: unknown) => e)) as TokenExchangeError;
+    expect(e1.oauthError).toBe("invalid_grant");
+
+    const junk = vi.fn(async () => new Response(JSON.stringify({ error: "<script>긴 본문" }), { status: 400 }));
+    const e2 = (await exchangeCode("C", "V", junk as unknown as typeof fetch).catch((e: unknown) => e)) as TokenExchangeError;
+    expect(e2.oauthError).toBeNull();
+
+    const net = vi.fn(async () => { throw new Error("x"); });
+    const e3 = (await exchangeCode("C", "V", net as unknown as typeof fetch).catch((e: unknown) => e)) as TokenExchangeError;
+    expect(e3.oauthError).toBeNull();
   });
 });
 

@@ -15,7 +15,7 @@ import {
   type FinishDeps,
   type FinishResult,
 } from "@/lib/agent/connect";
-import { ALLOW_ACCOUNT_CHANGE_LABEL } from "@/lib/agent/connect-copy";
+import { ALLOW_ACCOUNT_CHANGE_LABEL, START_LABEL } from "@/lib/agent/connect-copy";
 
 beforeAll(() => { process.env.AUTH_SECRET = "test-secret-for-agent-connect"; });
 
@@ -50,18 +50,30 @@ function callback(state: string, extra = `code=${CODE}`) {
 function deps(over: Partial<FinishDeps> = {}) {
   const exchange = vi.fn(async (_code: string, _verifier: string) => tokenFor("acct-NEW"));
   const save = vi.fn(async (_data: CodexAuthFile) => {});
-  return { exchange, save, now: () => NOW, ...over } as FinishDeps & {
+  const log = vi.fn((_line: string) => {});
+  return { exchange, save, log, now: () => NOW, ...over } as FinishDeps & {
     exchange: typeof exchange;
     save: typeof save;
+    log: typeof log;
   };
 }
 
-/** 결과 어디에도 비밀이 없다. 시나리오마다 부른다. */
-function expectNoSecrets(result: FinishResult, verifier: string) {
-  const text = JSON.stringify(result);
-  for (const secret of [ACCESS, REFRESH, CODE, verifier]) {
-    expect(text, `결과에 비밀(${secret.slice(0, 6)}…)이 실렸다`).not.toContain(secret);
+/** 결과 어디에도, 서버 로그 줄에도 비밀이 없다. 시나리오마다 부른다. */
+function expectNoSecrets(result: FinishResult, verifier: string, log?: { mock: { calls: unknown[][] } }) {
+  const texts = [JSON.stringify(result), ...(log?.mock.calls.map((c) => JSON.stringify(c)) ?? [])];
+  for (const text of texts) {
+    for (const secret of [ACCESS, REFRESH, CODE, verifier]) {
+      expect(text, `비밀(${secret.slice(0, 6)}…)이 실렸다`).not.toContain(secret);
+    }
   }
+}
+
+/**
+ * 화면 문구에 **터미널 말투**가 없다. 이 문장들은 가족 관리자가 폰에서 읽는다 —
+ * "state"·"code"·"HTTP 400"·"이 실행에서" 는 무엇을 하라는 건지 알려 주지 않는다.
+ */
+function expectWebCopy(message: string) {
+  expect(message).not.toMatch(/이 실행|state|code|HTTP|토큰 교환|access_denied|\d{3}/);
 }
 
 describe("시작 (startConnect)", () => {
@@ -86,7 +98,7 @@ describe("시작 (startConnect)", () => {
 });
 
 describe("마치기 (finishConnect) — 교환 전에 멈추는 것", () => {
-  it("쿠키가 없으면 처음부터 — 교환하지 않는다", async () => {
+  it("쿠키가 없으면 처음부터 — 누를 버튼을 그 이름으로 말한다", async () => {
     const d = deps();
     const r = await finishConnect(
       { url: callback("아무거나"), pending: undefined, allowAccountChange: false, current: null },
@@ -94,7 +106,8 @@ describe("마치기 (finishConnect) — 교환 전에 멈추는 것", () => {
     );
     expect(r.kind).toBe("bad_request");
     expect(r.restart).toBe(true);
-    expect(r.message).toContain("처음부터 다시 해 주세요");
+    expect(r.message).toContain(`'${START_LABEL}'`);
+    expectWebCopy(r.message);
     expect(d.exchange).not.toHaveBeenCalled();
   });
 
@@ -118,18 +131,35 @@ describe("마치기 (finishConnect) — 교환 전에 멈추는 것", () => {
     expectNoSecrets(r, s.verifier);
   });
 
-  it("state 가 다르면 거부 — 교환하지 않고, 다시 붙여넣을 수 있게 쿠키는 남긴다", async () => {
+  // 문장이 "새로 시작" 이라고 하면 화면도 그렇게 움직여야 한다(restart).
+  it("다른 로그인의 주소(state 다름)면 새로 시작하라고 — 교환하지 않는다", async () => {
     const s = started();
     const d = deps();
     const r = await finishConnect({ url: callback("다른state"), pending: s.pending, allowAccountChange: false, current: null }, d);
     expect(r.kind).toBe("bad_request");
-    expect(r.restart).toBe(false);
-    expect(r.message).toMatch(/state 가 일치하지 않아요/);
+    expect(r.restart).toBe(true);
+    expect(r.message).toContain("이번에 연 로그인 주소가 아니에요");
+    expect(r.message).toContain(`'${START_LABEL}'`);
+    expectWebCopy(r.message);
     expect(d.exchange).not.toHaveBeenCalled();
     expectNoSecrets(r, s.verifier);
   });
 
-  it("로그인이 거부된 콜백이면 그 사유로 — 교환하지 않는다", async () => {
+  // 잘못 붙여넣은 것은 진행 중인 연결을 죽이지 않는다 — 맞는 주소를 다시 붙여넣으면 된다.
+  it("콜백 주소가 아닌 것(엉뚱한 글자·로그인 주소 자체)이면 붙여넣을 것을 알려 주고 쿠키는 남긴다", async () => {
+    const s = started();
+    for (const url of ["아무 글자", "http://[", s.url /* 'ChatGPT 로그인 열기' 주소를 붙여넣음 */, callback(s.state, "x=1")]) {
+      const d = deps();
+      const r = await finishConnect({ url, pending: s.pending, allowAccountChange: false, current: null }, d);
+      expect(r.kind, url).toBe("bad_request");
+      expect(r.restart, url).toBe(false);
+      expect(r.message).toContain("로그인을 마친 탭");
+      expectWebCopy(r.message);
+      expect(d.exchange).not.toHaveBeenCalled();
+    }
+  });
+
+  it("로그인이 취소된 콜백이면 취소됐다고 — 코드는 보이지 않는다", async () => {
     const s = started();
     const d = deps();
     const r = await finishConnect(
@@ -137,7 +167,10 @@ describe("마치기 (finishConnect) — 교환 전에 멈추는 것", () => {
       d
     );
     expect(r.kind).toBe("bad_request");
-    expect(r.message).toContain("access_denied");
+    expect(r.restart).toBe(true);
+    expect(r.message).toContain("취소");
+    expect(r.message).toContain(`'${START_LABEL}'`);
+    expectWebCopy(r.message);
     expect(d.exchange).not.toHaveBeenCalled();
   });
 
@@ -153,30 +186,46 @@ describe("마치기 (finishConnect) — 교환 전에 멈추는 것", () => {
 });
 
 describe("마치기 — 교환 뒤", () => {
-  it("교환 실패는 upstream_error, 우리가 거른 문구 그대로 — code 는 이미 썼으니 처음부터", async () => {
+  it("교환 실패는 upstream_error — HTTP 숫자 없이, 짧은 코드만 괄호로", async () => {
     const s = started();
     const d = deps({
       exchange: vi.fn(async () => {
-        throw new TokenExchangeError("토큰 교환에 실패했어요 (HTTP 400 · invalid_grant).");
+        throw new TokenExchangeError("토큰 교환에 실패했어요 (HTTP 400 · invalid_grant).", "invalid_grant");
       }),
     });
     const r = await finishConnect({ url: callback(s.state), pending: s.pending, allowAccountChange: false, current: null }, d);
     expect(r.kind).toBe("upstream_error");
-    expect(r.message).toBe("토큰 교환에 실패했어요 (HTTP 400 · invalid_grant).");
+    expect(r.message).toBe(`ChatGPT 에서 연결을 받아 오지 못했어요 (invalid_grant). '${START_LABEL}'를 눌러 처음부터 해 주세요.`);
     expect(r.restart).toBe(true);
     expect(d.save).not.toHaveBeenCalled();
+    // 서버 로그에는 우리가 거른 문구만(이미 안전하다).
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining("invalid_grant"));
+    expectNoSecrets(r, s.verifier, d.log);
   });
 
-  it("모르는 예외는 문구를 버리고 일반 문장으로 — 무엇이 실렸을지 모른다", async () => {
+  it("코드가 없는 교환 실패는 괄호 없이", async () => {
     const s = started();
     const d = deps({
       exchange: vi.fn(async () => {
-        throw new Error(`본문: code=${CODE}&code_verifier=${s.verifier} → ${ACCESS}`);
+        throw new TokenExchangeError("토큰 교환 요청을 보내지 못했어요 (네트워크 오류이거나 시간이 초과됐어요).");
+      }),
+    });
+    const r = await finishConnect({ url: callback(s.state), pending: s.pending, allowAccountChange: false, current: null }, d);
+    expect(r.message).toBe(`ChatGPT 에서 연결을 받아 오지 못했어요. '${START_LABEL}'를 눌러 처음부터 해 주세요.`);
+  });
+
+  it("모르는 예외는 문구를 버린다 — 화면에도 서버 로그에도 이름만", async () => {
+    const s = started();
+    const d = deps({
+      exchange: vi.fn(async () => {
+        throw new TypeError(`본문: code=${CODE}&code_verifier=${s.verifier} → ${ACCESS}`);
       }),
     });
     const r = await finishConnect({ url: callback(s.state), pending: s.pending, allowAccountChange: false, current: null }, d);
     expect(r.kind).toBe("upstream_error");
-    expectNoSecrets(r, s.verifier);
+    expectWebCopy(r.message);
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining("TypeError"));
+    expectNoSecrets(r, s.verifier, d.log);
   });
 
   it("교환에는 쿠키 속 verifier 와 주소의 code 가 간다", async () => {
@@ -196,8 +245,10 @@ describe("마치기 — 교환 뒤", () => {
     expect(r.kind).toBe("account_changed");
     expect(r.restart).toBe(true);
     expect(d.save).not.toHaveBeenCalled();
-    // 체크칸을 **그 이름으로** 부른다 — 화면의 글자와 달라지면 어디를 누르라는 건지 모른다.
-    expect(r.message).toContain(ALLOW_ACCOUNT_CHANGE_LABEL);
+    // 체크칸과 버튼을 **그 이름으로** 부른다 — 화면의 글자와 달라지면 어디를 누르라는 건지 모른다.
+    expect(r.message).toContain(`'${ALLOW_ACCOUNT_CHANGE_LABEL}'`);
+    expect(r.message).toContain(`'${START_LABEL}'`);
+    expectWebCopy(r.message);
     expectNoSecrets(r, s.verifier);
   });
 
@@ -229,6 +280,7 @@ describe("마치기 — 교환 뒤", () => {
       account_id: "acct-SAME",
       provider: "openai-codex",
     });
+    expect(d.log).not.toHaveBeenCalled();
     expectNoSecrets(r, s.verifier);
   });
 
@@ -254,17 +306,24 @@ describe("마치기 — 교환 뒤", () => {
     }
   });
 
-  it("저장이 실패하면 server_error — 예외 문구는 버린다", async () => {
+  it("저장이 실패하면 server_error — 예외 문구는 버리고, 로그에는 이름과 프리즈마 코드만", async () => {
     const s = started();
+    const failure = Object.assign(new Error(`Invalid data: accessToken ${ACCESS} refresh ${REFRESH}`), {
+      name: "PrismaClientKnownRequestError",
+      code: "P2021",
+    });
     const d = deps({
       save: vi.fn(async () => {
-        throw new Error(`Invalid data: accessToken ${ACCESS} refresh ${REFRESH}`);
+        throw failure;
       }),
     });
     const r = await finishConnect({ url: callback(s.state), pending: s.pending, allowAccountChange: false, current: null }, d);
     expect(r.kind).toBe("server_error");
     expect(r.restart).toBe(true);
-    expectNoSecrets(r, s.verifier);
+    expect(r.message).toContain(`'${START_LABEL}'`);
+    expectWebCopy(r.message);
+    expect(d.log).toHaveBeenCalledWith(expect.stringMatching(/PrismaClientKnownRequestError.*P2021/));
+    expectNoSecrets(r, s.verifier, d.log);
   });
 });
 

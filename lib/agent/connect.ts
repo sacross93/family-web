@@ -8,8 +8,9 @@
 // 시작(startConnect)과 마치기(finishConnect)는 **서로 다른 요청**이라, 그 사이의 verifier·state 를
 // 쿠키에 봉해 둔다(lib/agent/crypto.ts 의 sealPending — 토큰과 다른 열쇠). 15분, 한 번 쓰면 끝.
 //
-// ⚠️ 토큰·verifier·code 는 어떤 결과에도 싣지 않는다. 화면에 가는 것은 아래에서 지은 문구와
-//    `TokenExchangeError` 문구(oauth.ts 가 거른 것)와 account_id 뿐이다. connect.test.ts 가 잡는다.
+// ⚠️ 토큰·verifier·code 는 어떤 결과에도, 서버 로그에도 싣지 않는다. 화면에 가는 것은 아래에서 지은
+//    문구(+ safeCode 를 거친 OAuth 코드 하나)와 account_id 뿐이다. 서버 로그에는 `TokenExchangeError`
+//    문구(oauth.ts 가 거른 것)나 예외의 **이름**만 간다. connect.test.ts 가 둘 다 잡는다.
 import { openPending, sealPending } from "@/lib/agent/crypto";
 import type { CodexAuthFile } from "@/lib/agent/auth";
 import {
@@ -18,9 +19,10 @@ import {
   createPkce,
   extractAccountId,
   inspectCallback,
+  type CallbackFailure,
   type TokenResponse,
 } from "@/lib/agent/oauth";
-import { ALLOW_ACCOUNT_CHANGE_LABEL } from "@/lib/agent/connect-copy";
+import { ALLOW_ACCOUNT_CHANGE_LABEL, START_LABEL } from "@/lib/agent/connect-copy";
 
 /** 쿠키 이름. 로그인 세션 쿠키와 섞이지 않게 따로 둔다. */
 export const PENDING_COOKIE = "podong_agent_connect";
@@ -50,13 +52,42 @@ export function pendingCookieSet(pending: string) {
 /** 붙여넣은 주소의 상한. 콜백 주소는 수백 자다 — 이보다 길면 다른 것을 붙여넣은 것이다. */
 const MAX_URL_CHARS = 4096;
 
-const RESTART = "처음부터 다시 해 주세요 — 연결하기를 다시 눌러 주세요.";
-const EMPTY_URL = "로그인을 마친 탭의 주소를 붙여넣어 주세요.";
-const TOO_LONG = "붙여넣은 주소가 너무 길어요. 로그인을 마친 탭의 주소창 주소만 붙여넣어 주세요.";
-const EXCHANGE_FAILED = "ChatGPT 에서 토큰을 받지 못했어요. 처음부터 다시 연결해 주세요.";
-const SAVE_FAILED = "로그인은 됐는데 저장하지 못했어요. 처음부터 다시 연결해 주세요.";
+// ── 화면 문구 ── 가족 관리자가 폰에서 읽는다. "state"·"code"·"HTTP 400" 같은 터미널 말투를 쓰지 않고,
+// **다음에 무엇을 누를지**를 그 버튼의 이름으로 말한다. 문장이 "새로 시작" 이라고 하면 restart 도 true 다
+// (화면이 붙여넣기 칸의 로그인 주소를 거둔다) — 말과 화면이 어긋나지 않게.
+const START = `'${START_LABEL}'`;
+const RESTART = `진행 중인 연결이 없거나 15분이 지났어요. ${START}를 눌러 처음부터 해 주세요.`;
+const PASTE_FINISHED_TAB = "로그인을 마친 탭('연결할 수 없음' 화면)의 주소창 주소를 그대로 붙여넣어 주세요.";
+const TOO_LONG = `붙여넣은 글이 너무 길어요. ${PASTE_FINISHED_TAB}`;
+const OTHER_LOGIN = `이번에 연 로그인 주소가 아니에요. ${START}를 눌러 새로 시작해 주세요.`;
+const CANCELLED = `ChatGPT 로그인이 취소됐어요. 다시 하려면 ${START}를 눌러 주세요.`;
+const SAVE_FAILED = `로그인은 됐는데 저장하지 못했어요. 잠시 뒤 ${START}를 눌러 처음부터 해 주세요.`;
 const ACCOUNT_CHANGED =
-  `로그인한 계정이 지금 연결된 계정과 달라요. 바꾸려면 '${ALLOW_ACCOUNT_CHANGE_LABEL}'에 체크하고 다시 연결해 주세요.`;
+  `로그인한 계정이 지금 저장된 계정과 달라요. 바꾸려면 '${ALLOW_ACCOUNT_CHANGE_LABEL}'에 체크하고 ${START}부터 다시 해 주세요.`;
+/** 교환 실패. 괄호에는 safeCode 를 거친 짧은 OAuth 코드(`invalid_grant` 등)만 — HTTP 숫자는 뜻이 없다. */
+function upstreamFailed(oauthError: string | null): string {
+  return `ChatGPT 에서 연결을 받아 오지 못했어요${oauthError ? ` (${oauthError})` : ""}. ${START}를 눌러 처음부터 해 주세요.`;
+}
+
+/** inspectCallback 의 실패 → 화면 문장과 restart. */
+const CALLBACK_COPY: Record<CallbackFailure, { message: string; restart: boolean }> = {
+  // 엉뚱한 것을 붙여넣었다(로그인 주소 자체, 다른 글자). 진행 중인 연결은 멀쩡하니 살려 둔다.
+  bad_url: { message: PASTE_FINISHED_TAB, restart: false },
+  no_code: { message: PASTE_FINISHED_TAB, restart: false },
+  // 다른 로그인(예: 앞서 연 탭)의 주소. 어느 탭이 이번 것인지 가리기보다 새로 시작하는 쪽이 확실하다.
+  state: { message: OTHER_LOGIN, restart: true },
+  denied: { message: CANCELLED, restart: true },
+};
+
+/** 서버 로그에 남길 **이름만**. 예외 문구에는 요청 본문·암호문이 실릴 수 있어 쓰지 않는다. */
+function safeName(e: unknown): string {
+  const name = e instanceof Error ? e.name : typeof e;
+  const code = (e as { code?: unknown } | null)?.code;
+  const parts = [/^[A-Za-z0-9_]{1,60}$/.test(name) ? name : "Error"];
+  // 프리즈마 오류 코드(P2021 = 표 없음 등)는 원인을 가리는 데 쓸모 있고 비밀이 없다.
+  if (typeof code === "string" && /^P\d{4}$/.test(code)) parts.push(code);
+  return parts.join(" ");
+}
 export const CONNECTED = "연결됐어요";
 
 interface PendingLogin {
@@ -115,12 +146,15 @@ export interface FinishDeps {
   exchange: (code: string, verifier: string) => Promise<TokenResponse>;
   save: (data: CodexAuthFile) => Promise<void>;
   now: () => number;
+  /** 실패를 서버 로그에 한 줄. 이름·거른 문구만 넘어온다. 기본은 console.error. */
+  log?: (line: string) => void;
 }
 
 /**
  * `restart` — **진행 중이던 연결이 끝났다**(쿠키를 지운다). code 는 한 번만 쓸 수 있으므로
- * 교환을 시도한 뒤에는 성공이든 실패든 언제나 true. 교환 전에 멈춘 것(주소를 잘못 붙여넣음)은
- * false 라 쿠키가 남고, 15분 안에 맞는 주소를 다시 붙여넣으면 된다.
+ * 교환을 시도한 뒤에는 성공이든 실패든 언제나 true. 교환 전에도 쿠키가 없거나 지났거나, 다른
+ * 로그인의 주소이거나, 로그인이 취소됐으면 true(문장이 "새로 시작" 이라고 말한다). 잘못 붙여넣은 것
+ * (빈 칸·콜백 주소가 아님·code 없음)만 false 라 쿠키가 남고, 15분 안에 맞는 주소를 붙여넣으면 된다.
  */
 export type FinishResult =
   | { kind: "ok"; message: string; accountId: string | null; restart: true }
@@ -130,25 +164,33 @@ export type FinishResult =
   | { kind: "server_error"; message: string; restart: true };
 
 export async function finishConnect(input: FinishInput, deps: FinishDeps): Promise<FinishResult> {
+  const log = deps.log ?? ((line: string) => console.error(line));
+
   const pending = readPending(input.pending, deps.now());
   if (!pending) return { kind: "bad_request", message: RESTART, restart: true };
 
   const url = input.url.trim();
-  if (!url) return { kind: "bad_request", message: EMPTY_URL, restart: false };
+  if (!url) return { kind: "bad_request", message: PASTE_FINISHED_TAB, restart: false };
   if (url.length > MAX_URL_CHARS) return { kind: "bad_request", message: TOO_LONG, restart: false };
 
   // state 를 가장 먼저 본다(inspectCallback). 남의 주소로는 교환까지 가지 않는다.
+  // 문장은 터미널용 reason 이 아니라 고정된 failure 코드로 고른다.
   const callback = inspectCallback(url, pending.state);
-  if (callback.kind !== "ok") return { kind: "bad_request", message: callback.reason, restart: false };
+  if (callback.kind !== "ok") return { kind: "bad_request", ...CALLBACK_COPY[callback.failure] };
 
   // ── 여기부터 code 를 쓴다. 이후의 결과는 전부 restart: true ──
   let token: TokenResponse;
   try {
     token = await deps.exchange(callback.code, pending.verifier);
   } catch (e) {
-    // oauth.ts 가 지은 문구만 그대로 보낸다. 모르는 예외에는 무엇이 실렸을지 모른다.
-    const message = e instanceof TokenExchangeError ? e.message : EXCHANGE_FAILED;
-    return { kind: "upstream_error", message, restart: true };
+    // TokenExchangeError 문구는 oauth.ts 가 지은 것(상태 코드 + safeCode)이라 로그에 남겨도 된다.
+    // 모르는 예외에는 요청 본문(code_verifier)이 실렸을지 모른다 — 이름만.
+    log(`[agent connect] exchange failed: ${e instanceof TokenExchangeError ? e.message : safeName(e)}`);
+    return {
+      kind: "upstream_error",
+      message: upstreamFailed(e instanceof TokenExchangeError ? e.oauthError : null),
+      restart: true,
+    };
   }
 
   const accountId = extractAccountId(token.access_token);
@@ -169,8 +211,9 @@ export async function finishConnect(input: FinishInput, deps: FinishDeps): Promi
       account_id: accountId,
       provider: "openai-codex",
     });
-  } catch {
-    // 저장 예외(프리즈마 검증 오류 등)에는 암호문이 통째로 실릴 수 있다 — 문구를 버린다.
+  } catch (e) {
+    // 저장 예외(프리즈마 검증 오류 등)에는 암호문이 통째로 실릴 수 있다 — 문구를 버리고 이름·코드만.
+    log(`[agent connect] save failed: ${safeName(e)}`);
     return { kind: "server_error", message: SAVE_FAILED, restart: true };
   }
 

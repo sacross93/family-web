@@ -67,10 +67,20 @@ export function safeCode(raw: string | null): string | null {
   return raw && /^[a-zA-Z0-9_-]{1,40}$/.test(raw) ? raw : null;
 }
 
+/**
+ * 실패의 **고정된 이름**. `reason` 은 터미널에 맞춘 문장("이 실행에서 연…")이라,
+ * 관리자 화면(lib/agent/connect.ts)은 이것으로 제 문장을 고른다. 터미널의 kind·reason 은 그대로다.
+ * - `bad_url` — URL 로 못 읽었거나 state 가 아예 없다(콜백 주소가 아니다. 다른 것을 붙여넣었다)
+ * - `state` — state 가 있는데 다르다(다른 로그인에서 나온 주소)
+ * - `denied` — 우리 로그인인데 거부·취소됐다
+ * - `no_code` — 우리 로그인인데 code 가 없다(로그인 주소 자체를 붙여넣은 경우 등)
+ */
+export type CallbackFailure = "bad_url" | "state" | "denied" | "no_code";
+
 export type CallbackResult =
   | { kind: "ok"; code: string }
-  | { kind: "denied"; reason: string } // 우리 로그인인데 실패함 → 끝낸다
-  | { kind: "ignore"; reason: string }; // 우리 로그인이 아님 → 계속 기다린다
+  | { kind: "denied"; reason: string; failure: "denied" | "no_code" } // 우리 로그인인데 실패함 → 끝낸다
+  | { kind: "ignore"; reason: string; failure: "bad_url" | "state" }; // 우리 로그인이 아님 → 계속 기다린다
 
 /**
  * 콜백 주소를 살펴봅니다. 전체 URL 도, `/auth/callback?...` 경로도 받습니다.
@@ -85,7 +95,11 @@ export function inspectCallback(rawUrl: string, expectedState: string): Callback
   try {
     url = new URL(rawUrl.trim(), `http://localhost:${CALLBACK_PORT}`);
   } catch {
-    return { kind: "ignore", reason: "주소를 이해하지 못했어요. 브라우저 주소창의 주소를 그대로 붙여넣어 주세요." };
+    return {
+      kind: "ignore",
+      reason: "주소를 이해하지 못했어요. 브라우저 주소창의 주소를 그대로 붙여넣어 주세요.",
+      failure: "bad_url",
+    };
   }
 
   const state = url.searchParams.get("state");
@@ -93,14 +107,19 @@ export function inspectCallback(rawUrl: string, expectedState: string): Callback
     return {
       kind: "ignore",
       reason: "state 가 일치하지 않아요. 이 실행에서 연 로그인 주소가 맞는지 확인하고 다시 시작해 주세요.",
+      failure: state ? "state" : "bad_url",
     };
   }
 
   const failure = safeCode(url.searchParams.get("error"));
-  if (failure) return { kind: "denied", reason: `로그인이 취소되었거나 거부됐어요 (${failure}).` };
+  if (failure) {
+    return { kind: "denied", reason: `로그인이 취소되었거나 거부됐어요 (${failure}).`, failure: "denied" };
+  }
 
   const code = url.searchParams.get("code");
-  if (!code) return { kind: "denied", reason: "주소에 code 가 없어요. 로그인을 다시 시작해 주세요." };
+  if (!code) {
+    return { kind: "denied", reason: "주소에 code 가 없어요. 로그인을 다시 시작해 주세요.", failure: "no_code" };
+  }
 
   return { kind: "ok", code };
 }
@@ -129,9 +148,12 @@ export interface TokenResponse {
  * 관리자 화면은 이 종류가 아닌 예외를 일반 문구로 바꾼다 — 모르는 예외에는 무엇이 실렸을지 모른다.
  */
 export class TokenExchangeError extends Error {
-  constructor(message: string) {
+  /** 응답의 짧은 OAuth 오류 코드(`invalid_grant` 등, safeCode 를 거친 것). 없으면 null. */
+  readonly oauthError: string | null;
+  constructor(message: string, oauthError: string | null = null) {
     super(message);
     this.name = "TokenExchangeError";
+    this.oauthError = oauthError;
   }
 }
 
@@ -171,7 +193,7 @@ export async function exchangeCode(
     } catch {
       // 본문을 못 읽으면 상태 코드만 씁니다.
     }
-    throw new TokenExchangeError(`토큰 교환에 실패했어요 (HTTP ${res.status}${hint ? ` · ${hint}` : ""}).`);
+    throw new TokenExchangeError(`토큰 교환에 실패했어요 (HTTP ${res.status}${hint ? ` · ${hint}` : ""}).`, hint);
   }
 
   const body = (await res.json().catch(() => null)) as Partial<TokenResponse> | null;
