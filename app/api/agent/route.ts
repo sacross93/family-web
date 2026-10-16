@@ -21,6 +21,7 @@ import { recordRun } from "@/lib/agent/run-log";
 import type { RunOutcome, RunStep } from "@/lib/agent/run-log";
 import { resolvePath } from "@/lib/agent/registry";
 import { RESOURCES } from "@/lib/agent/resources";
+import { AGENT_SYNC_WAIT_MS, runSync } from "@/lib/gcal/sync";
 
 // 토큰 갱신 HTTP 타임아웃 8초 × 2회 + 도구 왕복 여유.
 // 갱신은 트랜잭션 안에서 일어나므로 도중에 함수가 죽으면 refresh_token 이 영구히 죽습니다.
@@ -177,6 +178,19 @@ export async function POST(request: NextRequest) {
   const imageData = modelImage(body?.imageData);
   const screen = knownPath(body?.path);
   const speaker = await speakerName(body?.memberId);
+
+  // 구글 캘린더를 먼저 맞춘다 — 포동이가 "내일 일정" 을 물을 때 가족이 방금 구글에서 넣은 것도 보이게.
+  // 상한을 두는 이유: 대답을 붙잡지 않게. 넘으면 동기화는 뒤에서 마저 돌고 이번 턴은 지금 DB 로 답한다.
+  // 실패해도 대화는 계속한다. 꺼짐·처음 맞추기 전·60초 안이면 runSync 가 구글을 부르지 않고 곧바로 돌아온다.
+  // ⚠️ 로컬에서 처음 맞추기를 한 번 하고 나면(.env 에 진짜 키가 있다) 포동이 한 턴·agent:smoke 도 진짜 캘린더와 맞춘다.
+  let syncWait: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    runSync().catch(() => null),
+    new Promise((resolve) => {
+      syncWait = setTimeout(resolve, AGENT_SYNC_WAIT_MS);
+    }),
+  ]);
+  clearTimeout(syncWait);
 
   // 대화 준비는 스트림을 열기 **전에** 끝냅니다 — 여기서 실패하면 JSON 오류로 돌려줄 수 있습니다.
   let chatId: string;

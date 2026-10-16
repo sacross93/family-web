@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { afterSiteCreate } from "@/lib/gcal/sync";
+
+// 저장 뒤 구글에도 만든다(동기화가 켜져 있고 처음 맞추기를 마쳤을 때만). 토큰 + 만들기 두 요청이 각각 5초 상한이라
+// 함수 상한을 넉넉히 둔다 — 상한에 걸려 응답이 끊기면 저장은 됐는데 화면은 실패로 본다.
+export const maxDuration = 30;
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
@@ -59,5 +64,8 @@ export async function POST(req: NextRequest) {
       location: body.location?.trim() || null,
     },
   });
+  // 구글에 못 만들어도 저장은 성공이다(훅은 던지지 않는다) — 연결 없이 남은 일정은 다음 동기화가 보낸다.
+  // 포동이도 이 라우트로 일정을 만들므로 같은 길을 탄다.
+  await afterSiteCreate(event.id);
   return NextResponse.json(event);
 }
