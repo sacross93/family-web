@@ -268,7 +268,7 @@ describe("planSync — 묘비", () => {
 });
 
 describe("planSync — 처음 합치기 (initial=true)", () => {
-  it("오늘 이후·연결 없는 사이트 일정: 같은 날·같은 제목이면 link, 없으면 pushNew, 지난 일정은 아무것도", () => {
+  it("오늘 이후·연결 없는 사이트 일정: 같은 날·같은 제목이면 link, 없으면 pushNew, 짝 없는 지난 일정은 아무것도", () => {
     const gDentist = gev("g-dentist", { summary: "치과 " }); // 10/20 10:00 KST
     const sDentist = site("s-dentist", { title: "치과", start: new Date("2026-10-20T05:00:00.000Z") }); // 같은 날 다른 시각
     const sNew = site("s-new", { title: "새 일정" });
@@ -282,6 +282,50 @@ describe("planSync — 처음 합치기 (initial=true)", () => {
       { kind: "pushNew", eventId: "s-new" },
       { kind: "pushNew", eventId: "s-today" },
     ]);
+  });
+
+  // 지난 일정(창 안)도 잇기는 한다 — 안 이으면 양쪽에 따로 적힌 지난 일정이 createSite 로 사이트에 하나 더 생긴다.
+  // 보내지는(pushNew) 않는다.
+  const PAST_DAY = { dateTime: "2026-10-10T19:00:00+09:00", timeZone: "Asia/Seoul" }; // 10/10 KST — 오늘(10/16) 전, 창 안
+  const pastSite = (id: string, title: string) => site(id, { title, start: new Date("2026-10-10T03:00:00.000Z") }); // 10/10 12:00 KST
+
+  it("(a) 지난 사이트 일정 + 같은 날·같은 제목 지난 구글 일정 → link, 그 구글 일정은 createSite 안 함 · 짝 없는 지난 구글 일정은 createSite", () => {
+    const gAnniv = gev("g-anniv", { summary: "결혼기념일", start: PAST_DAY, end: PAST_DAY });
+    const gOther = gev("g-other", { summary: "지난 다른 일", start: PAST_DAY, end: PAST_DAY });
+    const actions = planSync(
+      input({ initial: true, initialDoneAt: null, google: [gAnniv, gOther], site: [pastSite("s-anniv", "결혼기념일")] }),
+    );
+    expect(actions).toEqual([
+      { kind: "link", eventId: "s-anniv", google: gAnniv },
+      { kind: "createSite", google: gOther },
+    ]);
+  });
+
+  it("(b) 짝 없는 지난 사이트 일정 → 아무것도(pushNew 없음) — 창 밖으로 오래된 것도", () => {
+    const old = site("s-old", { title: "아주 옛일", start: new Date(WINDOW.min.getTime() - DAY) });
+    expect(planSync(input({ initial: true, initialDoneAt: null, google: [], site: [pastSite("s-past", "지난 일"), old] }))).toEqual([]);
+  });
+
+  it("(c) 구글 일정 하나는 지난·앞으로의 사이트 일정에 두 번 이어지지 않는다(같은 used 를 나눠 쓴다)", () => {
+    // 같은 날이어야 짝이 되므로 지난 일정과 앞으로의 일정이 한 구글 일정을 두고 다툴 수는 없다 — 대신
+    // ① 같은 제목의 지난·앞으로 일정이 함께 있어도 각자 제 날짜의 구글 일정에만 이어지고,
+    // ② 같은 날 지난 일정 둘이 구글 하나를 두고 다투면 하나만 이어지고 나머지는 보내지도 않는다.
+    const gPast = gev("g-past", { summary: "치과", start: PAST_DAY, end: PAST_DAY });
+    const gFuture = gev("g-future", { summary: "치과" }); // 10/20
+    const sPast = pastSite("s-past", "치과");
+    const sFuture = site("s-future", { title: "치과" }); // 10/20
+    expect(planSync(input({ initial: true, initialDoneAt: null, google: [gFuture, gPast], site: [sFuture, sPast] }))).toEqual([
+      { kind: "link", eventId: "s-future", google: gFuture },
+      { kind: "link", eventId: "s-past", google: gPast },
+    ]);
+    // 앞으로의 짝만 있으면 지난 일정은 그 구글 일정을 가져가지 않는다(날짜가 다르다) — 그대로 사이트에만
+    expect(planSync(input({ initial: true, initialDoneAt: null, google: [gFuture], site: [sPast, sFuture] }))).toEqual([
+      { kind: "link", eventId: "s-future", google: gFuture },
+    ]);
+    // 같은 날 지난 일정 둘 · 구글 하나 → link 하나, 나머지는 아무것도
+    expect(
+      planSync(input({ initial: true, initialDoneAt: null, google: [gPast], site: [pastSite("s-p1", "치과"), pastSite("s-p2", "치과")] })),
+    ).toEqual([{ kind: "link", eventId: "s-p1", google: gPast }]);
   });
 
   it("남은 구글 일정은 createSite, 취소된 구글 일정과는 잇지 않는다", () => {

@@ -130,15 +130,19 @@ export function planSync(input: PlanInput): Action[] {
   const pushNew: Action[] = [];
 
   if (input.initial) {
-    // 처음 합치기: 오늘(Asia/Seoul) 이후의 연결 없는 사이트 일정만. 지난 일정은 사이트에만 둔다.
+    // 처음 합치기: 연결 없는 사이트 일정을 같은 날·같은 제목의 구글 일정과 잇는다.
+    // 지난 일정(창 안)도 **잇기는** 한다 — 안 이으면 양쪽에 따로 적힌 지난 일정이 createSite 로 사이트에 하나 더 생긴다.
+    // 그러나 구글로 **보내는** 것은 오늘(Asia/Seoul) 이후만. 짝 없는 지난 일정은 사이트에만 둔다(스펙 §1).
+    // 짝은 지난 일정·앞으로의 일정이 같은 `used` 를 나눠 써서 구글 일정 하나가 두 번 이어지지 않는다.
     const today = seoulDate(input.now);
     for (const s of unlinkedSite) {
-      if (seoulDate(s.start) < today) continue;
+      const past = seoulDate(s.start) < today;
+      if (past && s.start < window.min) continue; // 창보다 오래된 것은 구글 목록에 짝이 올 수 없다
       const match = unlinkedGoogle.find((g) => !used.has(g.id) && sameDaySameTitle(s, g));
       if (match) {
         used.add(match.id);
         actions.push({ kind: "link", eventId: s.id, google: match });
-      } else if (complete) {
+      } else if (!past && complete) {
         // 끝까지 못 읽었으면 못 읽은 쪽에 짝이 있을 수 있다 — 보내면 둘이 된다.
         pushNew.push({ kind: "pushNew", eventId: s.id });
       }
