@@ -134,12 +134,45 @@ model CalendarEvent {
   allDay        Boolean   @default(false)
   color         String    @default("lavender")
   location      String?
-  googleEventId String? // 나중에 Google Calendar 동기화용
-  source        String    @default("local") // local | google
+  googleEventId String? // 쓰지 않는다 — 연결은 GoogleEventLink 에 둔다(열을 지우려면 ALTER 가 필요해 그대로 둔다)
+  source        String    @default("local") // 처음 어디서 왔는지만: local | google (꼬리표·판단은 googleLink 로)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  googleLink GoogleEventLink? // DB 열 아님 — 관계 필드
+
   @@index([start])
+}
+
+// ─────────────────────────────────────────────
+// 구글 캘린더 동기화 (2026-10-16, 스펙 2026-10-16-google-calendar-sync-design.md)
+// CalendarEvent 의 열은 그대로 두고 연결 정보를 새 표 둘에 둔다 — 운영 스키마는 ensure.sql 의 CREATE 만 가능하다.
+// ─────────────────────────────────────────────
+
+/// 사이트 일정 ↔ 구글 일정 한 쌍. eventId 가 null 이면 "사이트에서 지웠는데 구글에서 아직 못 지운" 묘비.
+model GoogleEventLink {
+  id            String         @id @default(cuid())
+  eventId       String?        @unique
+  event         CalendarEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  googleEventId String         @unique
+  googleUpdated DateTime // 마지막으로 맞춘 때 구글 쪽 `updated`
+  siteSyncedAt  DateTime // 마지막으로 맞춘 때 사이트 쪽 `updatedAt`
+  readOnly      String? // "recurring" | "multiday" — 사이트에서 고치지 못하는 이유
+  pendingPush   Boolean        @default(false) // 사이트 변경을 아직 못 보냄
+  pendingDelete Boolean        @default(false) // 사이트에서 지움 → 구글 삭제 대기(eventId null)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+/// 동기화 상태 싱글턴 id="main"
+model GoogleSyncState {
+  id            String    @id @default("main")
+  calendarId    String? // 마지막으로 맞춘 캘린더(바뀌면 연결을 처음부터 다시)
+  initialDoneAt DateTime? // 처음 합치기를 마친 때. 이후에 만들어진 연결 없는 사이트 일정은 구글로 보낸다
+  lastSyncAt    DateTime?
+  lastError     String? // 짧은 문구(비밀 없음)
+  lockedUntil   DateTime? // 동시에 두 번 돌지 않게
+  updatedAt     DateTime  @updatedAt
 }
 
 // ─────────────────────────────────────────────

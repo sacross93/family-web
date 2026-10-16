@@ -103,3 +103,37 @@ CREATE TABLE IF NOT EXISTS "JourneySettings" (
 
     CONSTRAINT "JourneySettings_pkey" PRIMARY KEY ("id")
 );
+
+-- 구글 캘린더 동기화 (2026-10-16, 스펙 2026-10-16-google-calendar-sync-design.md §3)
+-- CalendarEvent 의 열은 **바꾸지 않는다**(ALTER 가 필요하다). 사이트 일정 ↔ 구글 일정 연결과 동기화 상태를 새 표 둘에 둔다.
+-- 아래는 `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` 의 출력을 그대로 옮기고
+-- IF NOT EXISTS 만 붙였다. FK 는 Prisma 가 따로 내는 ADD CONSTRAINT 줄을 CREATE TABLE 안으로 옮긴 것이다(이름·규칙 그대로).
+CREATE TABLE IF NOT EXISTS "GoogleEventLink" (
+    "id" TEXT NOT NULL,
+    "eventId" TEXT,
+    "googleEventId" TEXT NOT NULL,
+    "googleUpdated" TIMESTAMP(3) NOT NULL,
+    "siteSyncedAt" TIMESTAMP(3) NOT NULL,
+    "readOnly" TEXT,
+    "pendingPush" BOOLEAN NOT NULL DEFAULT false,
+    "pendingDelete" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "GoogleEventLink_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "GoogleEventLink_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "CalendarEvent"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "GoogleEventLink_eventId_key" ON "GoogleEventLink"("eventId");
+CREATE UNIQUE INDEX IF NOT EXISTS "GoogleEventLink_googleEventId_key" ON "GoogleEventLink"("googleEventId");
+
+CREATE TABLE IF NOT EXISTS "GoogleSyncState" (
+    "id" TEXT NOT NULL DEFAULT 'main',
+    "calendarId" TEXT,
+    "initialDoneAt" TIMESTAMP(3),
+    "lastSyncAt" TIMESTAMP(3),
+    "lastError" TEXT,
+    "lockedUntil" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "GoogleSyncState_pkey" PRIMARY KEY ("id")
+);
