@@ -18,6 +18,8 @@ const h = vi.hoisted(() => {
   const writes: string[] = [];
   /** "모델.작업" → 한 번 던지게(실패 주입). 값이 true 면 계속 던진다. */
   const failOnce: Record<string, boolean | "always"> = {};
+  /** 작업 하나가 시작될 때 부른다 — "그 사이 다른 요청이 무엇을 했다" 를 흉내 내는 자리 */
+  const hooks: { beforeOp: ((model: string, op: string, args: unknown) => void) | null } = { beforeOp: null };
   let seq = 0;
 
   const DEFAULTS: Record<string, () => Row> = {
@@ -96,7 +98,8 @@ const h = vi.hoisted(() => {
       throw err("P2003", "Foreign key constraint failed");
     }
   }
-  function maybeFail(model: string, op: string) {
+  function maybeFail(model: string, op: string, args?: unknown) {
+    hooks.beforeOp?.(model, op, args);
     const key = `${model}.${op}`;
     if (failOnce[key]) {
       if (failOnce[key] !== "always") delete failOnce[key];
@@ -168,7 +171,7 @@ const h = vi.hoisted(() => {
         return { ...r };
       },
       updateMany: async (a: { where?: Row; data: Row }) => {
-        maybeFail(model, "updateMany");
+        maybeFail(model, "updateMany", a);
         writes.push(`${model}.updateMany`);
         const hit = rows().filter((r) => match(r, a.where));
         for (const r of hit) Object.assign(r, { updatedAt: tick(), ...plain(a.data, model) });
@@ -224,11 +227,12 @@ const h = vi.hoisted(() => {
     for (const k of Object.keys(tables)) tables[k] = [];
     writes.length = 0;
     for (const k of Object.keys(failOnce)) delete failOnce[k];
+    hooks.beforeOp = null;
     clock.ms = Date.parse("2026-10-16T03:00:00.000Z");
     seq = 0;
   }
 
-  return { clock, tables, writes, failOnce, client, reset, tick };
+  return { clock, tables, writes, failOnce, hooks, client, reset, tick };
 });
 
 vi.mock("@/lib/prisma", () => ({ prisma: h.client }));
@@ -243,6 +247,7 @@ import {
   beforeSiteDelete,
   afterSiteDelete,
   READONLY_MESSAGE,
+  googleIdFor,
   type SyncOutcome,
 } from "@/lib/gcal/sync";
 
@@ -326,7 +331,10 @@ function fakeGoogle(opts: { pageSize?: number; fail?: (c: GCall) => Response | u
       return e ? json(200, e) : googleError(404, "notFound");
     }
     if (kind === "insert") {
-      const e = { ...(body as object), id: `g-new-${++n}`, status: "confirmed", updated: stamp() } as GEvent;
+      // 진짜 구글처럼: id 를 주면 그 id 로, 이미 있으면(지운 것 포함) 409
+      const want = typeof body?.id === "string" ? body.id : `g-new-${++n}`;
+      if (events.has(want)) return googleError(409, "duplicate");
+      const e = { ...(body as object), id: want, status: "confirmed", updated: stamp() } as GEvent;
       events.set(e.id, e);
       return json(200, e);
     }
@@ -480,31 +488,65 @@ describe("runSync — 돌지 않는 경우", () => {
     expect(state()).toMatchObject({ id: "main", calendarId: CAL, initialDoneAt: null });
   });
 
-  it("처음 맞추기 전에는 쓰기 훅 셋도 fetch 0회(연결이 남아 있어도)", async () => {
-    seedState({ initialDoneAt: null });
-    seedEvent("e1");
-    seedLink("l1", "e1", "g1");
+  /**
+   * 훅 셋이 각각 **가드만 없으면 구글을 부를** 모양: 만들기는 연결 없는 새 일정, 고치기는 연결된 일정(사이트가 바뀜),
+   * 지우기는 연결된 일정의 묘비. 가드 상태에서 0회인지 본 뒤, 같은 훅을 가드를 푼 상태에서 다시 불러 **실제로 부르는지**
+   * 확인한다(대조군) — 아무것도 안 하는 훅이라서 0회인 것이 아님을 시험 안에서 증명한다.
+   */
+  async function hookScene() {
+    seedEvent("new", { createdAt: now(), updatedAt: now() });
+    seedEvent("edited", { title: "고친 제목", updatedAt: now() });
+    seedLink("l-edit", "edited", "g-edit");
+    seedEvent("gone");
+    seedLink("l-gone", "gone", "g-gone");
     const g = fakeGoogle();
-    g.put(gev("g1"));
-    await afterSiteCreate("e1", deps(g));
-    await afterSiteUpdate("e1", deps(g));
-    const tomb = await beforeSiteDelete("e1");
-    await h.client.calendarEvent.deleteMany({ where: { id: "e1" } });
-    await afterSiteDelete(tomb, deps(g));
+    g.put(gev("g-edit"));
+    g.put(gev("g-gone"));
+    const tomb = await beforeSiteDelete("gone");
+    await h.client.calendarEvent.deleteMany({ where: { id: "gone" } });
+    const run = async () => {
+      await afterSiteCreate("new", deps(g));
+      await afterSiteUpdate("edited", deps(g));
+      await afterSiteDelete(tomb, deps(g));
+    };
+    return { g, run };
+  }
+
+  it("처음 맞추기 전에는 쓰기 훅 셋도 fetch 0회(연결이 남아 있어도) — 처음 맞추기를 마치면 같은 훅이 부른다", async () => {
+    seedState({ initialDoneAt: null });
+    const { g, run } = await hookScene();
+    await run();
     expect(g.calls).toHaveLength(0);
     // 묘비는 남는다 — 처음 맞추기가 돌면 그때 지운다
-    expect(link("l1")).toMatchObject({ eventId: null, pendingDelete: true });
+    expect(link("l-gone")).toMatchObject({ eventId: null, pendingDelete: true });
+    expect(linkOf("new")).toBeUndefined();
+
+    // 대조군: 같은 상태에서 처음 맞추기만 마친 것으로 바꾸면 셋 다 구글을 부른다
+    state().initialDoneAt = new Date(h.clock.ms - DAY);
+    await run();
+    expect(g.calls.filter((c) => c.kind === "insert").map((c) => c.id ?? c.body?.id)).toEqual([googleIdFor("new")]);
+    expect(g.calls.filter((c) => c.kind === "patch").map((c) => c.id)).toEqual(["g-edit"]);
+    expect(g.calls.filter((c) => c.kind === "delete").map((c) => c.id)).toEqual(["g-gone"]);
   });
 
-  it("꺼져 있으면 쓰기 훅 셋도 fetch 0회", async () => {
+  it("꺼져 있으면 쓰기 훅 셋도 fetch 0회 — 켜면 같은 훅이 부른다", async () => {
     vi.stubEnv("GOOGLE_CALENDAR_ID", "");
     seedState();
-    seedEvent("e1");
-    seedLink("l1", "e1", "g1");
-    const g = fakeGoogle();
-    await afterSiteCreate("e1", deps(g));
-    await afterSiteUpdate("e1", deps(g));
-    await afterSiteDelete({ linkId: "l1", googleEventId: "g1" }, deps(g));
+    const { g, run } = await hookScene();
+    await run();
+    expect(g.calls).toHaveLength(0);
+
+    enable(); // 대조군
+    await run();
+    expect(g.calls.filter((c) => c.kind === "insert")).toHaveLength(1);
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(1);
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(1);
+  });
+
+  it("다른 캘린더로 맞췄던 상태면(바뀐 뒤 아직 안 돎) 쓰기 훅 셋도 fetch 0회", async () => {
+    seedState({ calendarId: "old@example.com" });
+    const { g, run } = await hookScene();
+    await run();
     expect(g.calls).toHaveLength(0);
   });
 
@@ -531,6 +573,52 @@ describe("runSync — 돌지 않는 경우", () => {
     h.clock.ms += 11_000;
     expect((await runSync({ deps: deps(g), force: true })).ran).toBe(true);
     expect(state().lockedUntil).toBeNull();
+  });
+
+  it("잠금은 60초 — 실행 상한(20초)보다 넉넉하다", async () => {
+    seedState();
+    let seen: Date | null = null;
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (c.kind === "list") seen = state().lockedUntil as Date;
+        return undefined;
+      },
+    });
+    const startedAt = h.clock.ms;
+    await runSync({ deps: deps(g), force: true });
+    expect(seen).not.toBeNull();
+    expect(seen!.getTime() - startedAt).toBe(60_000);
+  });
+
+  it("실행 도중 잠금을 다른 요청이 새로 잡았으면(우리 잠금이 지났다) 끝날 때 남의 잠금을 풀지 않는다", async () => {
+    seedState();
+    const theirs = new Date(h.clock.ms + 120_000);
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (c.kind === "list") state().lockedUntil = theirs; // 느린 실행 사이 다른 요청이 잠금을 잡았다
+        return undefined;
+      },
+    });
+    await runSync({ deps: deps(g), force: true });
+    expect((state().lockedUntil as Date).getTime()).toBe(theirs.getTime());
+  });
+
+  it("잠금을 잡은 뒤 상태를 다시 읽는다 — 그 사이 앞사람이 처음 맞추기를 끝냈으면 또 하지 않는다", async () => {
+    seedState({ initialDoneAt: null });
+    seedEvent("old", { title: "옛 일정", start: at("2026-11-01T01:00:00.000Z") }); // 오늘 이후·연결 없음 → 처음 맞추기면 보낸다
+    const doneBySomeoneElse = new Date(h.clock.ms - 1000);
+    // 잠금을 잡는 그 순간까지 앞사람의 처음 맞추기가 끝나 있었다(우리가 처음 읽은 값은 낡았다)
+    h.hooks.beforeOp = (model, op, args) => {
+      const where = (args as { where?: { OR?: unknown } } | undefined)?.where;
+      if (model === "googleSyncState" && op === "updateMany" && where?.OR) {
+        state().initialDoneAt = doneBySomeoneElse;
+        h.hooks.beforeOp = null;
+      }
+    };
+    const g = fakeGoogle();
+    expect(await runSync({ initial: true, force: true, deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.writes()).toHaveLength(0); // 처음 맞추기가 아니라 평소 동기화로 돌았다
+    expect((state().initialDoneAt as Date).getTime()).toBe(doneBySomeoneElse.getTime());
   });
 
   it("대상 캘린더가 바뀌면 연결을 전부 지우고 initialDoneAt 을 비운다 → not_started, fetch 0회", async () => {
@@ -855,8 +943,8 @@ describe("runSync — 실행", () => {
     expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
     const ins = g.calls.filter((c) => c.kind === "insert");
     expect(ins).toHaveLength(1);
-    const made = g.events.get("g-new-1")!;
-    expect(linkOf("e-new")).toMatchObject({ googleEventId: "g-new-1", pendingPush: false });
+    const made = g.events.get(googleIdFor("e-new"))!;
+    expect(linkOf("e-new")).toMatchObject({ googleEventId: googleIdFor("e-new"), pendingPush: false });
     expect((linkOf("e-new")!.googleUpdated as Date).toISOString()).toBe(made.updated);
   });
 });
@@ -870,14 +958,15 @@ describe("쓰기 훅", () => {
     const ins = g.calls.filter((c) => c.kind === "insert");
     expect(ins).toHaveLength(1);
     expect(ins[0].body).toMatchObject({
+      id: googleIdFor("e1"), // 구글 일정 id 는 사이트 일정 id 에서 나온다
       summary: "치과",
       colorId: "4",
       start: { dateTime: "2026-10-20T01:00:00.000Z", timeZone: "Asia/Seoul" },
       end: { dateTime: "2026-10-20T02:00:00.000Z", timeZone: "Asia/Seoul" },
     });
-    const made = g.events.get("g-new-1")!;
+    const made = g.events.get(googleIdFor("e1"))!;
     const l = linkOf("e1")!;
-    expect(l.googleEventId).toBe("g-new-1");
+    expect(l.googleEventId).toBe(googleIdFor("e1"));
     expect((l.siteSyncedAt as Date).getTime()).toBe(ev.updatedAt.getTime());
     expect((l.googleUpdated as Date).toISOString()).toBe(made.updated);
 
@@ -894,14 +983,102 @@ describe("쓰기 훅", () => {
     expect(linkOf("e1")).toBeUndefined();
   });
 
-  it("만들기 — 연결을 못 남기면(그 사이 다른 쪽이 이었다) 방금 만든 구글 일정을 거둔다", async () => {
+  it("만들기 — 연결을 못 남겨도 사이트 일정이 그대로면 구글 일정을 거두지 않는다, 다음 동기화가 그 id 로 잇는다", async () => {
     seedState();
     seedEvent("e1", { createdAt: now() });
     h.failOnce["googleEventLink.create"] = true;
     const g = fakeGoogle();
     await afterSiteCreate("e1", deps(g));
-    expect(g.calls.filter((c) => c.kind === "delete").map((c) => c.id)).toEqual(["g-new-1"]);
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+    expect(g.events.has(googleIdFor("e1"))).toBe(true);
+    expect(linkOf("e1")).toBeUndefined();
+
+    expect(await runSync({ deps: deps(g), force: true })).toMatchObject({ ran: true, error: null });
+    expect(linkOf("e1")?.googleEventId).toBe(googleIdFor("e1"));
+    expect(g.events.size).toBe(1); // 둘이 되지 않았다
+    expect(h.tables.calendarEvent).toHaveLength(1);
+  });
+
+  it("만들기 — 그 사이 사이트 일정이 지워졌으면 방금 만든 구글 일정을 거둔다", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: now() });
+    // 구글에 만드는 동안 다른 사람이 사이트에서 지웠다(연결이 아직 없어 묘비도 없다)
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (c.kind === "insert") h.tables.calendarEvent = [];
+        return undefined;
+      },
+    });
+    await afterSiteCreate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "delete").map((c) => c.id)).toEqual([googleIdFor("e1")]);
     expect(g.events.size).toBe(0);
+  });
+
+  it("만들기 — 다른 쪽이 먼저 같은 id 로 만들고 이었으면 거두지 않고 끝낸다", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: now() });
+    const id = googleIdFor("e1");
+    // 훅이 보내는 사이 다른 기기의 동기화가 같은 일정을 먼저 보내고 이었다
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (c.kind === "insert" && !g.events.has(id)) {
+          g.put(gev(id, { summary: "e1", updated: new Date(++h.clock.ms).toISOString() }));
+          seedLink("l-other", "e1", id);
+        }
+        return undefined;
+      },
+    });
+    await afterSiteCreate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+    expect(g.events.size).toBe(1);
+    expect(h.tables.googleEventLink).toHaveLength(1);
+  });
+
+  it("동기화의 pushNew 도 같다 — 다른 쪽(만들기 훅)이 먼저 이었으면 실패로 세지 않는다", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (c.kind === "insert" && !g.events.has(id)) {
+          g.put(gev(id, { summary: "e1", updated: new Date(++h.clock.ms).toISOString() }));
+          seedLink("l-hook", "e1", id);
+        }
+        return undefined;
+      },
+    });
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.events.size).toBe(1);
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+  });
+
+  it("만들기 — 409(그 id 가 이미 있음) → 그 일정을 읽어 잇는다, 둘을 만들지 않는다", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: now() });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle();
+    g.put(gev(id, { summary: "e1" })); // 지난번 만들기가 들어갔는데 응답을 못 받았다
+    await afterSiteCreate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "insert")).toHaveLength(1);
+    expect(g.calls.filter((c) => c.kind === "get").map((c) => c.id)).toEqual([id]);
+    expect(g.events.size).toBe(1);
+    // 그 사이 어느 쪽이 고쳤는지 모른다 — 다음 동기화가 나중 것을 고르게 옛 시각으로 잇는다
+    expect(linkOf("e1")).toMatchObject({ googleEventId: id, siteSyncedAt: new Date(0), googleUpdated: new Date(0) });
+  });
+
+  it("만들기 — 409 인데 구글에서 지운 것(cancelled) → 잇지 않고 그 건만 실패", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle();
+    g.put({ id, status: "cancelled", updated: "2026-10-15T00:00:00.000Z" });
+    await afterSiteCreate("e1", deps(g));
+    expect(linkOf("e1")).toBeUndefined();
+    const out = (await runSync({ deps: deps(g), force: true })) as Extract<SyncOutcome, { ran: true }>;
+    expect(out.error).toMatch(/1개/);
+    expect(out.error).toContain("지운 일정");
+    expect(linkOf("e1")).toBeUndefined();
+    expect(h.tables.calendarEvent).toHaveLength(1);
   });
 
   it("만들기 — 이미 이어져 있으면 다시 보내지 않는다", async () => {
@@ -992,6 +1169,64 @@ describe("쓰기 훅", () => {
     seedEvent("e1");
     expect(await beforeSiteDelete("e1")).toBeNull();
     expect(h.writes).toEqual([]);
+  });
+});
+
+describe("구글 일정 id — 응답을 못 받은 만들기", () => {
+  it("googleIdFor 는 구글 규칙(base32hex a–v·0–9, 5~1024자)에 맞고 늘 같은 값이다", () => {
+    for (const id of ["e1", "cmabc123xyz", "가족 모임", ""]) {
+      const g = googleIdFor(id);
+      expect(g).toMatch(/^[a-v0-9]{5,1024}$/);
+      expect(googleIdFor(id)).toBe(g);
+    }
+    expect(googleIdFor("e1")).not.toBe(googleIdFor("e2"));
+    // 값을 박아 둔다 — 식이 바뀌면 이미 보낸 일정과 짝을 못 찾는다
+    expect(googleIdFor("abc")).toBe("pdba7816bf8f01cfea414140de5dae2223b00361a3");
+  });
+
+  it("구글엔 들어갔는데 응답이 끊김 → 다음 동기화가 그 id 로 잇는다(사이트에도 구글에도 둘이 생기지 않는다)", async () => {
+    seedState();
+    seedEvent("e1", { title: "치과", createdAt: now(), updatedAt: now() });
+    let cut = true;
+    const g = fakeGoogle({
+      fail: (c) => {
+        if (cut && c.kind === "insert") {
+          // 구글은 받아서 만들었는데 응답이 돌아오지 않았다
+          g.put({ ...(c.body as object), id: c.body!.id as string, status: "confirmed", updated: new Date(++h.clock.ms).toISOString() } as GEvent);
+          throw new Error("socket hang up");
+        }
+        return undefined;
+      },
+    });
+    await afterSiteCreate("e1", deps(g));
+    expect(linkOf("e1")).toBeUndefined();
+    cut = false;
+
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
+    expect(g.calls.filter((c) => c.kind === "insert")).toHaveLength(1); // 다시 보내지 않았다(pushNew 없음)
+    expect(h.tables.calendarEvent).toHaveLength(1); // 사이트로 가져오지 않았다(createSite 없음)
+    expect(g.events.size).toBe(1);
+    expect(linkOf("e1")?.googleEventId).toBe(googleIdFor("e1"));
+
+    // 다음 동기화가 나중 것으로 한 번 맞추고, 그다음은 조용하다
+    h.clock.ms += 61_000;
+    await runSync({ deps: deps(g) });
+    h.clock.ms += 61_000;
+    const before = g.writes().length;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.writes().length).toBe(before);
+    expect(h.tables.calendarEvent).toHaveLength(1);
+  });
+
+  it("미리보기도 되찾을 짝을 '이을 일정' 으로 센다(실제와 같은 수)", async () => {
+    seedState({ initialDoneAt: null });
+    seedEvent("e1", { title: "치과", start: at("2026-10-25T01:00:00.000Z") });
+    const g = fakeGoogle();
+    g.put(gev(googleIdFor("e1"), { summary: "제목을 구글에서 바꿈", start: { dateTime: "2026-10-26T10:00:00+09:00" } }));
+    expect(await previewInitial(deps(g))).toEqual({ toPush: 0, toLink: 1, toImport: 0 });
+    expect(await runSync({ initial: true, force: true, deps: deps(g) })).toEqual({ ran: true, changed: 1, error: null });
+    expect(g.writes()).toHaveLength(0);
+    expect(h.tables.calendarEvent).toHaveLength(1);
   });
 });
 

@@ -8,7 +8,7 @@
 // 오류는 상태코드·원문 그대로 내보내지 않고 사람 말로 번역합니다. 화면에 뜨는 문장이고,
 // 공급자 원문에는 사용자 본인의 ChatGPT 세션 사정이 섞여 있습니다.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { appendMessages, chatExists, createChat, loadHistory } from "@/lib/agent/chat-store";
 import { agentConfig } from "@/lib/agent/config";
@@ -181,11 +181,15 @@ export async function POST(request: NextRequest) {
 
   // 구글 캘린더를 먼저 맞춘다 — 포동이가 "내일 일정" 을 물을 때 가족이 방금 구글에서 넣은 것도 보이게.
   // 상한을 두는 이유: 대답을 붙잡지 않게. 넘으면 동기화는 뒤에서 마저 돌고 이번 턴은 지금 DB 로 답한다.
+  // 뒤에서 마저 도는 것은 `after()` 에 맡긴다 — 떠 있는 프라미스로 두면 서버리스는 응답이 끝나는 순간 함수를 얼려
+  // 동기화가 잠금을 쥔 채 멈출 수 있다. `.catch` 를 먼저 붙여 이 프라미스는 거절되지 않는다(처리 안 된 거절이 없다).
   // 실패해도 대화는 계속한다. 꺼짐·처음 맞추기 전·60초 안이면 runSync 가 구글을 부르지 않고 곧바로 돌아온다.
   // ⚠️ 로컬에서 처음 맞추기를 한 번 하고 나면(.env 에 진짜 키가 있다) 포동이 한 턴·agent:smoke 도 진짜 캘린더와 맞춘다.
+  const syncing = runSync().catch(() => null);
+  after(() => syncing);
   let syncWait: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
-    runSync().catch(() => null),
+    syncing,
     new Promise((resolve) => {
       syncWait = setTimeout(resolve, AGENT_SYNC_WAIT_MS);
     }),

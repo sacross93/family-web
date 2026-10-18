@@ -219,6 +219,17 @@ describe("insertEvent · patchEvent", () => {
     expect(f.calls[0].body).toEqual(body);
   });
 
+  it("insert 에 id 를 주면 본문에 실어 보낸다 · 같은 id 가 있으면 409 GcalError", async () => {
+    const f = fake((c) => json(200, { ...ev("pdabc12"), ...(c.body as object) }));
+    await insertEvent(cfg, { summary: "치과", id: "pdabc12" }, { fetch: f.fetch });
+    expect(f.calls[0].body).toEqual({ summary: "치과", id: "pdabc12" });
+    const dup = fake(() => googleError(409, "duplicate"));
+    const err = (await insertEvent(cfg, { summary: "치과", id: "pdabc12" }, { fetch: dup.fetch }).catch((e: unknown) => e)) as GcalError;
+    expect(err).toBeInstanceOf(GcalError);
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("duplicate");
+  });
+
   it("patch 는 PATCH — 종일로 바꿀 때 dateTime 을 null 로 지운다(구글 PATCH 는 안의 필드를 합친다)", async () => {
     const f = fake(() => json(200, ev("e1")));
     await patchEvent(cfg, "e1", { summary: "치과", start: { date: "2026-10-20" }, end: { date: "2026-10-21" } }, { fetch: f.fetch });

@@ -16,6 +16,7 @@
 // 다시 돌지 않게: 실행할 때마다 연결의 `siteSyncedAt` 은 사이트 일정의 (새) updatedAt 으로, `googleUpdated` 는 구글이
 // 돌려준 `updated` 로 적는다. 둘 중 하나라도 어긋나면 planSync 가 "바뀌었다" 로 보고 동기화마다 같은 일을 또 한다.
 
+import { createHash } from "node:crypto";
 import type { CalendarEvent, GoogleEventLink, GoogleSyncState } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { GcalDeps } from "./auth";
@@ -48,12 +49,15 @@ export const READONLY_MESSAGE = "구글에서 반복되는(또는 여러 날) �
 export const AGENT_SYNC_WAIT_MS = 3_000;
 
 const STATE_ID = "main";
-/** 동시에 두 번 돌지 않게(스펙 §5-1) */
-const LOCK_MS = 30_000;
+/**
+ * 동시에 두 번 돌지 않게(스펙 §5-1). 실행 상한(RUN_BUDGET_MS)보다 **넉넉히** 길어야 한다 — 목록 몇 쪽(쪽당 5초) +
+ * 20초 실행 + 마지막 액션(5초) 이 다 들어가고도 남게. 짧으면 느린 실행 도중에 잠금이 풀려 다른 요청이 같은 일을 한다.
+ */
+const LOCK_MS = 60_000;
 /** 화면을 열 때마다 부르므로 — 마지막 시도가 이보다 가까우면 건너뛴다(force 제외) */
 const THROTTLE_MS = 60_000;
 /**
- * 한 실행이 액션을 실행하는 시간 상한. 잠금(30초)보다 짧아야 한다 — 넘기면 다른 요청이 잠금을 잡아 같은 구글 일정을
+ * 한 실행이 액션을 실행하는 시간 상한. 잠금(60초)보다 한참 짧게 — 넘기면 다른 요청이 잠금을 잡아 같은 구글 일정을
  * 두 번 가져온다. 액션 하나가 길어야 5초(구글 요청 상한)라 20초에서 멈추면 잠금 안에서 끝난다. 남은 것은 다음 실행이
  * 다시 계획한다(모든 판단이 DB·구글 상태에서 다시 나오므로 잃는 것이 없다).
  */
@@ -65,6 +69,27 @@ const WINDOW_FUTURE_DAYS = 366;
 
 const GENERIC_ERROR = "구글 캘린더와 맞추지 못했어요";
 const OFF_ERROR = "구글 캘린더 동기화가 꺼져 있어요";
+
+/**
+ * 사이트 일정 id → 구글 일정 id. **결정적**이다 — 같은 사이트 일정은 언제나 같은 구글 id 로 만든다.
+ *
+ * 왜: 구글에는 만들어졌는데 응답을 못 받으면(5초 초과·연결 끊김) 연결이 안 남는다. id 를 구글에 맡기면 다음 동기화가
+ * 그 구글 일정을 "연결 없는 구글 일정" 으로 사이트에 하나 더 만들고(createSite), 사이트 일정은 "못 보낸 것" 으로 구글에
+ * 하나 더 만든다(pushNew) — 양쪽에 둘씩 생긴다. id 를 우리가 정해 두면 다시 보내도 구글이 409 로 막고, 목록에서도 짝을 안다.
+ *
+ * 구글 규칙: base32hex 글자(a–v, 0–9)만, 5~1024자. 16진수(0–9a–f)는 그 안에 들어간다. 앞의 "pd" 도 a–v 안이다.
+ * 160비트면 가족 캘린더에서 겹칠 일이 없다. **이 식을 바꾸지 말 것** — 바꾸면 이미 보낸 일정과 짝을 못 찾는다(시험이 값을 박아 둔다).
+ */
+export function googleIdFor(eventId: string): string {
+  return `pd${createHash("sha256").update(eventId).digest("hex").slice(0, 40)}`;
+}
+
+/**
+ * 짝은 찾았는데 두 쪽 내용이 같은지 모를 때 연결에 적는 시각. 둘 다 "아주 옛날" 이면 다음 동기화가 양쪽 모두 바뀐 것으로
+ * 보고 **나중에 고친 쪽**을 고른다(planSync 의 둘 다 바뀜 갈래) — 잃어버린 만들기 뒤에 사이트에서 또 고쳤든, 구글에서
+ * 고쳤든 그 규칙대로 맞는다.
+ */
+const RECONCILE = new Date(0);
 
 // ─────────────────────────────────────────────
 // 작은 도우미
@@ -170,27 +195,60 @@ async function deleteSiteAndLink(linkId: string, eventId: string): Promise<void>
   ]);
 }
 
+/** 연결 한 줄 만들기 */
+async function createLink(eventId: string, g: GEvent, siteSyncedAt: Date, googleUpdated: Date): Promise<void> {
+  await prisma.googleEventLink.create({
+    data: { eventId, googleEventId: g.id, googleUpdated, siteSyncedAt, readOnly: readOnlyOf(g) },
+  });
+}
+
 /**
  * 사이트 일정을 구글에 새로 만들고 잇는다. runSync 의 pushNew 와 만들기 훅이 같이 쓴다 — 둘이 겹칠 수 있다
  * (방금 만든 일정을 훅이 보내는 사이 다른 기기에서 화면을 열면 동기화도 그것을 "못 보낸 것" 으로 본다).
- * 연결의 eventId 가 유일키라 한쪽만 이긴다. 진 쪽은 방금 만든 구글 일정을 **거둔다** — 그대로 두면 구글에만 있는
- * 쌍둥이가 되어 다음 동기화가 사이트로 또 가져온다.
+ *
+ * 구글 id 를 googleIdFor 로 정해 보내므로 같은 사이트 일정의 구글 쌍둥이는 생기지 않는다:
+ * - 409(그 id 가 이미 있음) = 지난번 만들기가 들어갔는데 응답을 못 받았거나, 다른 쪽이 방금 만들었다 → 그 일정을 읽어 잇는다.
+ *   취소된 것으로 오면 구글에서 지운 것이다 — 잇지 않고 그 건만 실패로 남긴다(같은 id 는 다시 쓸 수 없다).
+ * - 연결을 못 남겼는데 사이트 일정이 그대로면 구글 일정을 **거두지 않는다** — 다른 쪽이 이었다면 그게 바로 이 일정이고,
+ *   아니면 다음 동기화가 목록에서 같은 id 를 보고 잇는다. 거두는 것은 그 사이 사이트 일정이 지워졌을 때뿐이다
+ *   (그대로 두면 연결 없는 구글 일정이 되어 다음 동기화가 사이트로 되살린다).
  */
 async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Promise<boolean> {
   if (await prisma.googleEventLink.findUnique({ where: { eventId: ev.id }, select: { id: true } })) return false;
-  const made = await insertEvent(cfg, toGoogle(siteFields(ev)), deps);
+  const id = googleIdFor(ev.id);
+
+  let made: GEvent;
+  let recovered = false;
   try {
-    await prisma.googleEventLink.create({
-      data: {
-        eventId: ev.id,
-        googleEventId: made.id,
-        googleUpdated: new Date(made.updated),
-        siteSyncedAt: ev.updatedAt,
-        readOnly: readOnlyOf(made),
-      },
-    });
+    made = await insertEvent(cfg, { ...toGoogle(siteFields(ev)), id }, deps);
   } catch (e) {
-    await deleteEvent(cfg, made.id, deps).catch((err) => logFail("겹쳐 만든 구글 일정 거두기", err));
+    if (!(e instanceof GcalError) || e.status !== 409) throw e;
+    const found = await getEvent(cfg, id, deps);
+    if (!found) throw e;
+    if (found.status === "cancelled") {
+      throw new GcalError(409, "deleted", "구글에서 이미 지운 일정과 겹쳐 다시 보내지 못했어요");
+    }
+    made = found;
+    recovered = true;
+  }
+
+  try {
+    // 되찾은 것은 그 사이 어느 쪽이 고쳤는지 모른다 — 다음 동기화가 나중 것을 고르게(RECONCILE).
+    if (recovered) await createLink(ev.id, made, RECONCILE, RECONCILE);
+    else await createLink(ev.id, made, ev.updatedAt, new Date(made.updated));
+  } catch (e) {
+    const site = await prisma.calendarEvent
+      .findUnique({ where: { id: ev.id }, select: { id: true } })
+      .catch(() => ({ id: ev.id })); // 못 읽으면 "있다" 로 — 모르는 채로 진짜 캘린더의 일정을 지우지 않는다
+    if (!site) {
+      await deleteEvent(cfg, made.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
+    } else if (
+      await prisma.googleEventLink
+        .findUnique({ where: { googleEventId: made.id }, select: { id: true } })
+        .catch(() => null)
+    ) {
+      return false; // 다른 쪽이 먼저 이었다 — 바로 이 구글 일정으로. 할 일이 끝났다.
+    }
     throw e;
   }
   return true;
@@ -215,6 +273,9 @@ async function markPendingPush(linkId: string): Promise<void> {
     .catch((e) => logFail("보내기 대기 표시", e));
 }
 
+/** planSync 의 액션 + 잃어버린 만들기 되찾기(아래 findLostInserts) */
+type RunAction = Action | { kind: "relink"; eventId: string; google: GEvent };
+
 interface RunCtx {
   cfg: GcalOn;
   deps?: GcalDeps;
@@ -225,7 +286,7 @@ interface RunCtx {
 }
 
 /** 액션 하나를 실행한다. 무언가 바뀌었으면 true. 실패는 던진다(부르는 쪽이 그 건만 실패로 센다). */
-async function execute(a: Action, ctx: RunCtx): Promise<boolean> {
+async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
   const { cfg, deps } = ctx;
   const siteOf = (id: string) => {
     const ev = ctx.sites.get(id);
@@ -271,17 +332,14 @@ async function execute(a: Action, ctx: RunCtx): Promise<boolean> {
       // 같은 날·같은 제목을 하나로 **잇기만** 한다. 내용은 옮기지 않는다 — 구글에 쓰지 않고(지난 일정은 보내지 않는다는
       // 약속과 같은 쪽), 사이트에 적힌 것도 지우지 않는다. 다음에 어느 쪽이든 고치면 그때부터 그쪽 내용이 간다.
       const site = siteOf(a.eventId);
-      await prisma.googleEventLink.create({
-        data: {
-          eventId: site.id,
-          googleEventId: a.google.id,
-          googleUpdated: new Date(a.google.updated),
-          siteSyncedAt: site.updatedAt,
-          readOnly: readOnlyOf(a.google),
-        },
-      });
+      await createLink(site.id, a.google, site.updatedAt, new Date(a.google.updated));
       return true;
     }
+    case "relink":
+      // 우리가 정한 id 로 구글에 있는데 연결이 없다 = 지난번 만들기의 응답을 못 받았다. 잇고, 내용은 다음 동기화가
+      // 나중 것으로 맞춘다(RECONCILE).
+      await createLink(siteOf(a.eventId).id, a.google, RECONCILE, RECONCILE);
+      return true;
     case "pushNew":
       return pushNewEvent(cfg, siteOf(a.eventId), deps);
     case "pushUpdate":
@@ -315,13 +373,59 @@ async function gather(cfg: GcalOn, now: Date, deps: GcalDeps | undefined, opts: 
   };
 }
 
+/**
+ * 잃어버린 만들기: 연결 없는 사이트 일정의 googleIdFor 가 구글 목록에 연결 없이 있다. 응답을 못 받았을 뿐 구글에는
+ * 들어간 것이다. 이것을 planSync 에 그대로 넘기면 구글 쪽은 createSite(사이트에 둘), 사이트 쪽은 pushNew 가 된다.
+ * 그래서 계획 **전에** 짝을 지어 둘 다 계획에서 빼고 relink 로 잇는다. 취소된 것은 짝으로 치지 않는다.
+ */
+function findLostInserts(google: GEvent[], sites: CalendarEvent[], links: GoogleEventLink[]): Map<string, GEvent> {
+  const linkedGoogle = new Set(links.map((l) => l.googleEventId));
+  const linkedSite = new Set(links.flatMap((l) => (l.eventId ? [l.eventId] : [])));
+  const byId = new Map(google.map((g) => [g.id, g]));
+  const lost = new Map<string, GEvent>();
+  for (const s of sites) {
+    if (linkedSite.has(s.id)) continue;
+    const g = byId.get(googleIdFor(s.id));
+    if (g && g.status !== "cancelled" && !linkedGoogle.has(g.id)) lost.set(s.id, g);
+  }
+  return lost;
+}
+
+/** 한 실행의 액션 — runSync 와 미리보기가 **같은** 함수로 세운다(그래서 미리보기 숫자 = 실제 숫자). */
+function planRun(
+  data: Awaited<ReturnType<typeof gather>>,
+  now: Date,
+  initial: boolean,
+  initialDoneAt: Date | null,
+): RunAction[] {
+  const sites = [...data.sites.values()];
+  const links = [...data.links.values()];
+  const lost = findLostInserts(data.google, sites, links);
+  const lostGoogle = new Set([...lost.values()].map((g) => g.id));
+  const relinks: RunAction[] = [...lost].map(([eventId, google]) => ({ kind: "relink", eventId, google }));
+  return [
+    ...relinks,
+    ...planSync({
+      now,
+      window: data.window,
+      complete: true, // listWindow 는 끝까지 읽었거나 던졌다 — 여기까지 왔으면 끝까지 읽은 것
+      google: data.google.filter((g) => !lostGoogle.has(g.id)),
+      site: sites.filter((s) => !lost.has(s.id)).map(planSite),
+      links,
+      initialDoneAt,
+      initial,
+    }),
+  ];
+}
+
 export async function runSync(opts: { force?: boolean; initial?: boolean; deps?: GcalDeps } = {}): Promise<SyncOutcome> {
   const cfg = gcalConfig();
   if (!cfg.enabled) return { ran: false, reason: "disabled" };
   const { deps } = opts;
   // 이 실행의 "지금" 은 하나 — 창·잠금·initialDoneAt 이 모두 이 값에서 나온다.
   const now = new Date(deps?.now?.() ?? Date.now());
-  let locked = false;
+  /** 우리가 잡은 잠금의 값. 풀 때 이 값일 때만 푼다 — 느린 실행이 남의 잠금을 풀지 않게. */
+  let heldUntil: Date | null = null;
 
   try {
     let state = await loadState();
@@ -336,33 +440,55 @@ export async function runSync(opts: { force?: boolean; initial?: boolean; deps?:
       });
     }
 
-    // 처음 맞추기는 initialDoneAt 이 비었을 때만. 이미 마쳤으면 initial 이라도 평소 동기화로 돈다 —
-    // 그 뒤로 연결 없이 남은 일정(처음 맞추기 전의 지난 일정)을 이제 와서 구글로 보내지 않는다.
-    const initial = Boolean(opts.initial) && !state.initialDoneAt;
-    if (!initial && !state.initialDoneAt) return { ran: false, reason: "not_started" };
-    if (!opts.force && state.lastSyncAt && now.getTime() - state.lastSyncAt.getTime() < THROTTLE_MS) {
-      return { ran: false, reason: "throttled" };
-    }
+    // 잠금 전에 한 번 거른다 — 돌 일이 없는 요청(처음 맞추기 전·60초 안)이 잠금을 쓰지 않게.
+    const early = gate(state, opts, now);
+    if (early) return early;
 
     // 잠금은 조건부 updateMany 의 count 로 잡는다 — 두 요청이 같이 와도 한쪽만 1 을 받는다.
+    const until = new Date(now.getTime() + LOCK_MS);
     const got = await prisma.googleSyncState.updateMany({
       where: { id: STATE_ID, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] },
-      data: { lockedUntil: new Date(now.getTime() + LOCK_MS) },
+      data: { lockedUntil: until },
     });
     if (got.count === 0) return { ran: false, reason: "locked" };
-    locked = true;
+    heldUntil = until;
 
-    return await syncLocked(cfg, now, initial, state.initialDoneAt, deps);
+    // 잠금을 잡은 **뒤에** 다시 읽는다. 앞에서 읽은 값은 낡았을 수 있다 — 두 사람이 [처음 맞추기]를 거의 같이 누르면
+    // 둘 다 initialDoneAt 이 빈 것을 보고, 앞사람이 끝내고 잠금을 푼 뒤 뒷사람이 처음 맞추기를 한 번 더 한다.
+    const fresh = await prisma.googleSyncState.findUnique({ where: { id: STATE_ID } });
+    if (!fresh || fresh.calendarId !== cfg.calendarId) return { ran: false, reason: "not_started" };
+    const late = gate(fresh, opts, now);
+    if (late) return late;
+
+    return await syncLocked(cfg, now, Boolean(opts.initial) && !fresh.initialDoneAt, fresh.initialDoneAt, deps);
   } catch (e) {
     logFail("동기화", e);
     return { ran: true, changed: 0, error: safeMessage(e) };
   } finally {
-    if (locked) {
+    if (heldUntil) {
+      // 아직 우리 잠금일 때만 푼다. 실행이 잠금보다 길어져 다른 요청이 새로 잡았다면 그 잠금은 그쪽 것이다.
       await prisma.googleSyncState
-        .updateMany({ where: { id: STATE_ID }, data: { lockedUntil: null } })
+        .updateMany({ where: { id: STATE_ID, lockedUntil: heldUntil }, data: { lockedUntil: null } })
         .catch((e) => logFail("잠금 풀기", e));
     }
   }
+}
+
+/**
+ * 돌지 않을 이유. 처음 맞추기는 initialDoneAt 이 비었을 때만 — 이미 마쳤으면 initial 이라도 평소 동기화로 돈다
+ * (그 뒤로 연결 없이 남은 일정, 곧 처음 맞추기 전의 지난 일정을 이제 와서 구글로 보내지 않는다).
+ */
+function gate(
+  state: GoogleSyncState,
+  opts: { force?: boolean; initial?: boolean },
+  now: Date,
+): { ran: false; reason: "not_started" | "throttled" } | null {
+  const initial = Boolean(opts.initial) && !state.initialDoneAt;
+  if (!initial && !state.initialDoneAt) return { ran: false, reason: "not_started" };
+  if (!opts.force && state.lastSyncAt && now.getTime() - state.lastSyncAt.getTime() < THROTTLE_MS) {
+    return { ran: false, reason: "throttled" };
+  }
+  return null;
 }
 
 async function syncLocked(
@@ -381,16 +507,7 @@ async function syncLocked(
   try {
     const data = await gather(cfg, now, deps, { ignoreLinks: false });
     const ctx: RunCtx = { cfg, deps, now, window: data.window, sites: data.sites, links: data.links };
-    const actions = planSync({
-      now,
-      window: data.window,
-      complete: true, // listWindow 는 끝까지 읽었거나 던졌다 — 여기까지 왔으면 끝까지 읽은 것
-      google: data.google,
-      site: [...data.sites.values()].map(planSite),
-      links: [...data.links.values()],
-      initialDoneAt,
-      initial,
-    });
+    const actions = planRun(data, now, initial, initialDoneAt);
 
     const startedAt = Date.now();
     for (const a of actions) {
@@ -471,18 +588,9 @@ export async function previewInitial(
     // 캘린더가 바뀌었으면 실제 실행은 연결을 다 지우고 시작한다 — 미리보기도 연결 없이 센다.
     const calendarChanged = state?.calendarId != null && state.calendarId !== cfg.calendarId;
     const data = await gather(cfg, now, deps, { ignoreLinks: calendarChanged });
-    const actions = planSync({
-      now,
-      window: data.window,
-      complete: true,
-      google: data.google,
-      site: [...data.sites.values()].map(planSite),
-      links: [...data.links.values()],
-      initialDoneAt: null,
-      initial: true,
-    });
-    const count = (k: Action["kind"]) => actions.filter((a) => a.kind === k).length;
-    return { toPush: count("pushNew"), toLink: count("link"), toImport: count("createSite") };
+    const actions = planRun(data, now, true, null);
+    const count = (...k: RunAction["kind"][]) => actions.filter((a) => k.includes(a.kind)).length;
+    return { toPush: count("pushNew"), toLink: count("link", "relink"), toImport: count("createSite") };
   } catch (e) {
     logFail("미리보기", e);
     return { error: safeMessage(e) };

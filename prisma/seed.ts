@@ -32,6 +32,13 @@ async function main() {
   await prisma.planChecklistItem.deleteMany();
   await prisma.planItem.deleteMany();
   await prisma.plan.deleteMany();
+  // 구글 캘린더 연결·동기화 상태도 같이 지운다(일정보다 먼저 — 연결이 일정을 가리킨다).
+  // 안 지우면 진짜 캘린더가 위험하다: 로컬에서 처음 맞추기를 한 번 했다면 initialDoneAt 이 남아 있고, 아래에서 다시 만드는
+  // 견본 일정은 createdAt 이 그보다 뒤·source "local" 이라 다음 동기화가 "못 보낸 새 일정" 으로 보고 **가족의 진짜 구글
+  // 캘린더로 보낸다**(.env 에 진짜 키가 있다). 상태를 지우면 initialDoneAt 이 비어 관리자가 [처음 맞추기]를 다시 누를 때까지
+  // 로컬은 구글에 아무것도 하지 않는다. 진짜 캘린더의 일정은 건드리지 않는다 — 연결만 잊는다.
+  await prisma.googleEventLink.deleteMany();
+  await prisma.googleSyncState.deleteMany();
   await prisma.calendarEvent.deleteMany();
   await prisma.todo.deleteMany();
   await prisma.anniversary.deleteMany();

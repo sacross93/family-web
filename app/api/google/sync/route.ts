@@ -10,7 +10,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { runSync, type SyncOutcome } from "@/lib/gcal/sync";
 
 export const runtime = "nodejs";
-// 목록(쪽당 5초) + 실행(20초에서 끊는다) + 마무리. 잠금이 30초라 그 안에서 끝나지만 함수 상한은 넉넉히.
+// 목록(쪽당 5초) + 실행(20초에서 끊는다) + 마무리. 잠금(60초)과 같은 상한 — 함수가 잠금보다 오래 살지 않게.
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {

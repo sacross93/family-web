@@ -117,7 +117,11 @@ export async function getEvent(cfg: GcalOn, id: string, deps?: GcalDeps): Promis
   return asEvent(res.body, res.status);
 }
 
-export async function insertEvent(cfg: GcalOn, body: GEventBody, deps?: GcalDeps): Promise<GEvent> {
+/**
+ * id 를 주면 그 id 로 만든다(구글 규칙: base32hex 글자 a–v·0–9, 5~1024자). 같은 id 가 이미 있으면(지운 것 포함) 409.
+ * 동기화는 사이트 일정 id 에서 이 값을 뽑아 넘긴다 — 응답을 못 받은 만들기를 다시 해도 둘이 생기지 않게(sync.ts).
+ */
+export async function insertEvent(cfg: GcalOn, body: GEventBody & { id?: string }, deps?: GcalDeps): Promise<GEvent> {
   const res = await send(cfg, "POST", eventsUrl(cfg), deps, body);
   if (!res.ok) fail(res);
   return asEvent(res.body, res.status);
