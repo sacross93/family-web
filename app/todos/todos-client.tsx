@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  CalendarCheck,
 } from "lucide-react";
 import { format, addDays, startOfWeek } from "date-fns";
 import {
@@ -72,7 +71,6 @@ interface FormState {
   priority: string;
   memberId: string;
   remindAt: string; // yyyy-MM-ddTHH:mm
-  syncToGoogle: boolean;
 }
 
 function emptyForm(dateStr: string): FormState {
@@ -83,7 +81,6 @@ function emptyForm(dateStr: string): FormState {
     priority: "normal",
     memberId: "",
     remindAt: "",
-    syncToGoogle: false,
   };
 }
 
@@ -222,7 +219,6 @@ export function TodosClient({
       priority: t.priority,
       memberId: t.memberId ?? "",
       remindAt: t.remindAt ? format(new Date(t.remindAt), "yyyy-MM-dd'T'HH:mm") : "",
-      syncToGoogle: t.syncedToGoogle,
     });
     setModalOpen(true);
   }
@@ -237,7 +233,6 @@ export function TodosClient({
       priority: form.priority,
       memberId: form.memberId || null,
       remindAt: form.remindAt || null,
-      syncToGoogle: form.syncToGoogle,
     };
     try {
       if (editingId) {
@@ -263,13 +258,6 @@ export function TodosClient({
           setTodos((prev) => [...prev, created]);
           setSelected(startOfDay(new Date(created.date)));
           setModalOpen(false);
-          if (form.syncToGoogle) {
-            showNotice(
-              created.syncedToGoogle
-                ? "구글 캘린더에도 저장했어요 🗓️"
-                : "구글 캘린더 연동은 설정 후 자동 저장돼요 🗓️"
-            );
-          }
         }
       }
     } catch {
@@ -603,17 +591,9 @@ export function TodosClient({
               </div>
             </Field>
           )}
-
-          <div className="rounded-md bg-sunken px-4 py-3.5">
-            <Toggle
-              checked={form.syncToGoogle}
-              onChange={(v) => setForm((f) => ({ ...f, syncToGoogle: v }))}
-              label="구글 캘린더에 저장"
-            />
-            <p className="mt-1.5 pl-[52px] text-xs text-ink-faint">
-              연동 전이면 설정 후 자동으로 올라가요.
-            </p>
-          </div>
+          {/* "구글 캘린더에도 저장" 선택지는 숨겼다(2026-10, 구글 캘린더 동기화 스펙 §1) — 한 번도 동작한 적이
+              없었고, 지금 구글과 오가는 것은 캘린더의 "일정" 뿐이다. 할 일까지 넓힐 때 git 기록에서
+              토글(`Toggle`)과 함께 되살린다. 서버(`/api/todos` 의 syncToGoogle)는 그대로 두었다. */}
         </div>
       </Modal>
     </div>
@@ -703,47 +683,5 @@ function TodoRow({
         ]}
       />
     </li>
-  );
-}
-
-// ─────────────────────────────────────────────
-// 로컬 토글 스위치 (공용 컴포넌트에 없어 기능 폴더에 둠)
-// ─────────────────────────────────────────────
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center gap-3"
-    >
-      <span
-        className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
-          checked ? "bg-primary" : "bg-line-strong"
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200",
-            checked ? "left-[22px]" : "left-0.5"
-          )}
-        />
-      </span>
-      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink">
-        <CalendarCheck className="h-4 w-4 text-ink-soft" />
-        {label}
-      </span>
-    </button>
   );
 }

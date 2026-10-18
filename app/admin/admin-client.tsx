@@ -37,6 +37,8 @@ import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 import { AgentConnectCard, type AgentConnection } from "./agent-connect-card";
+import { GoogleCalendarCard } from "./google-calendar-card";
+import type { GcalStatus } from "@/lib/gcal/contract";
 
 const PAGE_OPTIONS = [
   { value: "global", label: "🌈 모든 페이지" },
@@ -62,11 +64,14 @@ export function AdminClient({
   site,
   nav,
   agentConnection,
+  gcal,
 }: {
   decorations: Decoration[];
   site: SiteConfigData;
   nav: NavItem[];
   agentConnection: AgentConnection;
+  /** 서버가 못 읽었으면 null — 카드가 열릴 때 다시 읽는다. */
+  gcal: GcalStatus | null;
 }) {
   const router = useRouter();
 
@@ -81,6 +86,7 @@ export function AdminClient({
       <DecorationManager decorations={decorations} />
       <FamilyCard />
       <AgentConnectCard initial={agentConnection} />
+      <GoogleCalendarCard initial={gcal} />
       {/* 기억 목록은 메뉴에 없다 — 매일 여는 화면이 아니라 한 번씩 확인하고 지우는 자리다.
           그래도 **길은 있어야 한다**: 한 번도 물어본 적이 없으면 이 화면이 있는 줄도 모른다. */}
       <Link

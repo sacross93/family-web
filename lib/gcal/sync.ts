@@ -24,23 +24,12 @@ import { gcalConfig, type GcalOn } from "./config";
 import { GcalError, deleteEvent, getEvent, insertEvent, listWindow, patchEvent, type GEvent } from "./client";
 import { fromGoogle, readOnlyOf, seoulDate, seoulMidnight, toGoogle, type SiteFields } from "./map";
 import { planSync, type Action, type PlanSite } from "./plan";
+import type { GcalPreview, GcalStatus, SyncOutcome } from "./contract";
 
-export type SyncOutcome =
-  | { ran: false; reason: "disabled" | "not_started" | "throttled" | "locked" }
-  | { ran: true; changed: number; error: string | null };
-
-export interface GcalStatus {
-  config: "on" | "missing" | "bad_key";
-  calendarId: string | null;
-  initialDoneAt: string | null;
-  lastSyncAt: string | null;
-  lastError: string | null;
-  linked: number;
-  pending: number;
-}
-
-/** 반복 회차·여러 날 일정을 사이트에서 고치거나 지우려 할 때의 409 문구(화면·포동이 모두 이 길을 탄다) */
-export const READONLY_MESSAGE = "구글에서 반복되는(또는 여러 날) 일정이라 구글 캘린더에서 고쳐 주세요.";
+// 응답 모양과 409 문구는 prisma 없는 contract.ts 에 산다 — 화면("use client")도 같은 것을 읽어야 해서.
+// 여기서 다시 내보내 라우트·시험의 import 는 그대로 둔다.
+export type { GcalPreview, GcalStatus, SyncOutcome } from "./contract";
+export { READONLY_MESSAGE } from "./contract";
 
 /**
  * 포동이 한 턴이 동기화를 기다려 주는 최대 시간. 넘으면 동기화는 뒤에서 마저 돌고 이번 턴은 지금 DB 로 답한다.
@@ -582,7 +571,7 @@ export async function gcalStatus(): Promise<GcalStatus> {
  */
 export async function previewInitial(
   deps?: GcalDeps,
-): Promise<{ toPush: number; toLink: number; toImport: number } | { error: string }> {
+): Promise<GcalPreview> {
   const cfg = gcalConfig();
   if (!cfg.enabled) return { error: OFF_ERROR };
   try {

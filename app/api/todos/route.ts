@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
   });
 
   // "구글 캘린더에 저장" 옵션 — 미설정이면 조용히 로컬만 유지(syncedToGoogle=false).
+  // 이 선택지는 화면에서 숨겼다(2026-10, 구글 캘린더 동기화 스펙 §1 — 오가는 것은 캘린더 "일정" 뿐). 화면이 더는
+  // syncToGoogle 을 보내지 않으니 이 갈래는 돌지 않는다. 할 일까지 넓힐 때 화면과 함께 되살리려고 그대로 둔다.
   if (body.syncToGoogle) {
     const result = await syncTodoToGoogle({
       title: todo.title,

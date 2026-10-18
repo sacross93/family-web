@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { getSiteConfig, getNav } from "@/lib/site";
 import { authStatus } from "@/lib/agent/auth";
+import { gcalStatus } from "@/lib/gcal/sync";
 import { AdminClient } from "./admin-client";
 import type { AgentConnection } from "./agent-connect-card";
 
@@ -17,14 +18,19 @@ export default async function AdminPage() {
   const user = await getCurrentUser();
   if (!user?.isAdmin) redirect("/");
 
-  const [decorations, site, nav, agentConnection] = await Promise.all([
+  const [decorations, site, nav, agentConnection, gcal] = await Promise.all([
     prisma.decoration.findMany({ orderBy: [{ page: "asc" }, { createdAt: "asc" }] }),
     getSiteConfig(),
     getNav(),
     readAgentConnection(),
+    // 구글 캘린더 카드의 상태(DB 만 본다 — 미리보기는 카드가 열릴 때 따로). 표가 아직 없는 배포에서도 관리자 화면은
+    // 떠야 한다 — 못 읽으면 null 이고, 카드는 그걸 "꺼짐" 이 아니라 "확인할 수 없어요" 로 그린다.
+    gcalStatus().catch(() => null),
   ]);
 
-  return <AdminClient decorations={decorations} site={site} nav={nav} agentConnection={agentConnection} />;
+  return (
+    <AdminClient decorations={decorations} site={site} nav={nav} agentConnection={agentConnection} gcal={gcal} />
+  );
 }
 
 /**

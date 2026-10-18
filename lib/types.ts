@@ -50,6 +50,11 @@ export type TodoWithMember = Todo & { member: FamilyMember | null };
 export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null };
 export type BoardPostWithAuthor = BoardPost & { author: FamilyMember | null };
 export type ShoppingItemWithMember = ShoppingItem & { addedBy: FamilyMember | null };
+/**
+ * 캘린더 화면의 일정 — 구글 연결이 있으면 `googleLink`(꼬리표 `G`), `readOnly` 면 사이트에서 못 고친다
+ * ("recurring" | "multiday"). 꼬리표는 `source` 가 아니라 **연결이 있는지**로 단다 — 사이트에서 만들어 보낸 것도 연결이다.
+ */
+export type CalendarEventWithLink = CalendarEvent & { googleLink: { readOnly: string | null } | null };
 
 export type JourneyEntryWithAuthor = JourneyEntry & { author: FamilyMember | null };
 

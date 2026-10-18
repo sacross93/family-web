@@ -19,6 +19,7 @@ import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
 // prepCountdown: 준비 단계 "다음 생리 예정" 글자. 아기 페이지 히어로·포동이 목차와 같은 하나다.
 import { journeyState, prepCountdown } from "@/lib/journey";
 import { getSiteConfig } from "@/lib/site";
+import { GoogleSyncTrigger } from "@/components/google-sync-trigger";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -276,6 +277,8 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* 그려진 뒤 구글 캘린더와 맞춘다 — 아무것도 그리지 않는다. 바뀐 게 들어오면 "다가오는 일정" 을 다시 읽는다. */}
+      <GoogleSyncTrigger />
       {/* ── 히어로 ──
           사진은 글자 **옆에** 놓는다. 예전엔 `absolute -right-4 -top-4` 라서
           폰(390px)에서 인사말 두 줄째를 통째로 덮었다 — 실제 배포본에서 그랬다.

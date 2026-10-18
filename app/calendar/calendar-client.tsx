@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   addMonths,
   subMonths,
@@ -36,13 +37,16 @@ import {
   EmptyState,
   Segmented,
   ItemActions,
+  Tag,
   useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { kDate, kDateRelative, kTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import type { CalendarEvent } from "@/lib/types";
+import type { CalendarEvent, CalendarEventWithLink } from "@/lib/types";
 import type { JourneyMark } from "@/lib/journey-core";
+// 409 문구 — 서버가 본문을 못 실었을 때만 쓴다(보통은 서버가 보낸 문장 그대로). prisma 없는 모듈이다.
+import { READONLY_MESSAGE } from "@/lib/gcal/contract";
 import {
   MarkBars,
   MarkRows,
@@ -92,16 +96,63 @@ function revive(e: CalendarEvent): CalendarEvent {
   };
 }
 
+/** 사이트에서 못 고치는 구글 일정(반복 회차·여러 날)인가 — 고치기·지우기 대신 안내 한 줄을 보인다. */
+function isReadOnly(e: CalendarEventWithLink): boolean {
+  return !!e.googleLink?.readOnly;
+}
+
+/**
+ * 409(사이트에서 못 고치는 구글 일정)를 받은 일정에 그 사실을 적는다. 화면이 낡아 고치기 단추가 남아 있었던 것이니
+ * (그사이 구글 동기화가 연결을 만들었거나 포동이가 먼저 바꿨다) 바로 "구글 캘린더에서 고쳐 주세요" 로 바꿔 둔다.
+ */
+function markReadOnly(list: CalendarEventWithLink[], id: string, reason: unknown): CalendarEventWithLink[] {
+  const readOnly = typeof reason === "string" ? reason : "recurring";
+  return list.map((e) => (e.id === id ? { ...e, googleLink: { readOnly } } : e));
+}
+
+const READONLY_LINE = "구글 캘린더에서 고쳐 주세요";
+
+/**
+ * 구글 캘린더와 이어진 일정의 꼬리표 `G`(스펙 §7). `source` 가 아니라 **연결이 있는지**로 단다 —
+ * 사이트에서 만들어 구글로 보낸 것도 연결이다.
+ *
+ * 색은 하나로 고정한다. 일정 색(분류)을 따라가면 "G" 까지 분류처럼 읽힌다.
+ * Tag 는 aria-label 을 받지 않고, 목록 줄은 버튼이라 이름이 안쪽 글자에서 오므로 숨김 글자로 이름을 준다
+ * (보이는 "G" 는 읽지 않는다 — "지" 한 글자는 아무 뜻이 없다).
+ * `onTint`: 일정 색으로 칠한 판(하루 모달) 위 — 연한 하늘이 다른 연한 색 위에서 묻히지 않게 흰 바탕.
+ */
+function GoogleTag({ onTint, className }: { onTint?: boolean; className?: string }) {
+  return (
+    <Tag
+      color="sky"
+      className={cn("shrink-0 px-1.5 py-0 text-[0.6875rem] leading-4", onTint && "bg-surface", className)}
+    >
+      <span aria-hidden>G</span>
+      <span className="sr-only">구글 캘린더와 연결됨</span>
+    </Tag>
+  );
+}
+
 export function CalendarClient({
   initialEvents,
   marks,
 }: {
-  initialEvents: CalendarEvent[];
+  initialEvents: CalendarEventWithLink[];
   /** 아기 페이지에서 오는 읽기 전용 표시(`journey-marks.tsx`). 일정이 아니라 고치거나 지울 수 없다. */
   marks: JourneyMark[];
 }) {
   const { say } = useToast();
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const router = useRouter();
+  const [events, setEvents] = useState<CalendarEventWithLink[]>(initialEvents);
+  // router.refresh()(구글 동기화 트리거·일정을 만든 뒤)가 새 목록을 props 로 주면 그것으로 바꾼다.
+  // useState 는 첫 값만 보므로 이게 없으면 구글에서 들어온 일정이 다른 화면에 다녀오기 전까지 안 보인다.
+  // 아기 페이지처럼 key 로 다시 붙이면 보던 달·보기(목록/달력)가 처음으로 돌아가서, 그리는 중에 맞춘다
+  // (React 문서의 "이전 props 기억하기" — 효과로 하면 옛 목록이 한 번 그려졌다가 바뀐다).
+  const [shownInitial, setShownInitial] = useState(initialEvents);
+  if (shownInitial !== initialEvents) {
+    setShownInitial(initialEvents);
+    setEvents(initialEvents);
+  }
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(new Date()));
 
   // 폼(추가/수정) 모달
@@ -126,7 +177,7 @@ export function CalendarClient({
   });
 
   // 날짜별 이벤트 묶기
-  const byDay = new Map<string, CalendarEvent[]>();
+  const byDay = new Map<string, CalendarEventWithLink[]>();
   for (const e of events) {
     const key = format(new Date(e.start), DAY_KEY);
     const list = byDay.get(key);
@@ -177,7 +228,7 @@ export function CalendarClient({
   // 그 사이에 날짜순으로 끼우는 아기 페이지 표시(읽기 전용). 일정이 8개에서 잘렸으면
   // 마지막으로 보이는 일정 날까지만 — 몇 달 뒤 예정일이 8번째 일정 바로 밑에 붙으면
   // 그 사이에 아무 일정도 없는 것처럼 읽힌다.
-  const dayOf = (e: CalendarEvent) => format(new Date(e.start), DAY_KEY);
+  const dayOf = (e: CalendarEventWithLink) => format(new Date(e.start), DAY_KEY);
   const upcomingRows = interleaveMarks(
     upcoming,
     dayOf,
@@ -195,7 +246,7 @@ export function CalendarClient({
     setFormOpen(true);
   }
 
-  function openEdit(ev: CalendarEvent) {
+  function openEdit(ev: CalendarEventWithLink) {
     const s = new Date(ev.start);
     setEditingId(ev.id);
     setForm({
@@ -238,11 +289,24 @@ export function CalendarClient({
           body: JSON.stringify(payload),
         });
         if (res.ok) {
+          // 라우트는 일정 행만 돌려준다(연결은 안 싣는다) — 고쳐도 연결은 그대로이니 있던 것을 옮겨 단다.
+          // 안 그러면 고칠 때마다 꼬리표 G 가 사라진다.
           const updated = revive(await res.json());
           setEvents((prev) =>
-            prev.map((e) => (e.id === editingId ? updated : e))
+            prev.map((e) => (e.id === editingId ? { ...updated, googleLink: e.googleLink } : e))
           );
           setFormOpen(false);
+        } else {
+          const data = await res.json().catch(() => null);
+          if (res.status === 409) {
+            // 아무것도 안 바뀌었다(서버가 쓰기 전에 막는다). 폼은 닫고 일정은 안내 한 줄로 바꾼다.
+            setEvents((prev) => markReadOnly(prev, editingId, data?.readOnly));
+            setFormOpen(false);
+          }
+          say(
+            data?.error ?? (res.status === 409 ? READONLY_MESSAGE : "일정을 못 저장했어요. 잠시 후 다시 해 주세요."),
+            "error"
+          );
         }
       } else {
         const res = await fetch("/api/events", {
@@ -252,10 +316,18 @@ export function CalendarClient({
         });
         if (res.ok) {
           const created = revive(await res.json());
-          setEvents((prev) => [...prev, created]);
+          setEvents((prev) => [...prev, { ...created, googleLink: null }]);
           setFormOpen(false);
+          // 구글로 보냈으면 그사이 연결이 생겼다 — 응답에는 안 실리니 페이지를 다시 읽어 꼬리표 G 를 단다.
+          router.refresh();
+        } else {
+          const data = await res.json().catch(() => null);
+          say(data?.error ?? "일정을 못 저장했어요. 잠시 후 다시 해 주세요.", "error");
         }
       }
+    } catch {
+      // 네트워크가 끊기면 fetch 는 거부된다 — catch 가 없으면 아무 말 없이 폼만 남는다.
+      say("일정을 못 저장했어요. 연결을 확인해 주세요.", "error");
     } finally {
       setBusy(false);
     }
@@ -265,11 +337,17 @@ export function CalendarClient({
     const prev = events;
     setEvents((p) => p.filter((e) => e.id !== id));
     setDayOpen(false);
-    const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
-    if (!res.ok) {
+    const res = await fetch(`/api/events/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res?.ok) return;
+    if (!res) {
       setEvents(prev);
-      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+      say("못 지웠어요. 연결을 확인해 주세요.", "error");
+      return;
     }
+    const data = await res.json().catch(() => null);
+    // 409 = 구글에서 반복되는(또는 여러 날) 일정. 지워지지 않았으니 되살리고, 서버 문구로 어디서 지우는지 알린다.
+    setEvents(res.status === 409 ? markReadOnly(prev, id, data?.readOnly) : prev);
+    say(data?.error ?? (res.status === 409 ? READONLY_MESSAGE : "못 지웠어요. 잠시 후 다시 해 주세요."), "error");
   }
 
   const monthLabel = format(cursor, "yyyy년 M월", { locale: ko });
@@ -286,8 +364,8 @@ export function CalendarClient({
         description="온 가족의 이번 달 일정을 한눈에"
         summary={`앞으로 ${upcoming.length}개`}
       >
-        {/* 구글 캘린더 연동은 아직 안 된다. 눌리지 않는 버튼이 폰에서 제일 좋은 자리를
-            차지하고 "일정 추가" 와 폭을 나눠 가지고 있었다 — 되면 그때 올린다. */}
+        {/* 구글 캘린더 버튼은 두지 않는다 — 동기화는 화면을 열 때 저절로 돈다(GoogleSyncTrigger).
+            예전에 눌리지 않는 버튼이 폰에서 "일정 추가" 와 폭을 나눠 가지고 있었다. */}
         <Button onClick={() => openNew(new Date())}>
           <Plus className="h-4 w-4" /> 일정 추가
         </Button>
@@ -486,8 +564,11 @@ export function CalendarClient({
                     return <UpcomingMarkRow key={`mark:${row.mark.date}:${i}`} mark={row.mark} />;
                   }
                   const ev = row.item;
+                  const readOnly = isReadOnly(ev);
                   // 수정·삭제가 달력 격자의 날짜 모달 안에만 있었다. 폰 기본이 목록이 된 뒤로는
                   // 이 줄에서 지울 방법이 없어, 지우려면 달력으로 바꿔 날짜를 찾아 들어가야 했다.
+                  // 구글의 반복 회차·여러 날 일정은 사이트에서 못 고친다(409) — `…` 대신 안내 한 줄을 두고,
+                  // 줄을 누르면 고치기 폼이 아니라 그날 상세(장소·메모)를 연다.
                   return (
                     <li
                       key={ev.id}
@@ -495,7 +576,7 @@ export function CalendarClient({
                     >
                       <button
                         type="button"
-                        onClick={() => openEdit(ev)}
+                        onClick={() => (readOnly ? openDay(new Date(ev.start)) : openEdit(ev))}
                         className="flex min-w-0 flex-1 items-start gap-2.5 px-4 py-3 text-left transition hover:bg-sunken/60"
                       >
                         <span
@@ -505,24 +586,32 @@ export function CalendarClient({
                           )}
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[0.9375rem] font-semibold text-ink">
-                            {ev.title}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-[0.9375rem] font-semibold text-ink">
+                              {ev.title}
+                            </span>
+                            {ev.googleLink && <GoogleTag />}
                           </span>
                           <span className="mt-0.5 block text-xs text-ink-soft">
                             {/* 날짜와 시각은 띄어 쓴다("오늘 종일", "9월 26일 (토) 오후 3:00").
                                 가운뎃점으로 잇는 메타 줄은 쓰지 않는다(DESIGN.md §3). */}
                             {kDateRelative(ev.start)} {ev.allDay ? "종일" : kTime(ev.start)}
                           </span>
+                          {readOnly && (
+                            <span className="mt-0.5 block text-xs text-ink-faint">{READONLY_LINE}</span>
+                          )}
                         </span>
                       </button>
-                      <ItemActions
-                        inline
-                        quiet
-                        actions={[
-                          { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
-                          { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },
-                        ]}
-                      />
+                      {!readOnly && (
+                        <ItemActions
+                          inline
+                          quiet
+                          actions={[
+                            { label: "수정", icon: Pencil, onClick: () => openEdit(ev) },
+                            { label: "삭제", icon: Trash2, onClick: () => remove(ev.id), danger: true },
+                          ]}
+                        />
+                      )}
                     </li>
                   );
                 })}
@@ -578,6 +667,8 @@ export function CalendarClient({
                 <div className="min-w-0 flex-1">
                   <p className={cn("font-semibold", palette(ev.color).ink)}>
                     {ev.title}
+                    {/* 글자 뒤에 이어 붙인다 — 제목이 두 줄이 돼도 꼬리표가 마지막 글자 옆을 따라간다. */}
+                    {ev.googleLink && <GoogleTag onTint className="ml-1.5 align-middle" />}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
                     <span className="inline-flex items-center gap-1">
@@ -598,25 +689,31 @@ export function CalendarClient({
                   {ev.description && (
                     <p className="mt-1.5 text-sm text-ink-soft">{ev.description}</p>
                   )}
+                  {/* 반복 회차·여러 날 — 고치기·지우기 단추 대신 어디서 고치는지 한 줄. */}
+                  {isReadOnly(ev) && (
+                    <p className="mt-1.5 text-xs text-ink-soft">{READONLY_LINE}</p>
+                  )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <IconButton
-                    variant="ghost"
-                    size="sm"
-                    aria-label="수정"
-                    onClick={() => openEdit(ev)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </IconButton>
-                  <IconButton
-                    variant="danger"
-                    size="sm"
-                    aria-label="삭제"
-                    onClick={() => remove(ev.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </IconButton>
-                </div>
+                {!isReadOnly(ev) && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <IconButton
+                      variant="ghost"
+                      size="sm"
+                      aria-label="수정"
+                      onClick={() => openEdit(ev)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      variant="danger"
+                      size="sm"
+                      aria-label="삭제"
+                      onClick={() => remove(ev.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
