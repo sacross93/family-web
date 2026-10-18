@@ -208,7 +208,9 @@ async function createLink(eventId: string, g: GEvent, siteSyncedAt: Date, google
  *
  * 구글 id 를 googleIdFor 로 정해 보내므로 같은 사이트 일정의 구글 쌍둥이는 생기지 않는다:
  * - 409(그 id 가 이미 있음) = 지난번 만들기가 들어갔는데 응답을 못 받았거나, 다른 쪽이 방금 만들었다 → 그 일정을 읽어 잇는다.
- *   취소된 것으로 오면 구글에서 지운 것이다 — 잇지 않고 그 건만 실패로 남긴다(같은 id 는 다시 쓸 수 없다).
+ *   취소됨(또는 404·410)으로 오면 가족이 구글에서 지운 것이다 — **구글의 지우기가 이긴다**(스펙: cancelled 는 사이트 수정보다
+ *   우선). 사이트 일정을 지운다. 같은 id 는 다시 쓸 수 없어서, 안 지우면 동기화마다 같은 실패를 되풀이한다.
+ *   단 다시 묻기가 **성공했을 때만**이다 — getEvent 가 던지면(5xx·시간 초과·권한) 그 건만 실패로 두고 아무것도 안 지운다.
  * - 연결을 못 남겼는데 사이트 일정이 그대로면 구글 일정을 **거두지 않는다** — 다른 쪽이 이었다면 그게 바로 이 일정이고,
  *   아니면 다음 동기화가 목록에서 같은 id 를 보고 잇는다. 거두는 것은 그 사이 사이트 일정이 지워졌을 때뿐이다
  *   (그대로 두면 연결 없는 구글 일정이 되어 다음 동기화가 사이트로 되살린다).
@@ -223,10 +225,11 @@ async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Pr
     made = await insertEvent(cfg, { ...toGoogle(siteFields(ev)), id }, deps);
   } catch (e) {
     if (!(e instanceof GcalError) || e.status !== 409) throw e;
-    const found = await getEvent(cfg, id, deps);
-    if (!found) throw e;
-    if (found.status === "cancelled") {
-      throw new GcalError(409, "deleted", "구글에서 이미 지운 일정과 겹쳐 다시 보내지 못했어요");
+    const found = await getEvent(cfg, id, deps); // 던지면 그대로 실패 — 지우지 않는다
+    if (!found || found.status === "cancelled") {
+      // 방금 409 를 준 같은 캘린더라 접근은 확인됐다 — 여기서의 없음·취소됨은 정말 지운 것이다.
+      await prisma.calendarEvent.deleteMany({ where: { id: ev.id } });
+      return true;
     }
     made = found;
     recovered = true;

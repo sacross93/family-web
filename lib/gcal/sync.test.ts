@@ -1066,21 +1066,55 @@ describe("쓰기 훅", () => {
     expect(linkOf("e1")).toMatchObject({ googleEventId: id, siteSyncedAt: new Date(0), googleUpdated: new Date(0) });
   });
 
-  it("만들기 — 409 인데 구글에서 지운 것(cancelled) → 잇지 않고 그 건만 실패", async () => {
+  it("만들기 — 409 인데 구글에서 지운 것(cancelled) → 구글의 지우기가 이긴다: 사이트 일정을 지운다", async () => {
     seedState();
-    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    seedEvent("e1", { createdAt: now() });
     const id = googleIdFor("e1");
     const g = fakeGoogle();
     g.put({ id, status: "cancelled", updated: "2026-10-15T00:00:00.000Z" });
     await afterSiteCreate("e1", deps(g));
+    expect(event("e1")).toBeUndefined();
     expect(linkOf("e1")).toBeUndefined();
-    const out = (await runSync({ deps: deps(g), force: true })) as Extract<SyncOutcome, { ran: true }>;
-    expect(out.error).toMatch(/1개/);
-    expect(out.error).toContain("지운 일정");
-    expect(linkOf("e1")).toBeUndefined();
-    expect(h.tables.calendarEvent).toHaveLength(1);
+    expect(g.calls.filter((c) => c.kind === "get").map((c) => c.id)).toEqual([id]);
+    expect(g.writes().filter((c) => c.kind !== "insert")).toHaveLength(0); // 구글에는 아무것도 쓰지 않았다
   });
 
+  it("동기화의 pushNew 도 같다 — 409 + cancelled 면 사이트 일정을 지우고 실패로 세지 않는다(다음 동기화는 조용하다)", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    const g = fakeGoogle();
+    g.put({ id: googleIdFor("e1"), status: "cancelled", updated: "2026-10-15T00:00:00.000Z" });
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
+    expect(h.tables.calendarEvent).toHaveLength(0);
+    expect(h.tables.googleEventLink).toHaveLength(0);
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+  });
+
+  it("만들기 — 409 뒤 다시 묻기가 404(지워져 없음) → 사이트 일정을 지운다", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: now() });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(404, "notFound") : undefined) });
+    g.put(gev(id)); // insert 가 409 를 받게
+    await afterSiteCreate("e1", deps(g));
+    expect(event("e1")).toBeUndefined();
+    expect(linkOf("e1")).toBeUndefined();
+  });
+
+  it("만들기 — 409 뒤 다시 묻기가 실패(500) → 아무것도 지우지 않고 그 건만 실패", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(500) : undefined) });
+    g.put({ id, status: "cancelled", updated: "2026-10-15T00:00:00.000Z" });
+    await afterSiteCreate("e1", deps(g));
+    expect(event("e1")).toBeDefined();
+    const out = (await runSync({ deps: deps(g), force: true })) as Extract<SyncOutcome, { ran: true }>;
+    expect(out.error).toMatch(/1개/);
+    expect(event("e1")).toBeDefined();
+    expect(linkOf("e1")).toBeUndefined();
+  });
   it("만들기 — 이미 이어져 있으면 다시 보내지 않는다", async () => {
     seedState();
     seedEvent("e1");
