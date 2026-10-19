@@ -29,7 +29,14 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <AdminClient decorations={decorations} site={site} nav={nav} agentConnection={agentConnection} gcal={gcal} />
+    <AdminClient
+      decorations={decorations}
+      site={site}
+      nav={nav}
+      agentConnection={agentConnection}
+      gcal={gcal}
+      currentUid={user.uid}
+    />
   );
 }
 

@@ -47,6 +47,10 @@ export function LoginForm() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
+          // 아이폰은 첫 글자를 대문자로 바꾼다. 로그인은 아이디를 글자 그대로 찾으므로 "Eomma" 는 없는 아이디다.
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           autoFocus
           required
         />

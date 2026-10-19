@@ -60,7 +60,8 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 ## 로그인 / 인증 (적용됨)
 - 아이디·비밀번호 로그인. `AppUser`(bcrypt) + jose 세션 쿠키. 전 페이지를 `proxy.ts`가 보호.
 - 세션 로직: `lib/session.ts`(edge-safe, next/headers 금지) · 서버 조회: `lib/current-user.ts`의 `getCurrentUser()`.
-- 새 계정: `npm run user:add`. 공유 계정 `wlsdud022`(관리자). 모든 IP 접속: `npm run dev:lan`.
+- 새 계정: `/admin` 의 **로그인 계정** 카드(만들기·비밀번호 바꾸기 — 지우기·권한 바꾸기는 **일부러 없다**, 같은 아이디는 409)
+  또는 `npm run user:add`(같은 아이디면 **덮어쓴다**). 공유 계정 `wlsdud022`(관리자). 모든 IP 접속: `npm run dev:lan`.
 - `proxy.ts`(Next 16 에서 `middleware` 가 이 이름으로 바뀜)는 `lib/session.ts`만 import (jose). prisma/next-headers/bcrypt는 route(nodejs)에서만 — v16 부터 proxy 가 Node 런타임이 기본이라도 여기는 가볍게 둔다.
 
 ## 아기 페이지 (`/baby`) — 준비부터 출산까지

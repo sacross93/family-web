@@ -37,6 +37,7 @@ import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
 import { AgentConnectCard, type AgentConnection } from "./agent-connect-card";
+import { AccountsCard } from "./accounts-card";
 import { GoogleCalendarCard } from "./google-calendar-card";
 import type { GcalStatus } from "@/lib/gcal/contract";
 
@@ -65,6 +66,7 @@ export function AdminClient({
   nav,
   agentConnection,
   gcal,
+  currentUid,
 }: {
   decorations: Decoration[];
   site: SiteConfigData;
@@ -72,6 +74,8 @@ export function AdminClient({
   agentConnection: AgentConnection;
   /** 서버가 못 읽었으면 null — 카드가 열릴 때 다시 읽는다. */
   gcal: GcalStatus | null;
+  /** 지금 로그인한 관리자 — 계정 목록에서 "(나)" 를 붙인다. */
+  currentUid: string;
 }) {
   const router = useRouter();
 
@@ -85,6 +89,7 @@ export function AdminClient({
       <NavEditorCard nav={nav} onSaved={() => router.refresh()} />
       <DecorationManager decorations={decorations} />
       <FamilyCard />
+      <AccountsCard currentUid={currentUid} />
       <AgentConnectCard initial={agentConnection} />
       <GoogleCalendarCard initial={gcal} />
       {/* 기억 목록은 메뉴에 없다 — 매일 여는 화면이 아니라 한 번씩 확인하고 지우는 자리다.
