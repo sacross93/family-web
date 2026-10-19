@@ -1,7 +1,9 @@
 // 사이트 일정 ↔ 구글 일정 변환(순수 함수, 스펙 §4).
 //
-// **날짜 글자는 언제나 Asia/Seoul 로 만든다.** 운영 서버(Vercel)는 UTC, 개발 맥은 Asia/Seoul 이라
-// 로컬 시각에 기대면 같은 종일 일정이 한쪽에서는 10/20, 다른 쪽에서는 10/19 로 간다(koreaNow 와 같은 이유).
+// **날짜 글자는 언제나 Asia/Seoul 로 만든다 — 프로세스 시간대(TZ)에 전혀 기대지 않는다.** 운영의 nodejs 서버는
+// instrumentation.ts 가 TZ 를 Asia/Seoul(또는 SITE_TZ)로 맞추지만, 그건 그 런타임에서 register() 가 돈 뒤의 일이고
+// edge·시험·스크립트, SITE_TZ 를 바꾼 배포에서는 다르다. 로컬 시각에 기대면 같은 종일 일정이 한쪽에서는 10/20,
+// 다른 쪽에서는 10/19 로 간다(koreaNow 와 같은 이유).
 // 그래서 이 파일에는 `new Date(y, m, d)`·getDate()·date-fns format 이 없다 — Intl 에 시간대를 박아 쓰고,
 // 문자열에는 +09:00 을 붙인다. 시험(map.test.ts)이 TZ 를 UTC 와 Asia/Seoul 로 바꿔 가며 같은 결과인지 본다.
 //
@@ -89,7 +91,8 @@ export function toGoogle(f: SiteFields): GEventBody {
 
 /** 구글 일정 모양만 보고 사이트에서 고칠 수 있는지 — 시작이 없어도(취소됨) 던지지 않는다. */
 export function readOnlyOf(g: GEvent): ReadOnly {
-  if (g.recurringEventId) return "recurring";
+  // 회차(recurringEventId)도, 시리즈 원본(recurrence)도 반복이다. 원본 id 로 PATCH·DELETE 하면 시리즈 **전체**가 바뀐다.
+  if (g.recurringEventId || g.recurrence?.length) return "recurring";
   const s = g.start;
   const e = g.end;
   if (s?.date) {

@@ -5,6 +5,7 @@ import {
   toGoogle,
   fromGoogle,
   sameDaySameTitle,
+  readOnlyOf,
   type SiteFields,
 } from "@/lib/gcal/map";
 import type { GEvent } from "@/lib/gcal/client";
@@ -155,6 +156,17 @@ describe("toGoogle / fromGoogle", () => {
     expect(one.readOnly).toBe("recurring");
     const multi = fromGoogle(g({ recurringEventId: "series1", start: { date: "2026-10-20" }, end: { date: "2026-10-23" } }));
     expect(multi.readOnly).toBe("recurring");
+  });
+
+  it("recurrence 가 있는 일정(반복 시리즈 원본) → readOnly recurring — 원본 id 로 고치면 시리즈 전체가 바뀐다", () => {
+    const master = g({
+      recurrence: ["RRULE:FREQ=WEEKLY"],
+      start: { dateTime: "2026-10-20T10:00:00+09:00" },
+      end: { dateTime: "2026-10-20T11:00:00+09:00" },
+    });
+    expect(readOnlyOf(master)).toBe("recurring");
+    expect(fromGoogle(master).readOnly).toBe("recurring");
+    expect(readOnlyOf(g({ recurrence: [] }))).toBeNull(); // 빈 배열은 반복이 아니다
   });
 
   it("색 왕복 — 스펙 표(lavender↔1, mint↔2, rose↔4, butter↔5, peach↔6, sky↔7)", () => {

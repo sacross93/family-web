@@ -87,6 +87,10 @@ export async function DELETE(
   if (conflict) return conflict;
   // 지우기 **전에** 구글 연결에 묘비를 세운다 — 지운 뒤 여기서 끊겨도 다음 동기화가 구글에서 지운다(sync.ts).
   const link = await beforeSiteDelete(id);
+  // 위의 확인과 묘비 사이에 동기화가 이 일정을 반복·여러 날로 바꿨다(구글에서 "반복" 으로 바꾼 경우) — 지우지 않는다.
+  if (link && "readOnly" in link) {
+    return NextResponse.json({ error: READONLY_MESSAGE, readOnly: link.readOnly }, { status: 409 });
+  }
   // `delete` 가 아니라 `deleteMany` — 없는 행을 지우면 prisma 가 P2025 를 던져 **500** 이 된다.
   // 공유 목록이라 실제로 일어난다: 두 사람이 같은 항목을 동시에 지우면 뒤쪽이 500 을 받고,
   // 화면은 낙관적 삭제를 되돌려 **지운 것이 되살아난다.** 이미 없으면 그걸로 된 것이다.

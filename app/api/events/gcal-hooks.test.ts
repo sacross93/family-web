@@ -6,7 +6,11 @@ import { NextRequest } from "next/server";
 // 409 일 때는 DB 쓰기도 훅도 하나도 불리지 않아야 한다(= 구글에 아무 요청도 가지 않는다).
 
 const calls = vi.hoisted(() => [] as string[]);
-const ro = vi.hoisted(() => ({ reason: null as "recurring" | "multiday" | null }));
+const ro = vi.hoisted(() => ({
+  reason: null as "recurring" | "multiday" | null,
+  /** beforeSiteDelete 가 돌려줄 것 — 라우트 확인 뒤 그 사이 readOnly 가 된 경우를 흉내 낸다 */
+  ticket: { linkId: "l1", googleEventId: "g1" } as { linkId: string; googleEventId: string } | { readOnly: "recurring" | "multiday" } | null,
+}));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -39,7 +43,7 @@ vi.mock("@/lib/gcal/sync", async (importOriginal) => {
     afterSiteUpdate: vi.fn(async (id: string) => void calls.push(`afterSiteUpdate:${id}`)),
     beforeSiteDelete: vi.fn(async (id: string) => {
       calls.push(`beforeSiteDelete:${id}`);
-      return { linkId: "l1", googleEventId: "g1" };
+      return ro.ticket;
     }),
     afterSiteDelete: vi.fn(async (link: unknown) => void calls.push(`afterSiteDelete:${JSON.stringify(link)}`)),
   };
@@ -58,6 +62,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 beforeEach(() => {
   calls.length = 0;
   ro.reason = null;
+  ro.ticket = { linkId: "l1", googleEventId: "g1" };
 });
 
 describe("/api/events — 구글 동기화 배선", () => {
@@ -84,6 +89,17 @@ describe("/api/events — 구글 동기화 배선", () => {
       "db.deleteMany",
       `afterSiteDelete:${JSON.stringify({ linkId: "l1", googleEventId: "g1" })}`,
     ]);
+  });
+
+  it("DELETE: 확인은 통과했는데 묘비를 세우려는 순간 readOnly 가 됐다 → 409, 지우지 않는다", async () => {
+    ro.ticket = { readOnly: "recurring" };
+    const res = await DELETE(req("DELETE"), params("e1"));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: "구글에서 반복되는(또는 여러 날) 일정이라 구글 캘린더에서 고쳐 주세요.",
+      readOnly: "recurring",
+    });
+    expect(calls).toEqual(["readOnlyReason:e1", "beforeSiteDelete:e1"]); // deleteMany·afterSiteDelete 없음
   });
 
   it("두 번 지워도 200", async () => {

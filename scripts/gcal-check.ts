@@ -428,7 +428,7 @@ async function steps(cfg: GcalOn, made: Set<string>): Promise<void> {
   console.log("\n5. 사이트에서 지우기");
   // 라우트(DELETE /api/events/[id])와 같은 순서: 묘비 → deleteMany → 구글에서 지우기
   const tomb = await beforeSiteDelete(site.id);
-  check("지우기 전에 묘비를 세움", tomb?.googleEventId === siteGoogleId);
+  check("지우기 전에 묘비를 세움", tomb !== null && "googleEventId" in tomb && tomb.googleEventId === siteGoogleId);
   await prisma.calendarEvent.deleteMany({ where: { id: site.id } });
   await afterSiteDelete(tomb);
   check("구글에서도 지워짐", goneFromGoogle(await getEvent(cfg, siteGoogleId)));

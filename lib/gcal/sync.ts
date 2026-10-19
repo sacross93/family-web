@@ -160,8 +160,15 @@ async function startedConfig(): Promise<GcalOn | null> {
  * (제목 없음 → "(제목 없음)", 모르는 색 → 7번, 끝 없음 → 시작 + 1시간, 시간대 고정). **가족의 진짜 일정이 그렇게 덮어써진다.**
  * 그래서 "한 번 더 보낼 뿐 해가 없다" 가 아니다 — 어긋날 길을 아예 없앤다.
  *
- * 사이트 → 구글 쪽(pushNew·pushUpdate·link)은 일정을 쓰지 않는다. 연결 하나만 쓰고, siteSyncedAt 에는 **보내기 전에 읽은**
+ * 처음 맞추기의 잇기(link)도 같은 쪽이다 — 이을 때는 **구글 내용이 이긴다**(아래 linkTakingGoogle).
+ *
+ * 사이트 → 구글 쪽(pushNew·pushUpdate)은 일정을 쓰지 않는다. 연결 하나만 쓰고, siteSyncedAt 에는 **보내기 전에 읽은**
  * updatedAt 을 적는다 — 보내는 사이 사이트에서 또 고쳤으면 다음 동기화가 그것을 보낸다(나중 것을 잃지 않는다).
+ *
+ * **구글에 쓰기 전에는 그 일정을 다시 묻는다**(pushUpdate·deleteGoogleChecked). 연결된 단일 일정을 가족이 구글에서
+ * "매주 반복" 으로 바꾸면 그 id 가 시리즈 **원본**이 된다 — 원본은 singleEvents 목록에 안 와서 우리 연결은 모르는 채 남고,
+ * 그 id 로 PATCH 하면 시리즈 전체가 덮어써지고 DELETE 하면 시리즈가 통째로 사라진다. 다시 물어 반복·여러 날이면 쓰지 않는다.
+ * 다시 묻기가 실패하면 쓰지 않는다(대기로 남긴다).
  */
 
 /** 구글 일정을 사이트에 새로 만든다. 일정과 연결을 **한 문장**으로(중첩 쓰기) — 연결이 걸리면(유일키 등) 일정도 안 생긴다. */
@@ -194,6 +201,22 @@ async function updateSiteFrom(linkId: string, eventId: string, g: GEvent, deps?:
 }
 
 /**
+ * 처음 맞추기의 잇기 — 같은 날·같은 제목의 짝을 이으면서 **구글 내용을 사이트 일정에 쓴다**(한 트랜잭션).
+ * 왜 구글 쪽인가: 사이트 내용을 그대로 두면 처음 사이트에서 고칠 때 사이트 내용 전체가 구글로 가서, 구글에 적힌 시각을 덮고
+ * 메모·장소를 지운다(사이트에 없으면 null → ""). 가족이 실제로 쓰는 캘린더는 구글이라 그쪽을 남긴다. 구글에는 쓰지 않는다.
+ */
+async function linkTakingGoogle(eventId: string, g: GEvent, deps?: GcalDeps): Promise<void> {
+  const { fields, readOnly } = fromGoogle(g);
+  const stamp = writeTime(deps);
+  await prisma.$transaction(async (tx) => {
+    await tx.calendarEvent.update({ where: { id: eventId }, data: { ...fields, updatedAt: stamp } });
+    await tx.googleEventLink.create({
+      data: { eventId, googleEventId: g.id, googleUpdated: new Date(g.updated), siteSyncedAt: stamp, readOnly },
+    });
+  });
+}
+
+/**
  * 사이트 일정과 연결을 함께 지운다. 일정만 지우면 FK(SetNull)가 연결을 eventId 없는 고아로 남기고,
  * planSync 는 그런 연결을 일부러 건드리지 않아(로컬 DB 를 비웠을 때 진짜 캘린더를 지키려고) 영영 남는다.
  */
@@ -209,6 +232,29 @@ async function createLink(eventId: string, g: GEvent, siteSyncedAt: Date, google
   await prisma.googleEventLink.create({
     data: { eventId, googleEventId: g.id, googleUpdated, siteSyncedAt, readOnly: readOnlyOf(g) },
   });
+}
+
+/**
+ * 구글 일정 하나를 지운다 — **다시 물어 평범한 하나짜리일 때만.** 반복(원본·회차)·여러 날이면 지우지 않는다(위 머리 주석).
+ * 이미 없거나 취소됐으면 할 일이 없다. 다시 묻기가 실패하면 던진다(부르는 쪽은 아무것도 지우지 않은 채로 남는다).
+ */
+async function deleteIfPlain(cfg: GcalOn, googleEventId: string, deps?: GcalDeps): Promise<"deleted" | "gone" | "readOnly"> {
+  const cur = await getEvent(cfg, googleEventId, deps);
+  if (!cur || cur.status === "cancelled") return "gone";
+  if (readOnlyOf(cur)) return "readOnly";
+  await deleteEvent(cfg, googleEventId, deps); // 404·410 = 이미 없음 = 성공
+  return "deleted";
+}
+
+/**
+ * 묘비 처리(동기화·지우기 훅이 같이 쓴다). 구글에서 지웠든, 이미 없었든, 반복·여러 날이 되어 **안 지웠든** 연결은 거둔다.
+ * 안 지운 경우 사이트 일정은 이미 지워졌다 — 그 구글 일정은 연결이 없어졌으니 회차면 다음 동기화가 다시 가져온다
+ * (사이트에서 반복 일정을 지우는 길은 없다). 원본이면 목록에 안 오므로 회차들이 그대로 보인다.
+ */
+async function settleTombstone(cfg: GcalOn, linkId: string, googleEventId: string, deps?: GcalDeps): Promise<void> {
+  const done = await deleteIfPlain(cfg, googleEventId, deps);
+  if (done === "readOnly") console.warn("[gcal] 반복·여러 날이 된 구글 일정이라 지우지 않고 연결만 거뒀어요");
+  await prisma.googleEventLink.deleteMany({ where: { id: linkId } });
 }
 
 /**
@@ -253,7 +299,7 @@ async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Pr
       .findUnique({ where: { id: ev.id }, select: { id: true } })
       .catch(() => ({ id: ev.id })); // 못 읽으면 "있다" 로 — 모르는 채로 진짜 캘린더의 일정을 지우지 않는다
     if (!site) {
-      await deleteEvent(cfg, made.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
+      await deleteIfPlain(cfg, made.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
     } else if (
       await prisma.googleEventLink
         .findUnique({ where: { googleEventId: made.id }, select: { id: true } })
@@ -269,13 +315,35 @@ async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Pr
 /**
  * 사이트 내용을 구글로. siteSyncedAt 은 **보내기 전에 읽은** updatedAt — 보내는 사이에 누가 또 고쳤으면
  * 그 값이 더 크므로 다음 동기화가 다시 보낸다(나중 것을 잃지 않는다).
+ *
+ * 보내기 전에 다시 묻는다(던지면 그대로 실패 — 부르는 쪽이 pendingPush 로 남긴다):
+ * - 반복(원본·회차)·여러 날이 됐으면 **보내지 않는다.** 연결을 readOnly 로 바꾸고 대기를 내린다 — 이제 사이트에서 고칠 수
+ *   없는 일정이다(라우트가 409). googleUpdated 는 그대로 두어 다음 동기화가 구글 내용을 사이트로 가져오게 한다.
+ * - 없거나 취소됐으면 가족이 구글에서 지운 것이다 — **구글의 지우기가 이긴다**(처음 맞추기 409 와 같은 규칙). 사이트 일정과
+ *   연결을 지운다. 안 그러면 창 밖의 보내기 대기 연결은 동기화마다 404 실패를 되풀이한다(창 밖이라 다시 묻기도 안 온다).
  */
-async function pushUpdate(cfg: GcalOn, link: { id: string; googleEventId: string }, ev: CalendarEvent, deps?: GcalDeps) {
+async function pushUpdate(
+  cfg: GcalOn,
+  link: { id: string; googleEventId: string },
+  ev: CalendarEvent,
+  deps?: GcalDeps,
+): Promise<"pushed" | "readOnly" | "gone"> {
+  const cur = await getEvent(cfg, link.googleEventId, deps);
+  if (!cur || cur.status === "cancelled") {
+    await deleteSiteAndLink(link.id, ev.id);
+    return "gone";
+  }
+  const shape = readOnlyOf(cur);
+  if (shape) {
+    await prisma.googleEventLink.update({ where: { id: link.id }, data: { readOnly: shape, pendingPush: false } });
+    return "readOnly";
+  }
   const res = await patchEvent(cfg, link.googleEventId, toGoogle(siteFields(ev)), deps);
   await prisma.googleEventLink.update({
     where: { id: link.id },
     data: { googleUpdated: new Date(res.updated), siteSyncedAt: ev.updatedAt, pendingPush: false, readOnly: readOnlyOf(res) },
   });
+  return "pushed";
 }
 
 /** 못 보낸 변경 표시. readOnly 연결에는 세우지 않는다 — 반복 회차는 사이트에서 보내는 길이 없다. */
@@ -286,7 +354,11 @@ async function markPendingPush(linkId: string): Promise<void> {
 }
 
 /** planSync 의 액션 + 잃어버린 만들기 되찾기(아래 findLostInserts) */
-type RunAction = Action | { kind: "relink"; eventId: string; google: GEvent };
+type RunAction =
+  | Action
+  | { kind: "relink"; eventId: string; google: GEvent }
+  /** readOnly 묘비 — planSync 는 지우지 않는다. 구글은 그대로 두고 연결만 거둔다(DB 만). */
+  | { kind: "dropTombstone"; linkId: string };
 
 interface RunCtx {
   cfg: GcalOn;
@@ -323,6 +395,13 @@ async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
         await deleteSiteAndLink(a.linkId, a.eventId);
         return true;
       }
+      // 반복 시리즈 **원본**이 됐다(연결된 단일 일정을 구글에서 "반복" 으로 바꿨다). 회차들이 목록에서 따로 들어와 일정을
+      // 이어서 보이므로 이 사본은 겹친다 — 사이트 사본과 연결만 지운다(DB 만, 구글은 그대로). 아래 일반 갈래로 가면
+      // 원본 내용(첫 회차 날짜)으로 사이트를 고치거나, 사이트가 바뀌었으면 원본을 PATCH 해 시리즈 전체를 덮는다.
+      if (g.recurrence?.length) {
+        await deleteSiteAndLink(a.linkId, a.eventId);
+        return true;
+      }
       // 살아 있다(창 밖으로 옮겨졌다). 어느 쪽이 이길지는 planSync 에 이 연결 하나만 넣어 다시 묻는다 —
       // 판단 갈래를 여기에 한 벌 더 두지 않으려고. complete:false 라 지우기·다시 묻기는 나오지 않는다.
       const link = ctx.links.get(a.linkId);
@@ -340,26 +419,39 @@ async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
       });
       return next ? execute(next, ctx) : false;
     }
-    case "link": {
-      // 같은 날·같은 제목을 하나로 **잇기만** 한다. 내용은 옮기지 않는다 — 구글에 쓰지 않고(지난 일정은 보내지 않는다는
-      // 약속과 같은 쪽), 사이트에 적힌 것도 지우지 않는다. 다음에 어느 쪽이든 고치면 그때부터 그쪽 내용이 간다.
-      const site = siteOf(a.eventId);
-      await createLink(site.id, a.google, site.updatedAt, new Date(a.google.updated));
+    case "link":
+      // 같은 날·같은 제목을 하나로 잇는다 — 내용은 구글 쪽으로(사이트 일정에 쓴다). 구글에는 쓰지 않는다.
+      await linkTakingGoogle(siteOf(a.eventId).id, a.google, deps);
       return true;
-    }
-    case "relink":
+    case "relink": {
       // 우리가 정한 id 로 구글에 있는데 연결이 없다 = 지난번 만들기의 응답을 못 받았다. 잇고, 내용은 다음 동기화가
       // 나중 것으로 맞춘다(RECONCILE).
-      await createLink(siteOf(a.eventId).id, a.google, RECONCILE, RECONCILE);
+      const site = siteOf(a.eventId);
+      try {
+        await createLink(site.id, a.google, RECONCILE, RECONCILE);
+      } catch (e) {
+        // pushNewEvent 와 같은 규칙: 그 사이 사이트 일정이 지워졌으면 그 pd… 일정(우리가 만든 것)만 거둔다 — 그대로 두면
+        // 연결 없는 구글 일정이 되어 다음 동기화가 사이트로 되살린다. 못 읽으면 "있다" 로 치고 아무것도 안 지운다.
+        const still = await prisma.calendarEvent
+          .findUnique({ where: { id: site.id }, select: { id: true } })
+          .catch(() => ({ id: site.id }));
+        if (!still && a.google.id === googleIdFor(site.id)) {
+          await deleteIfPlain(cfg, a.google.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
+        }
+        throw e;
+      }
       return true;
+    }
     case "pushNew":
       return pushNewEvent(cfg, siteOf(a.eventId), deps);
     case "pushUpdate":
       await pushUpdate(cfg, { id: a.linkId, googleEventId: a.googleEventId }, siteOf(a.eventId), deps);
       return true;
     case "deleteGoogle":
-      await deleteEvent(cfg, a.googleEventId, deps); // 404·410 = 이미 없음 = 성공
-      await prisma.googleEventLink.deleteMany({ where: { id: a.linkId } });
+      await settleTombstone(cfg, a.linkId, a.googleEventId, deps);
+      return true;
+    case "dropTombstone":
+      await prisma.googleEventLink.deleteMany({ where: { id: a.linkId, pendingDelete: true } });
       return true;
   }
 }
@@ -415,8 +507,19 @@ function planRun(
   const lost = findLostInserts(data.google, sites, links);
   const lostGoogle = new Set([...lost.values()].map((g) => g.id));
   const relinks: RunAction[] = [...lost].map(([eventId, google]) => ({ kind: "relink", eventId, google }));
+  // planSync 가 지우지 않는 묘비(readOnly 표시가 있거나 지금 구글 일정이 반복·여러 날) — 같은 조건으로 골라 연결만 거둔다.
+  // 안 거두면 영영 남아 "보내기 대기" 에 잡히고, 그 회차는 연결된 것으로 보여 다시 들어오지도 않는다.
+  const googleById = new Map(data.google.map((g) => [g.id, g]));
+  const drops: RunAction[] = links
+    .filter((l) => {
+      if (!l.pendingDelete) return false;
+      const current = googleById.get(l.googleEventId);
+      return l.readOnly != null || (current !== undefined && readOnlyOf(current) !== null);
+    })
+    .map((l) => ({ kind: "dropTombstone", linkId: l.id }));
   return [
     ...relinks,
+    ...drops,
     ...planSync({
       now,
       window: data.window,
@@ -613,11 +716,20 @@ export async function previewInitial(
 // 사이트에서 쓸 때 (/api/events, 스펙 §6)
 // ─────────────────────────────────────────────
 
+type ReadOnlyKind = "recurring" | "multiday";
+const isReadOnly = (r: string | null | undefined): r is ReadOnlyKind => r === "recurring" || r === "multiday";
+
+/** beforeSiteDelete → afterSiteDelete 로 넘기는 묘비 표 */
+export interface DeleteTicket {
+  linkId: string;
+  googleEventId: string;
+}
+
 /** 사이트에서 고치지 못하는 일정인가 — DB 만 본다(꺼져 있어도 반복 회차는 반복 회차다). 라우트가 409 를 낸다. */
-export async function readOnlyReason(eventId: string): Promise<"recurring" | "multiday" | null> {
+export async function readOnlyReason(eventId: string): Promise<ReadOnlyKind | null> {
   const link = await prisma.googleEventLink.findUnique({ where: { eventId }, select: { readOnly: true } });
   const r = link?.readOnly;
-  return r === "recurring" || r === "multiday" ? r : null;
+  return isReadOnly(r) ? r : null;
 }
 
 /** 만들기 뒤. 실패는 삼킨다 — 연결 없이 남은 일정은 createdAt ≥ initialDoneAt 이라 다음 동기화가 보낸다. */
@@ -658,30 +770,37 @@ export async function afterSiteUpdate(eventId: string, deps?: GcalDeps): Promise
  * 무시한다(로컬 DB 를 비웠을 때 진짜 캘린더를 지키려고). 그러니 지운 뒤에 함수가 죽으면(시간 초과·배포) 구글 일정이
  * 영영 남는다. 앞에서 세워 두면 어디서 끊겨도 다음 동기화가 지운다.
  */
-export async function beforeSiteDelete(eventId: string): Promise<{ linkId: string; googleEventId: string } | null> {
+export async function beforeSiteDelete(eventId: string): Promise<DeleteTicket | { readOnly: ReadOnlyKind } | null> {
   const link = await prisma.googleEventLink.findUnique({ where: { eventId }, select: { id: true, googleEventId: true } });
   if (!link) return null;
   // update 가 아니라 updateMany — 읽은 뒤 그 사이 동기화가 연결을 지웠으면 update 는 P2025 를 던져 DELETE 가 500 이 된다
-  // (화면은 낙관적 삭제를 되돌린다: AGENTS.md DELETE 규칙). 이미 없으면 세울 묘비도 없다.
+  // (화면은 낙관적 삭제를 되돌린다: AGENTS.md DELETE 규칙). `readOnly: null` 조건은 라우트의 readOnly 확인과 여기 사이에
+  // 동기화가 연결을 readOnly 로 바꾼 경우를 막는다 — 그러면 묘비를 세우지 않고 라우트가 409 를 낸다.
   const marked = await prisma.googleEventLink.updateMany({
-    where: { id: link.id },
+    where: { id: link.id, readOnly: null },
     data: { pendingDelete: true, pendingPush: false },
   });
-  if (marked.count === 0) return null;
+  if (marked.count === 0) {
+    const now = await prisma.googleEventLink.findUnique({ where: { id: link.id }, select: { readOnly: true } });
+    return now && isReadOnly(now.readOnly) ? { readOnly: now.readOnly } : null; // 없으면 세울 묘비도 없다
+  }
   return { linkId: link.id, googleEventId: link.googleEventId };
 }
 
-/** 지우기 뒤. 구글에서 지우고 연결을 없앤다. 실패하면 묘비로 남는다(다음 동기화가 지운다). */
+/**
+ * 지우기 뒤. 구글에서 지우고 연결을 없앤다. 실패하면 묘비로 남는다(다음 동기화가 지운다).
+ * beforeSiteDelete 의 결과를 그대로 받는다 — readOnly 였으면 라우트가 이미 409 로 끝냈어야 하지만, 와도 아무것도 안 한다.
+ */
 export async function afterSiteDelete(
-  link: { linkId: string; googleEventId: string } | null,
+  link: DeleteTicket | { readOnly: ReadOnlyKind } | null,
   deps?: GcalDeps,
 ): Promise<void> {
-  if (!link) return;
+  if (!link || "readOnly" in link) return;
   try {
     const cfg = await startedConfig();
     if (!cfg) return; // 묘비는 beforeSiteDelete 가 이미 세웠다
-    await deleteEvent(cfg, link.googleEventId, deps); // 404·410 = 이미 없음 = 성공
-    await prisma.googleEventLink.deleteMany({ where: { id: link.linkId } });
+    // 다시 물어 평범한 일정일 때만 지운다 — 반복·여러 날이 됐으면 구글은 그대로 두고 연결만 거둔다(settleTombstone).
+    await settleTombstone(cfg, link.linkId, link.googleEventId, deps);
   } catch (e) {
     logFail("지운 일정 구글에서 지우기", e);
     // FK(SetNull)가 eventId 를 비웠겠지만 거기에 기대지 않는다 — 묘비 모양을 여기서 확실히.

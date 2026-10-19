@@ -64,14 +64,13 @@ function Body({
   onStatus: (next: GcalStatusBody) => void;
 }) {
   const { confirm, dialog } = useConfirm();
-  // 열릴 때 무엇을 받아 와야 하나 — 서버가 상태를 못 읽었거나, 처음 맞추기 전인데 미리보기가 아직 없을 때.
-  // CollapsibleCard 는 열려 있을 때만 이 안을 그리므로 "붙을 때 한 번" 이 곧 "열릴 때" 다.
-  const [needsFetch] = useState(
-    () => status === null || (status.config === "on" && !status.initialDoneAt && !status.preview),
-  );
+  // 열릴 때 무엇을 받아 와야 하나 — 서버가 상태를 못 읽었거나, 처음 맞추기 전일 때(**열 때마다** 새로).
+  // 예전 미리보기를 들고 있어도 다시 읽는다: 그 사이 구글·사이트 일정이 바뀌었으면 숫자가 다르고, 확인 창이 "아무것도 만들지
+  // 않아요" 라고 말한 뒤 실제로는 만드는 일이 생긴다. CollapsibleCard 는 열려 있을 때만 이 안을 그리므로 "붙을 때" = "열릴 때".
+  const [needsFetch] = useState(() => status === null || (status.config === "on" && !status.initialDoneAt));
   const [loading, setLoading] = useState(needsFetch);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"initial" | "sync" | null>(null);
+  const [busy, setBusy] = useState<"checking" | "initial" | "sync" | null>(null);
   const [note, setNote] = useState<Note>(null);
 
   useEffect(() => {
@@ -98,9 +97,27 @@ function Body({
     setLoading(false);
   }
 
-  async function runInitial(counts: Counts) {
+  async function runInitial() {
     if (busy) return;
+    setNote(null);
+    // 확인 창 **바로 전에** 미리보기를 새로 받는다 — 화면에 떠 있는 숫자는 열었을 때의 것이라 낡았을 수 있다.
+    // 새 숫자가 오면 화면도 그것으로 바뀌고, 그 사이 누가 처음 맞추기를 끝냈거나 구글을 못 읽으면 묻지 않고 그 상태를 보인다.
+    setBusy("checking");
+    const fresh = await readStatus();
+    if (!fresh.ok) {
+      setLoadError(fresh.error);
+      setBusy(null);
+      return;
+    }
+    setLoadError(null);
+    onStatus(fresh.body);
+    const counts = fresh.body.preview;
+    if (fresh.body.config !== "on" || fresh.body.initialDoneAt || !counts || "error" in counts) {
+      setBusy(null);
+      return;
+    }
     const ask = initialAsk(counts);
+    setBusy(null); // 확인 창이 떠 있는 동안 단추가 "살펴보는 중" 으로 남지 않게(창이 화면을 덮어 다시 누를 수는 없다)
     const ok = await confirm({
       title: ask.title,
       description: ask.description,
@@ -109,7 +126,6 @@ function Body({
     });
     if (!ok) return;
     setBusy("initial");
-    setNote(null);
     try {
       const res = await fetch("/api/google/initial", { method: "POST" });
       const data = await res.json().catch(() => null);
@@ -180,7 +196,7 @@ function Body({
         <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-4">
           <p className="text-sm leading-relaxed text-ink">
             처음 한 번은 직접 맞춰 주세요. 사이트의 <b>오늘 이후</b> 일정을 구글로 보내고, 같은 날·같은 제목인 일정은
-            하나로 이어요. 지난 일정은 사이트에만 남아요.
+            하나로 이어요(내용은 구글 쪽으로 맞춰요). 지난 일정은 사이트에만 남아요.
           </p>
 
           {loading ? (
@@ -205,9 +221,9 @@ function Body({
                 <dt className="text-ink-soft">사이트로 가져올 일정</dt>
                 <dd className="font-num font-semibold text-ink">{preview.toImport}개</dd>
               </dl>
-              <Button onClick={() => runInitial(preview)} disabled={busy !== null} className="self-start">
+              <Button onClick={runInitial} disabled={busy !== null} className="self-start">
                 <CalendarCheck className="h-4 w-4" />
-                {busy === "initial" ? "맞추는 중…" : "처음 맞추기"}
+                {busy === "checking" ? "다시 살펴보는 중…" : busy === "initial" ? "맞추는 중…" : "처음 맞추기"}
               </Button>
             </>
           ) : null}
@@ -291,15 +307,17 @@ function ErrorLine({ text }: { text: string }) {
  */
 function initialAsk({ toPush, toLink, toImport }: Counts): { title: string; description: string } {
   const after = "이제부터 홈이나 캘린더를 열 때마다 저절로 맞춰요.";
+  // 이을 때는 구글 내용이 이긴다 — 사이트에 적힌 시각·메모가 구글 것으로 바뀐다는 것을 누르기 전에 말한다.
+  const joinNote = toLink > 0 ? "이은 일정의 내용은 구글 쪽으로 맞춰요." : null;
   if (toPush > 0) {
     const rest = [
-      toLink > 0 ? `같은 날·같은 제목인 ${toLink}개는 하나로 이어요.` : null,
+      toLink > 0 ? `같은 날·같은 제목인 ${toLink}개는 하나로 잇고, 내용은 구글 쪽으로 맞춰요.` : null,
       toImport > 0 ? `구글 일정 ${toImport}개를 사이트로 가져와요.` : null,
       after,
     ].filter(Boolean);
     return { title: `구글 캘린더에 ${toPush}개를 만들어요. 계속할까요?`, description: rest.join(" ") };
   }
-  const nothingWritten = `구글 캘린더에는 아무것도 만들지 않아요. ${after}`;
+  const nothingWritten = [joinNote, `구글 캘린더에는 아무것도 만들지 않아요. ${after}`].filter(Boolean).join(" ");
   if (toImport > 0 && toLink > 0) {
     return { title: `구글에서 ${toImport}개를 가져오고 ${toLink}개를 이어요. 계속할까요?`, description: nothingWritten };
   }

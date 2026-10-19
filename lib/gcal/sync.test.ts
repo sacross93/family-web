@@ -329,6 +329,8 @@ function fakeGoogle(opts: { pageSize?: number; fail?: (c: GCall) => Response | u
       const max = Date.parse(url.searchParams.get("timeMax")!);
       const all = [...events.values()].filter((e) => {
         const s = startOf(e);
+        // 진짜 구글처럼 singleEvents=true 면 반복 시리즈 **원본**은 목록에 안 오고 회차만 온다
+        if (e.recurrence?.length) return false;
         return s === null || (s >= min && s < max); // 취소된 것(시작 없음)은 언제나 온다
       });
       const size = opts.pageSize ?? 250;
@@ -765,11 +767,35 @@ describe("처음 맞추기 (initial)", () => {
     expect(g.calls.slice(before).filter((c) => c.kind !== "list" && c.kind !== "token")).toHaveLength(0);
   });
 
-  it("잇기는 내용을 옮기지 않는다 — 사이트 일정은 그대로, 구글에도 쓰지 않는다", async () => {
+  it("이을 때는 구글 내용으로 맞춘다(사이트 일정에 쓴다, 구글에는 쓰지 않는다) — 연결 시각 = 일정 시각", async () => {
     const g = scene();
+    g.events.set("g-match", { ...g.events.get("g-match")!, description: "구글 메모", location: "할머니 댁", colorId: "2" });
     await runSync({ initial: true, force: true, deps: deps(g) });
-    expect(event("s-match")).toMatchObject({ title: " 가족 모임 ", allDay: true, color: "rose" });
-    expect(linkOf("s-match")).toMatchObject({ googleEventId: "g-match", readOnly: null, pendingPush: false });
+    expect(event("s-match")).toMatchObject({
+      title: "가족 모임",
+      allDay: true,
+      color: "mint",
+      description: "구글 메모",
+      location: "할머니 댁",
+      start: seoulMidnight("2026-10-20"),
+    });
+    expect(event("s-match")!.source).toBe("local"); // 출처는 그대로
+    const l = linkOf("s-match")!;
+    expect(l).toMatchObject({ googleEventId: "g-match", readOnly: null, pendingPush: false });
+    expect((l.siteSyncedAt as Date).getTime()).toBe((event("s-match")!.updatedAt as Date).getTime());
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
+  });
+
+  it("잇기 — 연결 쓰기가 실패하면 사이트 일정도 그대로(한 트랜잭션)", async () => {
+    const g = scene();
+    h.failOnce["googleEventLink.create"] = true;
+    const before = { ...event("s-match")! };
+    await runSync({ initial: true, force: true, deps: deps(g) });
+    // 첫 연결 쓰기 = s-match 의 잇기(가져오기는 중첩 쓰기라 이 자리를 안 탄다). 실패했으니 내용도 시각도 그대로
+    expect(linkOf("s-match")).toBeUndefined();
+    expect(event("s-match")).toMatchObject({ title: before.title, color: before.color, updatedAt: before.updatedAt });
+    expect(linkOf("s-past-match")).toBeDefined(); // 나머지는 진행
+    expect(state().initialDoneAt).toBeNull();
   });
 
   it("보내기가 하나라도 실패하면 initialDoneAt 을 적지 않는다 — 다시 누르면 남은 것만 한다", async () => {
@@ -1286,6 +1312,180 @@ describe("쓰기 훅", () => {
     seedEvent("e1");
     expect(await beforeSiteDelete("e1")).toBeNull();
     expect(h.writes).toEqual([]);
+  });
+});
+
+describe("반복으로 바뀐 일정 — 시리즈를 사이트에서 고치거나 지우지 않는다", () => {
+  const WEEKLY = ["RRULE:FREQ=WEEKLY"];
+  /** 연결된 단일 일정 g1 을 가족이 구글에서 "매주 반복" 으로 바꿨다 → g1 이 시리즈 원본이 되고 회차가 따로 생긴다 */
+  function convertToSeries(g: ReturnType<typeof fakeGoogle>, id = "g1") {
+    g.put(gev(id, { summary: "운동", recurrence: WEEKLY, updated: "2026-10-15T00:00:00.000Z" }));
+    g.put(gev(`${id}_20261020T010000Z`, { summary: "운동", recurringEventId: id, updated: "2026-10-15T00:00:00.000Z" }));
+  }
+
+  it("recheck 가 시리즈 원본을 받으면 사이트 사본과 연결만 지운다(구글 쓰기 0) — 사이트에서 고친 것이 있어도", async () => {
+    seedState();
+    seedEvent("e1", { title: "운동(사이트에서 고침)", updatedAt: new Date(h.clock.ms - DAY) }); // 사이트가 바뀜
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    convertToSeries(g);
+    const out = await runSync({ deps: deps(g), force: true });
+    expect(out).toMatchObject({ ran: true, error: null });
+    expect(g.writes()).toHaveLength(0); // PATCH(시리즈 전체 덮어쓰기)도 DELETE 도 없다
+    expect(event("e1")).toBeUndefined();
+    expect(link("l1")).toBeUndefined();
+    // 회차가 일정을 이어서 보인다(readOnly)
+    const inst = h.tables.calendarEvent.find((e) => e.source === "google")!;
+    expect(linkOf(inst.id as string)).toMatchObject({ googleEventId: "g1_20261020T010000Z", readOnly: "recurring" });
+  });
+
+  it("창 밖 · 보내기 대기 연결인데 구글이 시리즈 원본이 됐다 → PATCH 0, 연결이 readOnly 로, 대기 내림", async () => {
+    seedState();
+    seedEvent("e1", { start: at("2028-03-01T01:00:00.000Z"), end: null, updatedAt: new Date(h.clock.ms - DAY) });
+    seedLink("l1", "e1", "g1", { pendingPush: true });
+    const g = fakeGoogle();
+    convertToSeries(g);
+    await runSync({ deps: deps(g), force: true });
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
+    expect(link("l1")).toMatchObject({ readOnly: "recurring", pendingPush: false });
+  });
+
+  it("창 밖 · 보내기 대기 연결인데 구글에서 지워졌다(GET 404) → 구글의 지우기가 이긴다: 사이트 일정·연결을 지운다", async () => {
+    seedState();
+    seedEvent("e1", { start: at("2028-03-01T01:00:00.000Z"), end: null, updatedAt: new Date(h.clock.ms - DAY) });
+    seedLink("l1", "e1", "g1", { pendingPush: true });
+    const g = fakeGoogle();
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
+    expect(g.writes()).toHaveLength(0);
+    expect(event("e1")).toBeUndefined();
+    expect(link("l1")).toBeUndefined();
+  });
+
+  it("고치기 훅 — GET 이 시리즈 원본을 주면 PATCH 0, 연결 readOnly, 대기 내림", async () => {
+    seedState();
+    seedEvent("e1", { updatedAt: now() });
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    convertToSeries(g);
+    await afterSiteUpdate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
+    expect(link("l1")).toMatchObject({ readOnly: "recurring", pendingPush: false });
+    // 그다음 사이트에서 고치기·지우기는 409 대상
+    expect(await readOnlyReason("e1")).toBe("recurring");
+  });
+
+  it("고치기 훅 — GET 이 여러 날 일정을 주면 PATCH 0, 연결 readOnly multiday", async () => {
+    seedState();
+    seedEvent("e1", { updatedAt: now() });
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    g.put(gev("g1", { start: { date: "2026-10-20" }, end: { date: "2026-10-23" } }));
+    await afterSiteUpdate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
+    expect(link("l1")).toMatchObject({ readOnly: "multiday", pendingPush: false });
+  });
+
+  it("고치기 훅 — GET 이 실패(500)하면 쓰지 않는다: PATCH 0, pendingPush", async () => {
+    seedState();
+    seedEvent("e1", { updatedAt: now() });
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(500) : undefined) });
+    g.put(gev("g1"));
+    await afterSiteUpdate("e1", deps(g));
+    expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
+    expect(link("l1")).toMatchObject({ pendingPush: true });
+  });
+
+  it("지우기 훅 — GET 이 시리즈 원본을 주면 구글 삭제 0, 묘비를 거둔다(사이트 일정은 이미 지워짐)", async () => {
+    seedState();
+    seedEvent("e1");
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    convertToSeries(g);
+    const ticket = await beforeSiteDelete("e1");
+    await h.client.calendarEvent.deleteMany({ where: { id: "e1" } });
+    await afterSiteDelete(ticket as { linkId: string; googleEventId: string }, deps(g));
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+    expect(g.events.has("g1")).toBe(true);
+    expect(link("l1")).toBeUndefined();
+  });
+
+  it("지우기 훅 — GET 이 실패하면 지우지 않는다(묘비로 남는다)", async () => {
+    seedState();
+    seedEvent("e1");
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(503) : undefined) });
+    g.put(gev("g1"));
+    const ticket = await beforeSiteDelete("e1");
+    await h.client.calendarEvent.deleteMany({ where: { id: "e1" } });
+    await afterSiteDelete(ticket as { linkId: string; googleEventId: string }, deps(g));
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+    expect(link("l1")).toMatchObject({ eventId: null, pendingDelete: true });
+  });
+
+  it("동기화의 묘비 — 그 사이 시리즈 원본이 됐으면 구글 삭제 0, 묘비를 거둔다", async () => {
+    seedState();
+    seedLink("l1", null, "g1", { pendingDelete: true });
+    const g = fakeGoogle();
+    convertToSeries(g);
+    await runSync({ deps: deps(g), force: true });
+    expect(g.calls.filter((c) => c.kind === "delete")).toHaveLength(0);
+    expect(g.events.has("g1")).toBe(true);
+    expect(link("l1")).toBeUndefined();
+  });
+
+  it("readOnly 표시가 있는 묘비(예전 것) → 구글은 건드리지 않고 묘비만 거둔다, 그 회차는 다음 동기화가 다시 가져온다", async () => {
+    seedState();
+    seedLink("l1", null, "g9_20261020T010000Z", { pendingDelete: true, readOnly: "recurring" });
+    const g = fakeGoogle();
+    g.put(gev("g9_20261020T010000Z", { summary: "주간 회의", recurringEventId: "g9" }));
+    await runSync({ deps: deps(g), force: true });
+    expect(g.writes()).toHaveLength(0);
+    expect(link("l1")).toBeUndefined();
+    h.clock.ms += 61_000;
+    await runSync({ deps: deps(g) });
+    expect(h.tables.calendarEvent.map((e) => e.title)).toEqual(["주간 회의"]);
+    expect(g.writes()).toHaveLength(0);
+  });
+
+  it("beforeSiteDelete — 연결이 readOnly 면 묘비를 세우지 않고 { readOnly } 를 준다(라우트가 409)", async () => {
+    seedEvent("e1");
+    seedLink("l1", "e1", "g1_1", { readOnly: "recurring" });
+    expect(await beforeSiteDelete("e1")).toEqual({ readOnly: "recurring" });
+    expect(link("l1")).toMatchObject({ pendingDelete: false, eventId: "e1" });
+  });
+
+  it("beforeSiteDelete — 라우트가 확인한 뒤 그 사이 연결이 readOnly 가 됐어도 묘비를 세우지 않는다", async () => {
+    seedEvent("e1");
+    seedLink("l1", "e1", "g1");
+    // 라우트의 readOnly 확인(통과) 뒤, 묘비를 세우기 직전에 동기화가 연결을 readOnly 로 바꿨다
+    h.hooks.beforeOp = (model, op) => {
+      if (model === "googleEventLink" && op === "updateMany") {
+        link("l1")!.readOnly = "recurring";
+        h.hooks.beforeOp = null;
+      }
+    };
+    expect(await beforeSiteDelete("e1")).toEqual({ readOnly: "recurring" });
+    expect(link("l1")).toMatchObject({ pendingDelete: false });
+  });
+
+  it("relink 중 사이트 일정이 지워졌으면 그 pd… 구글 일정만 거둔다(다시 가져오지 않게)", async () => {
+    seedState();
+    seedEvent("e1", { createdAt: new Date(h.clock.ms - DAY) });
+    const id = googleIdFor("e1");
+    const g = fakeGoogle();
+    g.put(gev(id, { summary: "e1" })); // 지난번 만들기 응답을 못 받았다
+    g.put(gev("g-other"));
+    h.hooks.beforeOp = (model, op) => {
+      if (model === "googleEventLink" && op === "create") {
+        h.tables.calendarEvent = h.tables.calendarEvent.filter((e) => e.id !== "e1"); // 그 사이 사이트에서 지웠다
+        h.hooks.beforeOp = null;
+      }
+    };
+    await runSync({ deps: deps(g), force: true });
+    expect(g.calls.filter((c) => c.kind === "delete").map((c) => c.id)).toEqual([id]);
+    expect(g.events.has(id)).toBe(false);
+    expect(g.events.has("g-other")).toBe(true);
   });
 });
 

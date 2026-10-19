@@ -254,6 +254,22 @@ describe("planSync — 묘비", () => {
     expect(actions).toEqual([{ kind: "deleteGoogle", linkId: "L1", googleEventId: "g1" }]);
   });
 
+  it("readOnly 연결의 묘비는 구글에서 지우지 않는다 — 반복 회차·시리즈를 사이트에서 지우는 길은 없다", () => {
+    expect(
+      planSync(input({ google: [gev("g1_1")], links: [link("L1", null, "g1_1", { pendingDelete: true, readOnly: "recurring" })] })),
+    ).toEqual([]);
+    expect(
+      planSync(input({ google: [], links: [link("L1", null, "g2", { pendingDelete: true, readOnly: "multiday" })] })),
+    ).toEqual([]);
+  });
+
+  it("묘비인데 지금 구글 일정이 여러 날·반복이면(연결엔 아직 표시가 없어도) 지우지 않는다", () => {
+    const multi = gev("g1", { start: { date: "2026-10-20" }, end: { date: "2026-10-23" } });
+    expect(planSync(input({ google: [multi], links: [link("L1", null, "g1", { pendingDelete: true })] }))).toEqual([]);
+    const inst = gev("g2_1", { recurringEventId: "g2" });
+    expect(planSync(input({ google: [inst], links: [link("L2", null, "g2_1", { pendingDelete: true })] }))).toEqual([]);
+  });
+
   it("목록에 없어도·끝까지 못 읽었어도 묘비는 지운다(사이트에서 사람이 지운 것이라)", () => {
     expect(
       planSync(input({ complete: false, google: [], links: [link("L1", null, "g1", { pendingDelete: true })] })),

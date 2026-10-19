@@ -76,8 +76,13 @@ export function planSync(input: PlanInput): Action[] {
   // ── 연결별 ──────────────────────────────────
   for (const link of input.links) {
     // 묘비: 사이트에서 사람이 지운 것. 목록과 상관없이 구글에서 지운다(404·410 이면 이미 없는 것).
+    // 단 readOnly 연결(표시가 있거나, 지금 구글 일정이 반복·여러 날 모양)은 **지우지 않는다** — 사이트에서 반복 회차·시리즈를
+    // 지우는 길은 없다(라우트가 409 로 막는다). 그런 묘비는 sync.ts 가 연결만 거둔다(구글은 그대로).
     if (link.pendingDelete) {
-      actions.push({ kind: "deleteGoogle", linkId: link.id, googleEventId: link.googleEventId });
+      const current = googleById.get(link.googleEventId);
+      if (link.readOnly == null && !(current && readOnlyOf(current))) {
+        actions.push({ kind: "deleteGoogle", linkId: link.id, googleEventId: link.googleEventId });
+      }
       continue;
     }
     // 묘비 표시 없이 eventId 만 빈 연결 — 사이트에서 지운 직후(구글 삭제 전)이거나 견본 일정을 통째로 지웠을 때.

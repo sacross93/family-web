@@ -27,6 +27,11 @@ export interface GEvent {
   start?: GTime;
   end?: GTime;
   recurringEventId?: string;
+  /**
+   * 반복 시리즈 **원본**에만 있다(RRULE 등). singleEvents=true 목록에는 원본이 안 오고 회차만 오지만, id 로 하나를 다시
+   * 물으면(getEvent) 원본이 온다 — 연결된 단일 일정을 가족이 구글에서 "매주 반복" 으로 바꾸면 그 id 가 원본이 된다.
+   */
+  recurrence?: string[];
 }
 
 export type GEventBody = Pick<GEvent, "summary" | "description" | "location" | "colorId" | "start" | "end">;
