@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button, CollapsibleCard, Field, Input, Label, Segmented, Tag, useToast } from "@/components/ui";
+import { cleanName } from "@/lib/accounts";
 
 /** `/api/accounts` 가 돌려주는 모양 — passwordHash 는 오지 않는다. 날짜는 ISO 문자열. */
 type AccountRow = {
@@ -45,7 +47,7 @@ export function AccountsCard({ currentUid }: { currentUid: string }) {
   const [role, setRole] = useState<Role>("family");
   const [busy, setBusy] = useState(false);
   // 한 번에 한 줄만 펼친다.
-  const [changingId, setChangingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // 관리자 화면에서만 쓰는 목록이라 페이지 데이터에 싣지 않았다(가족 카드와 같다).
   useEffect(() => {
@@ -106,8 +108,11 @@ export function AccountsCard({ currentUid }: { currentUid: string }) {
               key={row.id}
               row={row}
               me={row.id === currentUid}
-              open={changingId === row.id}
-              onToggle={(open) => setChangingId(open ? row.id : null)}
+              open={editingId === row.id}
+              onToggle={(open) => setEditingId(open ? row.id : null)}
+              onSaved={(saved) =>
+                setRows((prev) => (Array.isArray(prev) ? prev.map((r) => (r.id === saved.id ? saved : r)) : prev))
+              }
             />
           ))}
         </div>
@@ -152,17 +157,19 @@ export function AccountsCard({ currentUid }: { currentUid: string }) {
   );
 }
 
-/** 계정 한 줄 + 펼치면 그 아래에 비밀번호 바꾸기. 떠 있는 판이 아니라 제자리에서 펼친다. */
+/** 계정 한 줄 + 펼치면 그 아래에 고치기(이름·비밀번호). 떠 있는 판이 아니라 제자리에서 펼친다. */
 function AccountItem({
   row,
   me,
   open,
   onToggle,
+  onSaved,
 }: {
   row: AccountRow;
   me: boolean;
   open: boolean;
   onToggle: (open: boolean) => void;
+  onSaved: (row: AccountRow) => void;
 }) {
   return (
     <div className="rounded-lg border border-line px-3 py-2">
@@ -181,41 +188,77 @@ function AccountItem({
             variant="soft"
             size="sm"
             aria-expanded={open}
-            aria-label={`${row.username} 비밀번호 바꾸기`}
+            aria-label={`${row.username} 고치기`}
             onClick={() => onToggle(!open)}
           >
-            비밀번호
+            고치기
           </Button>
         </span>
       </div>
       {/* 접으면 칸째로 없앤다 — 다른 줄을 펼쳤을 때 치다 만 비밀번호가 숨은 채 남지 않게. */}
-      {open && <PasswordChange row={row} onDone={() => onToggle(false)} />}
+      {open && <AccountEdit row={row} me={me} onSaved={onSaved} onDone={() => onToggle(false)} />}
     </div>
   );
 }
 
-function PasswordChange({ row, onDone }: { row: AccountRow; onDone: () => void }) {
+/** 바뀐 것만 알린다. 남의 이름은 그 사람 쿠키에 실려 있어서 다시 로그인해야 바뀐다(`/api/accounts/[id]`). */
+function savedMessage(saved: AccountRow, me: boolean, nameChanged: boolean, passwordChanged: boolean): string {
+  const what = nameChanged && passwordChanged ? "이름과 비밀번호를" : nameChanged ? "이름을" : "비밀번호를";
+  const head = me ? `${what} 바꿨어요.` : `${saved.username} ${what} 바꿨어요.`;
+  if (nameChanged && passwordChanged && !me) {
+    return `${head} 이미 로그인한 기기는 그대로 로그인돼 있고, 새 이름은 다시 로그인하면 보여요.`;
+  }
+  if (passwordChanged) return `${head} 이미 로그인한 기기는 그대로 로그인돼 있어요.`;
+  if (!me) return `${head} ${saved.name ?? saved.username} 님 화면에는 다시 로그인하면 보여요.`;
+  return head;
+}
+
+function AccountEdit({
+  row,
+  me,
+  onSaved,
+  onDone,
+}: {
+  row: AccountRow;
+  me: boolean;
+  onSaved: (row: AccountRow) => void;
+  onDone: () => void;
+}) {
   const { say } = useToast();
-  const [next, setNext] = useState("");
+  const router = useRouter();
+  const [name, setName] = useState(row.name ?? "");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // 서버와 같은 식으로 다듬어 비교한다 — 끝에 빈칸 하나 친 것은 바뀐 게 아니다.
+  const nameChanged = cleanName(name) !== cleanName(row.name);
+  const passwordChanged = password !== "";
+  const canSave = (nameChanged || passwordChanged) && !busy;
+
   async function save() {
-    if (!next || busy) return;
+    if (!canSave) return;
     setBusy(true);
     try {
+      // 바뀐 칸만 보낸다 — 이름만 고칠 때 비밀번호를 건드리지 않게.
       const res = await fetch(`/api/accounts/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: next }),
+        body: JSON.stringify({
+          ...(nameChanged ? { name } : {}),
+          ...(passwordChanged ? { password } : {}),
+        }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        say(data?.error ?? "비밀번호를 못 바꿨어요.", "error");
+      if (!res.ok || !data) {
+        say(data?.error ?? "바꾸지 못했어요.", "error");
         setBusy(false);
         return;
       }
+      onSaved(data);
+      say(savedMessage(data, me, nameChanged, passwordChanged));
+      // 내 이름은 응답에 실린 새 쿠키로 바뀌었다 — 위의 "○○ 님" 을 지금 다시 그린다.
+      if (me && nameChanged) router.refresh();
       // 저장한 비밀번호는 다시 보여 주지 않는다 — 칸째로 접는다.
-      say(`${row.username} 비밀번호를 바꿨어요. 이미 로그인한 기기는 그대로 로그인돼 있어요.`);
       onDone();
     } catch {
       say("연결을 확인해 주세요.", "error");
@@ -223,22 +266,35 @@ function PasswordChange({ row, onDone }: { row: AccountRow; onDone: () => void }
     }
   }
 
+  const onEnter = (e: KeyboardEvent) => e.key === "Enter" && !e.nativeEvent.isComposing && save();
+
   return (
-    <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-end">
-      <Field label="새 비밀번호" className="min-w-0 flex-1">
-        <Input
-          type="text"
-          placeholder="4자 이상"
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && save()}
-          autoComplete="off"
-          {...PLAIN_TYPING}
-          autoFocus
-        />
-      </Field>
+    <div className="mt-2 flex flex-col gap-3 border-t border-line pt-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="이름" hint="사이트 위에 “○○ 님”으로 나와요" className="min-w-0">
+          <Input
+            placeholder="비워 두면 아이디가 보여요"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={onEnter}
+            autoComplete="off"
+            autoFocus
+          />
+        </Field>
+        <Field label="새 비밀번호" hint="4자 이상" className="min-w-0">
+          <Input
+            type="text"
+            placeholder="바꿀 때만 적어 주세요"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={onEnter}
+            autoComplete="off"
+            {...PLAIN_TYPING}
+          />
+        </Field>
+      </div>
       <div className="flex gap-2">
-        <Button size="sm" onClick={save} disabled={!next || busy}>
+        <Button size="sm" onClick={save} disabled={!canSave}>
           {busy ? "바꾸는 중…" : "저장"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone} disabled={busy}>

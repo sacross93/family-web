@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextRequest } from "next/server";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { NextRequest, type NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 // /api/accounts — 관리자만 부를 수 있는지, passwordHash 가 밖으로 안 나가는지, 만든 해시로 정말 로그인되는지.
 // prisma 는 가짜지만 **`select` 를 진짜처럼 따른다** — 고르지 않으면 passwordHash 까지 돌려준다.
 // 그래야 라우트에서 select 를 빼먹었을 때 "응답에 passwordHash 없음" 이 빨개진다.
+// 세션 쿠키는 **진짜** `lib/session` 으로 만들고 풀어 본다 — 새 이름이 정말 쿠키에 실렸는지까지.
 
 type Row = { id: string; username: string; passwordHash: string; name: string | null; isAdmin: boolean; createdAt: Date };
 
@@ -35,9 +37,15 @@ vi.mock("@/lib/prisma", () => ({
         const row: Row = { id: "new-1", createdAt: new Date("2026-10-19T00:00:00Z"), ...args.data };
         return project(row, args.select);
       }),
-      updateMany: vi.fn(async (args: Record<string, unknown>) => {
+      updateMany: vi.fn(async (args: { where: { id: string }; data: Partial<Row> }) => {
         s.calls.push({ op: "updateMany", args });
+        if (s.updateCount > 0) Object.assign(s.rows.find((r) => r.id === args.where.id) ?? {}, args.data);
         return { count: s.updateCount };
+      }),
+      findUnique: vi.fn(async (args: { where: { id: string }; select?: Record<string, boolean> }) => {
+        s.calls.push({ op: "findUnique", args });
+        const row = s.rows.find((r) => r.id === args.where.id);
+        return row ? project(row, args.select) : null;
       }),
     },
   },
@@ -58,14 +66,17 @@ const created = () => s.calls.find((c) => c.op === "create")?.args.data as Recor
 const updated = () => s.calls.find((c) => c.op === "updateMany")?.args as { where: unknown; data: Record<string, unknown> };
 
 beforeEach(() => {
+  vi.stubEnv("AUTH_SECRET", "test-secret-for-accounts-routes-0123456789");
   s.user = ADMIN;
   s.calls.length = 0;
   s.createError = null;
   s.updateCount = 1;
   s.rows = [
     { id: "u1", username: "admin", passwordHash: "$2a$10$SECRETHASH", name: "아빠", isAdmin: true, createdAt: new Date("2026-01-01") },
+    { id: "u2", username: "mom", passwordHash: "$2a$10$MOMSECRET", name: "엄마", isAdmin: false, createdAt: new Date("2026-01-02") },
   ];
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("관리자만", () => {
   for (const [who, user] of [
@@ -92,8 +103,10 @@ describe("GET /api/accounts", () => {
     const text = await res.text();
     expect(text).not.toContain("passwordHash");
     expect(text).not.toContain("SECRETHASH");
+    expect(text).not.toContain("MOMSECRET");
     expect(JSON.parse(text)).toEqual([
       { id: "u1", username: "admin", name: "아빠", isAdmin: true, createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "u2", username: "mom", name: "엄마", isAdmin: false, createdAt: "2026-01-02T00:00:00.000Z" },
     ]);
   });
 });
@@ -166,31 +179,98 @@ describe("POST /api/accounts", () => {
 });
 
 describe("PATCH /api/accounts/[id]", () => {
-  it("새 비밀번호의 해시만 쓴다 — 본문의 isAdmin·username·name 은 무시", async () => {
-    const res = await PATCH(
-      req("PATCH", { password: "새비번99", isAdmin: true, username: "x", name: "해커", passwordHash: "plain" }),
-      params("u2")
-    );
+  const sessionIn = (res: NextResponse) => verifySessionToken(res.cookies.get(SESSION_COOKIE)?.value);
+
+  it("비밀번호만 → 새 해시만 쓴다 · 응답은 고친 계정(passwordHash 없음)", async () => {
+    const res = await PATCH(req("PATCH", { password: "새비번99" }), params("u2"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
     const { where, data } = updated();
     expect(where).toEqual({ id: "u2" });
     expect(Object.keys(data)).toEqual(["passwordHash"]);
     expect(await bcrypt.compare("새비번99", String(data.passwordHash))).toBe(true);
+    const text = await res.text();
+    expect(text).not.toContain("passwordHash");
+    expect(text).not.toContain("$2");
+    expect(JSON.parse(text)).toEqual({
+      id: "u2", username: "mom", name: "엄마", isAdmin: false, createdAt: "2026-01-02T00:00:00.000Z",
+    });
   });
 
-  it("3자·앞뒤 빈칸 → 400, DB 를 부르지 않는다", async () => {
-    for (const password of ["123", " 1234", undefined]) {
+  it("이름만 → data 는 정확히 { name: 다듬은 이름 } (passwordHash 칸 없음)", async () => {
+    const res = await PATCH(req("PATCH", { name: "  어머니   최고  " }), params("u2"));
+    expect(res.status).toBe(200);
+    expect(updated().data).toEqual({ name: "어머니 최고" });
+    expect(await res.json()).toMatchObject({ id: "u2", name: "어머니 최고" });
+  });
+
+  it("이름을 비우면 null — 위에는 아이디가 대신 나온다", async () => {
+    await PATCH(req("PATCH", { name: "   " }), params("u2"));
+    expect(updated().data).toEqual({ name: null });
+  });
+
+  it("이름도 비밀번호도 없으면 400, DB 를 부르지 않는다", async () => {
+    for (const body of [{}, { isAdmin: true }, { username: "x" }, null, "name", []]) {
       s.calls.length = 0;
-      const res = await PATCH(req("PATCH", { password }), params("u2"));
+      const res = await PATCH(req("PATCH", body), params("u2"));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(s.calls).toEqual([]);
+    }
+  });
+
+  it("본문의 isAdmin·username·passwordHash 는 무시 — 쓰는 칸은 name·passwordHash 둘뿐", async () => {
+    const res = await PATCH(
+      req("PATCH", { isAdmin: true, username: "x", name: "a", password: "abcd", passwordHash: "plain", id: "u1" }),
+      params("u2")
+    );
+    expect(res.status).toBe(200);
+    const { where, data } = updated();
+    expect(where).toEqual({ id: "u2" });
+    expect(Object.keys(data).sort()).toEqual(["name", "passwordHash"]);
+    expect(data.name).toBe("a");
+    expect(await bcrypt.compare("abcd", String(data.passwordHash))).toBe(true);
+    expect(await res.json()).toMatchObject({ username: "mom", isAdmin: false });
+  });
+
+  it("비밀번호가 틀리면 이름도 쓰지 않는다 — 3자·앞뒤 빈칸·null → 400, DB 를 부르지 않는다", async () => {
+    for (const password of ["123", " 1234", null, ""]) {
+      s.calls.length = 0;
+      const res = await PATCH(req("PATCH", { password, name: "새이름" }), params("u2"));
       expect(res.status, String(password)).toBe(400);
       expect(s.calls).toEqual([]);
     }
   });
 
-  it("없는 계정(count 0) → 404", async () => {
+  it("내 이름 → 응답에 새 세션 쿠키: 새 이름 + 지금 세션의 uid·아이디·관리자 여부(본문 것 아님)", async () => {
+    const res = await PATCH(req("PATCH", { name: "  새 이름  ", isAdmin: false, username: "x" }), params("u1"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toContain(`${SESSION_COOKIE}=`);
+    expect(await sessionIn(res)).toEqual({ uid: "u1", username: "admin", name: "새 이름", isAdmin: true });
+    expect(await res.text()).not.toContain("passwordHash");
+  });
+
+  it("내 이름을 비우면 쿠키의 이름도 null", async () => {
+    const res = await PATCH(req("PATCH", { name: "" }), params("u1"));
+    expect(await sessionIn(res)).toEqual({ uid: "u1", username: "admin", name: null, isAdmin: true });
+  });
+
+  it("남의 이름 → 쿠키를 싣지 않는다(실으면 관리자가 그 사람으로 로그인된다)", async () => {
+    const res = await PATCH(req("PATCH", { name: "어머니" }), params("u2"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("내 비밀번호만 → 쿠키를 다시 굽지 않는다", async () => {
+    const res = await PATCH(req("PATCH", { password: "새비번99" }), params("u1"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("없는 계정(count 0) → 404, 쿠키 없음", async () => {
     s.updateCount = 0;
-    const res = await PATCH(req("PATCH", { password: "1234" }), params("nope"));
-    expect(res.status).toBe(404);
+    for (const body of [{ password: "1234" }, { name: "누구" }]) {
+      const res = await PATCH(req("PATCH", body), params("nope"));
+      expect(res.status).toBe(404);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
   });
 });

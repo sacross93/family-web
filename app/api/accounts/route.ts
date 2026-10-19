@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * 그 스크립트는 같은 아이디면 **덮어쓰지만**(upsert) 여기서는 409 로 돌려보낸다. 화면에서 잘못 친
  * 아이디 하나로 남의 비밀번호와 관리자 권한이 바뀌면 안 된다.
  *
- * 지우기·관리자↔가족 바꾸기는 **일부러 없다.** 비밀번호 바꾸기는 `[id]/route.ts`.
+ * 지우기·관리자↔가족 바꾸기는 **일부러 없다.** 이름·비밀번호 고치기는 `[id]/route.ts`.
  */
 export async function GET() {
   const user = await getCurrentUser();
