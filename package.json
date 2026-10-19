@@ -23,6 +23,7 @@
     "agent:runs": "tsx scripts/agent-runs.ts",
     "agent:prompt": "tsx scripts/agent-prompt.ts",
     "agent:smoke": "tsx scripts/agent-smoke.ts",
+    "gcal:check": "tsx scripts/gcal-check.ts",
     "postinstall": "prisma generate",
     "ui:audit": "node scripts/ui-audit.mjs",
     "ui:flows": "node scripts/ui-flows.mjs"

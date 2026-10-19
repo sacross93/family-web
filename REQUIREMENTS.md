@@ -54,7 +54,7 @@ npm run dev:lan     # 또는 프로덕션: npm run build && npm run start:lan
 | 기능 | 필요한 준비 | 난이도 |
 |---|---|---|
 | 구글 로그인 | Google Cloud OAuth 자격증명 | 30분 |
-| 구글 캘린더 자동 저장 | 위 + Calendar API 활성화 | +15분 |
+| 구글 캘린더 동기화 (사이트 "일정") | 서비스 계정 키 + 캘린더 공유 → [DEPLOY.md](DEPLOY.md) 7절 (구글 로그인과 무관) | 15분 |
 | 앱을 닫아도 오는 알림 | 웹푸시(서비스워커) 또는 구글 캘린더 알림 이용 | 중간 |
 | 가족이 여러 기기에서 공유 | 호스팅 DB + 배포 | 중간 |
 | 사진을 클라우드에 안전 보관 | 오브젝트 스토리지(S3/R2 등) | 중간 |
@@ -63,7 +63,17 @@ npm run dev:lan     # 또는 프로덕션: npm run build && npm run start:lan
 
 ## 1. 구글 로그인 + 캘린더 연동
 
-> 목표: 가족이 구글 계정으로 로그인하고, 할일/일정을 각자의 **구글 캘린더**에 자동 저장·알림.
+> **캘린더는 다른 길로 만들어졌습니다(2026-10-16).** 아래 옛 계획은 가족마다 구글로 로그인해 각자의 캘린더에 쓰는
+> 구조였지만, 사이트는 아이디·비밀번호 로그인이라 **서비스 계정**으로 붙었어요 — 구글 로그인도, OAuth 동의 화면도,
+> `googleapis` 패키지도 필요 없습니다.
+> - 설계: [docs/superpowers/specs/2026-10-16-google-calendar-sync-design.md](docs/superpowers/specs/2026-10-16-google-calendar-sync-design.md)
+>   (이 절의 옛 캘린더 계획을 대신합니다)
+> - 켜는 법(공유·환경변수·처음 맞추기): [DEPLOY.md](DEPLOY.md) 7절 · 지켜야 할 규칙: AGENTS.md "구글 캘린더"
+> - 오가는 것은 사이트 "일정" 뿐입니다. 할 일은 아직 구글로 가지 않아요(할 일 화면의 "구글 캘린더에도 저장" 은 숨김).
+>
+> 아래 1-1 ~ 1-3 은 **구글 로그인**(아직 미연동)을 켤 때만 참고하세요. 캘린더 동기화에는 필요 없습니다.
+
+> 옛 목표: 가족이 구글 계정으로 로그인하고, 할일/일정을 각자의 **구글 캘린더**에 자동 저장·알림.
 
 ### 1-1. Google Cloud 준비 (직접 하셔야 하는 부분)
 
@@ -99,13 +109,13 @@ AUTH_URL="http://localhost:3000"   # 배포 시 실제 도메인으로
 이미 밑작업이 되어 있습니다:
 - `prisma/schema.prisma` — NextAuth용 `User/Account/Session` 모델 준비 완료
 - `lib/auth.ts` — Auth.js(NextAuth) 설정 **스텁** (주석에 켜는 방법 포함)
-- `lib/google-calendar.ts` — 캘린더 동기화 함수 스텁 (`syncTodoToGoogle`, `syncEventToGoogle`)
+- `lib/google-calendar.ts` — 할 일용 옛 스텁 (`syncTodoToGoogle`). 일정 동기화는 이것이 아니라 `lib/gcal/`(위 안내)
 
 남은 구현:
 1. `npm i next-auth@beta @auth/prisma-adapter googleapis`
 2. `lib/auth.ts` 의 주석 처리된 설정을 활성화 (Google provider + Calendar scope + PrismaAdapter, access_token 저장).
 3. `app/api/auth/[...nextauth]/route.ts` 생성 (handlers export).
-4. `lib/google-calendar.ts` 의 `TODO(연동)` 부분을 `googleapis` 로 실제 구현.
+4. (할 일까지 구글로 보내려면) `lib/google-calendar.ts` 스텁을 살리지 말고 `lib/gcal/` 를 넓힌다 — 스펙 §1.
 5. 로그인한 구글 계정을 `FamilyMember` 와 연결(`FamilyMember.userId`).
 
 > **`.env` 는 절대 git에 커밋되지 않습니다** (`.gitignore` 처리됨). 자격증명은 안전합니다.
@@ -116,8 +126,8 @@ AUTH_URL="http://localhost:3000"   # 배포 시 실제 도메인으로
 
 - **현재:** 브라우저 탭이 열려 있는 동안만 오는 로컬 알림 (`lib/notifications.ts`). 새로고침하면 사라짐.
 - **앱을 닫아도 오게 하려면** 둘 중 하나:
-  - **(A) 구글 캘린더 알림 이용 (추천, 쉬움):** 위 1번 연동 후, 할일/일정이 구글 캘린더에
-    저장되면 구글이 알아서 폰·PC로 알림을 보냅니다. 별도 구현 거의 불필요.
+  - **(A) 구글 캘린더 알림 이용 (추천, 쉬움):** 사이트 "일정" 은 이제 구글 캘린더와 이어집니다(1번 안내) —
+    구글 캘린더 앱의 알림을 쓰면 됩니다. 할 일은 아직 구글로 가지 않습니다.
   - **(B) 웹 푸시 직접 구현:** 서비스 워커(`public/sw.js`) + Web Push(VAPID 키) + 서버 스케줄러 필요.
     구현량이 많습니다. (A)를 먼저 권장.
 

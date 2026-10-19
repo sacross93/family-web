@@ -129,5 +129,35 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 좌표: xPct(중심 가로 %), yPx(중심 세로 px), width(px), rotation(deg). 앞/뒤: `z`(≥10 앞/기본20, <10 뒤/2, 콘텐츠 z-10, 선택 z-50). `clip`은 보기 모드에서만 적용(편집 중 핸들 안 잘리게).
 - `/admin`에서 페이지별 스티커 업로드·관리. 편집 모드 localStorage `podong_edit_mode`(page variant).
 
-## 구글 로그인/캘린더/알림
-아직 미연동 (밑작업만). `lib/auth.ts`, `lib/google-calendar.ts`, `lib/notifications.ts` 스텁 + [REQUIREMENTS.md](REQUIREMENTS.md) 절차 참고. `.env`는 git 제외.
+## 구글 캘린더 (양방향 — 사이트 "일정"만)
+스펙 `docs/superpowers/specs/2026-10-16-google-calendar-sync-design.md`, 켜는 법 DEPLOY.md 7절. 코드는 `lib/gcal/`
+(판단은 순수 함수 `plan.ts`·`map.ts`, 구글 REST 는 `client.ts`, DB·잠금·실행은 `sync.ts`).
+- **서비스 계정**으로 붙는다(사이트에 구글 로그인 화면 없음). 환경변수 두 개: `GOOGLE_SERVICE_ACCOUNT_JSON`(키 파일 내용 전체)·
+  `GOOGLE_CALENDAR_ID`. 없거나 키를 못 읽으면 **꺼짐** — 던지지 않는다(일정 화면이 500 이 된다). 키·토큰은 로그·응답·오류 문구에
+  절대 싣지 않는다(오류는 HTTP 상태 + 짧은 영숫자 코드만).
+- **처음 맞추기는 관리자가 누른다**(`/admin` 카드: 미리보기 "보낼 N · 이을 M · 가져올 K" → [처음 맞추기]). 그 전에는
+  (`GoogleSyncState.initialDoneAt` 이 빔) 자동 동기화도 쓰기 훅도 **구글을 한 번도 부르지 않는다.** 로컬 `.env` 에 진짜 키·진짜
+  캘린더가 들어 있어서, 이게 없으면 로컬 화면을 열기만 해도 시드 견본 일정이 가족 캘린더로 간다. 자동으로 시작하게 바꾸지 말 것.
+- 창: 오늘(서울) 기준 **90일 전 ~ 365일 뒤**. 그 안에서만 읽고 "구글에서 지워졌다" 도 그 안에서만 판단한다.
+- **목록을 끝까지 못 읽으면 계획을 세우지 않는다** — `listWindow` 는 끝까지 읽거나 던진다. 반쯤 읽은 목록의 "없음 = 지워짐" 은
+  창 안 사이트 일정을 한꺼번에 지운다. 끝까지 읽었어도 "목록에 없음" 만으로는 안 지운다(하나씩 다시 묻고 404·410·취소됨일 때만).
+- 반복 회차·여러 날 일정은 `readOnly` → `/api/events/[id]` PATCH/DELETE 가 **409**(`READONLY_MESSAGE`, 구글에는 요청 0).
+  화면도 포동이도 이 라우트를 탄다.
+- 꼬리표 `G` 는 **연결(`GoogleEventLink`) 유무**로. `CalendarEvent.source` 는 처음 어디서 왔는지(local|google)만 — 판단에 쓰지 말 것.
+- 구글 일정 id 는 사이트 일정 id 에서 뽑는다(`googleIdFor` — **식을 바꾸지 말 것**, 이미 보낸 일정과 짝을 못 찾는다).
+- 언제 도나: 홈·캘린더 화면이 그려진 뒤(`components/google-sync-trigger.tsx`, 60초 제한) · 포동이 턴 시작(3초까지만 기다림) ·
+  관리자 [지금 맞추기]. **자동화 브라우저(`navigator.webdriver`)에서는 화면 트리거가 돌지 않는다** — `ui:audit` 의
+  "로그인 말고 쓰기 0" 약속과, `ui:flows` 가 진짜 캘린더를 건드리지 않게.
+- ⚠️ **`npm run gcal:check` 는 진짜 캘린더를 건드린다**(시험용 캘린더를 따로 두지 않았다). 로컬 DB 전용이고, 연결 없는 로컬
+  일정이 있으면 멈춘다(**견본 일정을 먼저 비울 것**). `[포동시험]` 일정을 약 300일 뒤에 만들고, 끝에(실패해도) 지운 뒤
+  **로컬 동기화 상태를 처음으로 되돌린다**(상태·연결·구글에서 가져온 일정 — 로컬만). 그래서 돌린 뒤 로컬은 "처음 맞추기 전" 이다.
+  지운 시험 일정은 구글 휴지통에 "취소됨" 으로 한동안 남는다(새는 게 아니다).
+- `db:seed` 도 `GoogleEventLink`·`GoogleSyncState` 를 비운다 — 새로 만든 견본 일정이 "처음 맞추기 뒤에 만든 것" 으로 보여
+  진짜 캘린더로 가지 않게.
+- **하지 않는 것**: 하루 한 번 cron(로그인 없는 경로가 필요해진다 — 대신 열 때마다 맞춘다) · 할 일(화면의 "구글 캘린더에도 저장" 은
+  숨김) · 아기 페이지의 주기·병원 표시 · 기념일.
+
+## 구글 로그인/알림
+아직 미연동 (밑작업만). `lib/auth.ts`(구글 로그인), `lib/notifications.ts`(탭이 열려 있는 동안의 로컬 알림) 스텁 +
+[REQUIREMENTS.md](REQUIREMENTS.md) 절차 참고. `lib/google-calendar.ts` 는 할 일용 옛 스텁(위 "하지 않는 것" — 일정 동기화와 무관).
+`.env`는 git 제외.
