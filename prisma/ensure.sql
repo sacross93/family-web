@@ -137,3 +137,16 @@ CREATE TABLE IF NOT EXISTS "GoogleSyncState" (
 
     CONSTRAINT "GoogleSyncState_pkey" PRIMARY KEY ("id")
 );
+
+-- 기념일을 만든 사람 (2026-10-19). 고치기·지우기는 만든 사람이나 관리자만 — lib/anniversary.ts.
+-- Anniversary 의 열은 **바꾸지 않는다**(ALTER 가 필요하다). 이 표가 생기기 전의 기념일은 줄이 없어 관리자만 고친다.
+-- 위 구글 표와 같은 방식: migrate diff 출력에 IF NOT EXISTS 만 붙이고 FK 줄을 CREATE TABLE 안으로 옮겼다.
+-- userId 는 AppUser.id 지만 FK 를 걸지 않는다 — 계정을 지워도 기념일은 남고 관리자만 고치는 것으로 돌아간다.
+CREATE TABLE IF NOT EXISTS "AnniversaryOwner" (
+    "anniversaryId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AnniversaryOwner_pkey" PRIMARY KEY ("anniversaryId"),
+    CONSTRAINT "AnniversaryOwner_anniversaryId_fkey" FOREIGN KEY ("anniversaryId") REFERENCES "Anniversary"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);

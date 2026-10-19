@@ -131,7 +131,8 @@ export function AlbumDetailClient({
       </Link>
 
       {/* 앨범 헤더 — 다른 상세 화면(아기·계획)과 같은 진한 판. */}
-      <section className="on-chrome relative mb-7 overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
+      {/* `group` — 데스크톱의 `ItemActions` 아이콘이 `group-hover` 로 뜬다. 없으면 영영 투명하다. */}
+      <section className="group on-chrome relative mb-7 overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
         {album.coverUrl && (
           <>
             <img

@@ -17,6 +17,8 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 날짜는 `lib/date.ts` 헬퍼(`kDate`, `dday`, `ageFrom` …). 타입은 `lib/types.ts`.
 - **DELETE 는 두 번 불러도 같은 결과여야 한다.** 라우트에서 `prisma.X.delete()` 를 쓰지 말고 **`deleteMany({ where: { id } })`** 를 쓸 것 — 없는 행에 `delete` 를 걸면 P2025 가 던져져 **500** 이 되고, 화면은 `!res.ok` 를 보고 낙관적 삭제를 되돌려 **지운 것이 되살아난다.** 공유 목록이라 실제로 일어난다(두 사람이 같은 항목을 동시에 지울 때·연결이 끊겼다 다시 눌렀을 때). `ui-flows` 가 확인한다.
 - 데이터 패턴: `app/<기능>/page.tsx`(서버, prisma로 read, `export const dynamic="force-dynamic"`) → `<기능>-client.tsx`("use client", 낙관적 업데이트 + `/api/...` fetch). 예시: `app/shopping/*`.
+- **`ItemActions` 는 `group` 이 붙은 조상 안에 둘 것.** 데스크톱 아이콘이 `group-hover` 로 뜨기 때문에, 없으면 **영영 투명해서** 데스크톱에서는 고칠·지울 길이 없다(폰 `…` 는 멀쩡해서 모른다 — 기념일·계획 히어로·앨범 히어로가 그랬다). 사용자가 손을 얹는 카드/줄에 `group`.
+- **기념일 고치기·지우기는 만든 사람이나 관리자만**(`lib/anniversary.ts` 한 곳 — 화면의 버튼과 라우트의 403 이 같이 쓴다). 만든 사람은 `AnniversaryOwner` 표(ensure.sql 이 ALTER 를 못 해서 따로 둔다 — `Anniversary.memberId` 는 "누구의 날" 이지 만든 사람이 아니다). 그 표가 생기기 전의 기념일·시드는 줄이 없어 **관리자만** 고친다.
 - **Next 16 동적 라우트 params는 Promise**: `{ params }: { params: Promise<{ id: string }> }` → `await params`.
 - 사진은 `<img loading="lazy">` (eslint 허용). 업로드는 `public/uploads/`(git 제외).
 - **큰 사진은 줄여서 보낸다** — `lib/img.ts` 의 `sized()`·`sizedSrcSet()`. 홈 스티커 한 장이 **2,208KB** 였다(운영에서 폰 폭으로 실측. 홈이 받는 이미지가 그것 하나뿐이었다). 원본은 저장소에 그대로 두고 화면에만 줄인 것이 간다. `next/image` **컴포넌트는 안 쓴다** — 스티커는 DB 에 가로 px 만 있고 세로는 사진 비율을 따르는데 `next/image` 는 width+height 를 요구하고 감싸는 요소가 하나 더 생겨 드래그 좌표가 어긋난다. 그래서 `<img>` 는 그대로 두고 **주소만** 최적화 주소로 바꾼다.

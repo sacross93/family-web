@@ -21,7 +21,7 @@ import {
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { dday, kDate, kDateShort } from "@/lib/date";
-import type { AnniversaryWithMember, FamilyMember } from "@/lib/types";
+import type { AnniversaryItem, FamilyMember } from "@/lib/types";
 
 type AnnivType = "birthday" | "anniversary" | "memorial" | "event";
 
@@ -49,7 +49,7 @@ function toDateInput(d: Date | string) {
 }
 
 type Decorated = {
-  item: AnniversaryWithMember;
+  item: AnniversaryItem;
   d: ReturnType<typeof dday>;
 };
 
@@ -62,8 +62,14 @@ function compareDecorated(a: Decorated, b: Decorated) {
   return a.d.days - b.d.days; // 다가오는 건 작은 수(가까운) 먼저
 }
 
+/** 실패한 응답의 `{ error }` 문구. 본문이 없거나 못 읽으면 대신할 말. */
+async function errorOf(res: Response, fallback: string) {
+  const body = await res.json().catch(() => null);
+  return typeof body?.error === "string" && body.error ? body.error : fallback;
+}
+
 /** 다가오는 생일에 몇 살이 되는지 (반복 생일 기준) */
-function turningAge(item: AnniversaryWithMember, next: Date) {
+function turningAge(item: AnniversaryItem, next: Date) {
   const birthYear = new Date(item.date).getFullYear();
   return next.getFullYear() - birthYear;
 }
@@ -72,13 +78,13 @@ export function AnniversariesClient({
   initialItems,
   members,
 }: {
-  initialItems: AnniversaryWithMember[];
+  initialItems: AnniversaryItem[];
   members: FamilyMember[];
 }) {
   const { say } = useToast();
   const [items, setItems] = useState(initialItems);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<AnniversaryWithMember | null>(null);
+  const [editing, setEditing] = useState<AnniversaryItem | null>(null);
   const [busy, setBusy] = useState(false);
 
   // 폼 상태
@@ -116,7 +122,7 @@ export function AnniversariesClient({
     setModalOpen(true);
   }
 
-  function openEdit(item: AnniversaryWithMember) {
+  function openEdit(item: AnniversaryItem) {
     setEditing(item);
     setTitle(item.title);
     setDate(toDateInput(item.date));
@@ -158,9 +164,11 @@ export function AnniversariesClient({
           body: JSON.stringify(payload),
         });
         if (res.ok) {
-          const updated: AnniversaryWithMember = await res.json();
+          const updated: AnniversaryItem = await res.json();
           setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
           setModalOpen(false);
+        } else {
+          say(await errorOf(res, "기념일을 못 저장했어요."), "error");
         }
       } else {
         const res = await fetch("/api/anniversaries", {
@@ -169,9 +177,11 @@ export function AnniversariesClient({
           body: JSON.stringify(payload),
         });
         if (res.ok) {
-          const created: AnniversaryWithMember = await res.json();
+          const created: AnniversaryItem = await res.json();
           setItems((prev) => [...prev, created]);
           setModalOpen(false);
+        } else {
+          say(await errorOf(res, "기념일을 못 저장했어요."), "error");
         }
       }
     } catch {
@@ -189,7 +199,8 @@ export function AnniversariesClient({
     const res = await fetch(`/api/anniversaries/${id}`, { method: "DELETE" }).catch(() => null);
     if (!res || !res.ok) {
       setItems(prev);
-      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+      // 403(만든 사람이 아님)은 서버 말을 그대로 — "잠시 후 다시" 는 다시 해도 안 되는 일에 거짓말이다.
+      say(res ? await errorOf(res, "못 지웠어요. 잠시 후 다시 해 주세요.") : "못 지웠어요. 잠시 후 다시 해 주세요.", "error");
     }
   }
 
@@ -411,7 +422,7 @@ function FeaturedCard({
   onEdit,
   onRemove,
 }: {
-  item: AnniversaryWithMember;
+  item: AnniversaryItem;
   d: ReturnType<typeof dday>;
   onEdit: () => void;
   onRemove: () => void;
@@ -421,8 +432,10 @@ function FeaturedCard({
   const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
 
   return (
-    <section className="on-chrome relative rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
-      <CardActions onEdit={onEdit} onRemove={onRemove} />
+    /* `group` — 데스크톱의 수정·삭제 아이콘은 `group-hover` 로 뜬다. 이게 없으면 아이콘이
+       영영 투명해서 데스크톱에서는 고칠 길이 없었다(폰의 `…` 만 됐다). */
+    <section className="group on-chrome relative rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
+      {item.canEdit && <CardActions onEdit={onEdit} onRemove={onRemove} />}
 
       <div className="flex items-center gap-2.5 pr-10">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xl">
@@ -474,7 +487,7 @@ function AnniversaryRow({
   onEdit,
   onRemove,
 }: {
-  item: AnniversaryWithMember;
+  item: AnniversaryItem;
   d: ReturnType<typeof dday>;
   onEdit: () => void;
   onRemove: () => void;
@@ -488,7 +501,8 @@ function AnniversaryRow({
   return (
     <li
       className={cn(
-        "flex items-center gap-3 border-b border-line px-5 py-3 last:border-0",
+        // `group` — 데스크톱 수정·삭제 아이콘이 `group-hover` 로 뜬다(위 FeaturedCard 와 같은 이유).
+        "group flex items-center gap-3 border-b border-line px-5 py-3 last:border-0",
         isPast && "opacity-60",
         isToday && pal.soft
       )}
@@ -514,14 +528,20 @@ function AnniversaryRow({
       >
         {isToday ? `오늘 ${meta.emoji}` : d.label}
       </span>
-      <ItemActions
-        inline
-        quiet
-        actions={[
-          { label: "수정", icon: Pencil, onClick: onEdit },
-          { label: "삭제", icon: Trash2, onClick: onRemove, danger: true },
-        ]}
-      />
+      {item.canEdit ? (
+        <ItemActions
+          inline
+          quiet
+          actions={[
+            { label: "수정", icon: Pencil, onClick: onEdit },
+            { label: "삭제", icon: Trash2, onClick: onRemove, danger: true },
+          ]}
+        />
+      ) : (
+        /* 못 고치는 줄도 그 자리를 비워 둔다 — 빼면 D-day 가 오른쪽으로 밀려 세로줄이 어긋난다.
+           폭은 ItemActions 그대로: 폰 `…` 하나(w-10), 데스크톱 아이콘 둘(w-8 ×2 + gap-1). */
+        <span aria-hidden className="w-10 shrink-0 lg:w-17" />
+      )}
     </li>
   );
 }

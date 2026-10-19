@@ -213,6 +213,20 @@ model Anniversary {
   memberId  String?
   member    FamilyMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
   createdAt DateTime      @default(now())
+
+  owner AnniversaryOwner? // DB 열 아님 — 관계 필드. memberId 는 "누구의 날" 이지 만든 사람이 아니다.
+}
+
+/// 기념일을 만든 사람(2026-10-19). 고치기·지우기는 만든 사람이나 관리자만(lib/anniversary.ts).
+/// Anniversary 에 열을 더하려면 ALTER 가 필요해 새 표에 둔다 — 운영 스키마는 ensure.sql 의 CREATE 만 가능하다.
+/// 이 표가 생기기 전의 기념일(시드 포함)은 줄이 없다 → 관리자만 고친다.
+model AnniversaryOwner {
+  anniversaryId String      @id
+  anniversary   Anniversary @relation(fields: [anniversaryId], references: [id], onDelete: Cascade)
+  // AppUser.id(세션의 uid). 일부러 AppUser 에 FK 를 걸지 않는다 — 계정을 지워도 기념일은 남고
+  // 그 줄은 관리자만 고치는 것으로 돌아갈 뿐이다. 계정 삭제가 기념일 삭제를 막거나 지워서는 안 된다.
+  userId        String
+  createdAt     DateTime    @default(now())
 }
 
 // ─────────────────────────────────────────────

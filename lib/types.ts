@@ -48,6 +48,8 @@ export type PlanDetail = Plan & {
 export type PlanWithCount = Plan & { _count: { items: number } };
 export type TodoWithMember = Todo & { member: FamilyMember | null };
 export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null };
+/** 기념일 화면이 받는 것 — 고치기·지우기를 보일지는 서버가 정한다(lib/anniversary.ts). */
+export type AnniversaryItem = AnniversaryWithMember & { canEdit: boolean };
 export type BoardPostWithAuthor = BoardPost & { author: FamilyMember | null };
 export type ShoppingItemWithMember = ShoppingItem & { addedBy: FamilyMember | null };
 /**
