@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownView } from "@/components/markdown-view";
-import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
+import { useToast } from "@/components/ui";
+import { MAX_EDGE } from "@/lib/image-upload";
+import { uploadErrorMessage, uploadImage as upload } from "@/lib/upload-client";
 
 /** 옵시디언식 마크다운 에디터 — 툴바·단축키·미리보기·이미지 업로드 */
 export function MarkdownEditor({
@@ -42,6 +44,7 @@ export function MarkdownEditor({
   const pendingSel = useRef<[number, number] | null>(null);
   const [preview, setPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const { say } = useToast();
 
   // 툴바 조작 후 커서 위치 복원
   useEffect(() => {
@@ -110,11 +113,12 @@ export function MarkdownEditor({
   async function uploadImage(file: File) {
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", await shrinkForUpload(file, MAX_EDGE.photo));
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const { urls } = await res.json();
-      if (urls?.[0]) insert(`\n![](${urls[0]})\n`);
+      // 글 속 사진은 줄여서(긴 변 2000px) — 투명 PNG 는 PNG 로 남는다(lib/image-upload.ts).
+      const url = await upload(file, { maxEdge: MAX_EDGE.photo }).catch((e) => {
+        say(uploadErrorMessage(e), "error"); // 저장 공간이 찼으면 그 말이 뜬다
+        return null;
+      });
+      if (url) insert(`\n![](${url})\n`);
     } finally {
       setUploading(false);
     }

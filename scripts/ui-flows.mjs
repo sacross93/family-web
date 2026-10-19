@@ -23,6 +23,7 @@
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { deflateSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
@@ -32,10 +33,15 @@ const PASS = process.argv[4] || process.env.AUDIT_PASS;
 const MARK = "포동UI점검";
 // 사진 올리기 시험용 8×8 PNG. 파일을 안 남기려고 그때그때 만든다.
 const IMG = join(tmpdir(), "podong-ui-flows.png");
-/** 폰 카메라 원본만 한 사진. 올리기 전에 줄어드는지 보려면 큰 게 있어야 한다. */
+/**
+ * 폰 카메라 원본만 한 **투명 PNG**. 앨범·스티커는 이걸 바이트 그대로 저장해야 하고,
+ * 글 속 사진은 줄이되 투명을 지켜야 한다. 왼쪽 위 TRANSPARENT×TRANSPARENT 칸이 완전히 투명하다.
+ * 잡음이라 ~16MB — proxy 의 본문 상한(기본 10MB, 넘으면 **조용히 잘린다**)도 같이 밟는다.
+ */
 const BIG_IMG = join(tmpdir(), "podong-ui-flows-big.png");
 const BIG_W = 2400;
 const BIG_H = 1800;
+const TRANSPARENT = 600;
 
 if (!USER || !PASS) {
   console.error("사용법: node scripts/ui-flows.mjs [기준URL] <아이디> <비밀번호>");
@@ -90,7 +96,7 @@ const { chromium } = await import(pw);
  * 잡음이라야 압축이 안 먹혀 **진짜 큰 파일**이 된다 — 단색 2400×1800 은 몇 KB 라
  * "줄었다" 를 증명하지 못한다. PNG 는 IHDR·IDAT(zlib)·IEND 세 덩어리면 된다.
  */
-function makeNoisePng(path, width, height) {
+function makeNoisePng(path, width, height, transparent = 0) {
   const crc32 = (buf) => {
     let c = ~0;
     for (const b of buf) {
@@ -111,12 +117,20 @@ function makeNoisePng(path, width, height) {
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // color type: truecolor
-  const raw = Buffer.alloc(height * (1 + width * 3));
+  ihdr[9] = 6; // color type: truecolor + alpha
+  // 잡음은 불투명(알파 255), 왼쪽 위 칸만 완전히 투명(0,0,0,0).
+  const raw = Buffer.alloc(height * (1 + width * 4));
   for (let y = 0; y < height; y++) {
-    const row = y * (1 + width * 3);
+    const row = y * (1 + width * 4);
     raw[row] = 0; // filter: none
-    for (let x = 0; x < width * 3; x++) raw[row + 1 + x] = (Math.random() * 256) | 0;
+    for (let x = 0; x < width; x++) {
+      const at = row + 1 + x * 4;
+      if (x < transparent && y < transparent) continue; // Buffer.alloc 이 이미 0
+      raw[at] = (Math.random() * 256) | 0;
+      raw[at + 1] = (Math.random() * 256) | 0;
+      raw[at + 2] = (Math.random() * 256) | 0;
+      raw[at + 3] = 255;
+    }
   }
   writeFileSync(
     path,
@@ -128,8 +142,10 @@ function makeNoisePng(path, width, height) {
     ])
   );
 }
-makeNoisePng(BIG_IMG, BIG_W, BIG_H);
+makeNoisePng(BIG_IMG, BIG_W, BIG_H, TRANSPARENT);
 const window_bigSize = statSync(BIG_IMG).size;
+const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+const BIG_SHA = sha256(BIG_IMG);
 
 // 사진 올리기 시험용 8×8 PNG 를 임시로 만든다.
 writeFileSync(
@@ -177,8 +193,35 @@ const text = () => page.evaluate(() => document.body.innerText);
 // 올린 파일이 실제로 지워지는지 — DB 행만 지우고 파일을 남기면 무료 용량을 계속 먹고,
 // 주소를 아는 사람은 "지운" 사진을 그대로 볼 수 있다.
 const uploadDir = join(process.cwd(), "public", "uploads");
-const fileCount = () =>
-  existsSync(uploadDir) ? readdirSync(uploadDir).filter((f) => !f.startsWith(".")).length : 0;
+const uploadNames = () =>
+  existsSync(uploadDir) ? readdirSync(uploadDir).filter((f) => !f.startsWith(".")) : [];
+const fileCount = () => uploadNames().length;
+/** 조건이 맞을 때까지 기다린다 — 큰 사진은 올리는 데 몇 초가 걸린다(고정 대기는 거짓 실패·거짓 통과를 낳는다). */
+const until = async (what, fn, ms = 60000) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`기다려도 안 된다 — ${what}`);
+    await page.waitForTimeout(300);
+  }
+};
+/** 이 묶음 안에서 새로 생긴 업로드 파일 하나. 둘 이상이면 무엇을 쟀는지 모르니 실패. */
+const newUpload = (before) => {
+  const fresh = uploadNames().filter((f) => !before.includes(f));
+  if (fresh.length !== 1) throw new Error(`새 파일이 ${fresh.length}개 — 하나여야 잴 수 있다`);
+  return fresh[0];
+};
+/** 저장된 파일이 원본과 바이트 하나까지 같은가. */
+const assertByteIdentical = (name) => {
+  const path = join(uploadDir, name);
+  const got = sha256(path);
+  if (got !== BIG_SHA) {
+    throw new Error(
+      `원본이 아니다 — ${name} ${(statSync(path).size / 1024) | 0}KB (원본 ${(window_bigSize / 1024) | 0}KB), sha256 다름`
+    );
+  }
+};
 
 await page.goto(BASE + "/login");
 await page.getByRole("textbox", { name: "아이디" }).fill(USER);
@@ -348,6 +391,65 @@ await step("글 안에 넣은 사진이 같이 지워진다 — 다른 글이 �
   if (fileCount() !== base) throw new Error("아무도 안 쓰는데 사진이 남았다");
 });
 
+await step("글 속 사진은 줄이되 투명은 지킨다 — PNG 로, 빈 곳은 알파 0", async () => {
+  // 글 속 사진은 긴 변 2000px 로 줄인다. 예전엔 무조건 JPEG 로 다시 눌러 투명한 곳이 검게 칠해졌다.
+  const before = uploadNames();
+  let postId = null;
+  try {
+    await page.getByRole("button", { name: /한마디 남기기/ }).click();
+    await page.waitForTimeout(600);
+    const ta = page.locator("textarea").first();
+    await ta.fill(MARK + "투명");
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      page.getByRole("button", { name: "사진", exact: true }).click(),
+    ]);
+    await chooser.setFiles(BIG_IMG);
+    const url = await until("본문에 사진이 들어간다", async () =>
+      (await ta.inputValue()).match(/!\[\]\(([^)]+)\)/)?.[1]
+    );
+    const name = newUpload(before);
+    if (!url.endsWith("/" + name)) throw new Error(`본문 주소가 새 파일이 아니다: ${url}`);
+    const head = readFileSync(join(uploadDir, name)).subarray(0, 8).toString("hex");
+    if (head !== "89504e470d0a1a0a") throw new Error(`PNG 가 아니다 — ${name} 머리 ${head}`);
+    // 줄이는 갈래가 **실제로 돌았는지**(원본이 그대로 돌아온 게 아닌지)와, 투명한 칸이 투명한지를
+    // 브라우저에서 그려서 본다. 원본 (150,150) = 투명 칸 한가운데, (1800,1200) = 잡음(불투명).
+    const px = await page.evaluate(async ([u, W]) => {
+      const img = new Image();
+      img.src = u;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const k = img.naturalWidth / W;
+      const a = (x, y) => ctx.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data[3];
+      return { w: img.naturalWidth, clear: a(150, 150), solid: a(1800, 1200) };
+    }, [url, BIG_W]);
+    if (px.w !== 2000) throw new Error(`줄이지 않았다 — 가로 ${px.w}px (2000 이어야). 투명 검사가 공허해진다`);
+    if (px.solid !== 255) throw new Error(`잡음 칸이 불투명이 아니다(알파 ${px.solid}) — 엉뚱한 걸 쟀다`);
+    if (px.clear !== 0) throw new Error(`투명한 칸이 칠해졌다 — 알파 ${px.clear}`);
+    console.log(`      ${BIG_W}px → ${px.w}px PNG · 투명 칸 알파 ${px.clear} · 잡음 칸 알파 ${px.solid}`);
+
+    await page.getByRole("button", { name: /붙이기/ }).click();
+    await page.waitForTimeout(1200);
+    postId = await page.evaluate(async (m) => {
+      const list = await fetch("/api/board").then((r) => r.json());
+      return list.find((p) => (p.content || "").includes(m + "투명"))?.id ?? null;
+    }, MARK);
+    if (!postId) throw new Error("쪽지가 안 붙었다");
+  } finally {
+    if (postId) await page.evaluate((id) => fetch(`/api/board/${id}`, { method: "DELETE" }), postId);
+    else {
+      // 쪽지에 못 붙은 사진은 아무도 안 치운다(주인이 없다) — 로컬 파일이니 직접 지운다.
+      for (const f of uploadNames().filter((n) => !before.includes(n))) unlinkSync(join(uploadDir, f));
+    }
+    await page.reload({ waitUntil: "networkidle" });
+  }
+  if (fileCount() !== before.length) throw new Error(`쪽지를 지웠는데 사진이 남았다 — ${before.length} → ${fileCount()}`);
+});
+
 await step("지우기 전에 한 번 묻는다 — 취소하면 그대로 있다", async () => {
   // 가족이 쓴 말은 다시 만들 수 없다. 잘못 눌러 사라지면 안 된다.
   await openMenu(NOTES, MARK);
@@ -452,37 +554,88 @@ await step("앨범 열기", async () => {
   await page.waitForTimeout(1300);
   if (!page.url().includes("/albums/")) throw new Error("상세로 안 간다: " + page.url());
 });
-await step("큰 사진은 올리기 전에 줄어든다", async () => {
-  // 폰 카메라 원본만 한 사진(2400×1800)을 올려 본다.
-  // 배포본 홈에 **2.2MB 짜리 스티커**가 올라가 있었고, 화면에서는 150px 로 그려졌다.
-  // 그대로 올리면 열 때마다 그만큼을 받는다.
+await step("저장 공간이 차면 '저장 공간이 거의 찼어요' 가 뜬다 — 흔한 실패 문구가 아니라", async () => {
+  // 서버의 문지기(lib/upload-guard.ts)가 507 STORAGE_FULL 을 주는 상황을 흉내 낸다 — 진짜로 채우지 않는다.
+  // 화면이 그 코드를 알아보고 관리자에게 알리라고 말하는지(배선)를 본다.
+  // **따로 연 탭에서** 한다: 가로채기를 건 탭은 풀어도 그 뒤 큰 사진 새로고침이 networkidle 에 30초를 넘겼다.
+  const before = uploadNames();
+  const tab = await ctx.newPage();
+  let hit = 0;
+  await tab.route(/\/api\/upload(\/token)?$/, (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    hit++;
+    return route.fulfill({
+      status: 507,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "사진 저장 공간이 거의 찼어요.", code: "STORAGE_FULL" }),
+    });
+  });
+  try {
+    await tab.goto(page.url(), { waitUntil: "networkidle" });
+    await tab.getByRole("button", { name: /사진 추가/ }).first().click();
+    await tab.waitForTimeout(700);
+    const dlg = tab.locator('[role="dialog"]').filter({ hasText: "여기로 사진을 끌어다 놓으세요" });
+    await dlg.locator('input[type="file"]').setInputFiles([IMG, IMG]);
+    await until("저장 공간 문구", async () => (await dlg.innerText()).includes("저장 공간이 거의 찼어요"), 15000);
+    if ((await dlg.innerText()).includes("사진을 못 올렸어요")) throw new Error("흔한 실패 문구가 같이 떴다");
+    if (hit !== 1) throw new Error(`찬 뒤에도 계속 올렸다 — 요청 ${hit}번(첫 장에서 멈춰야)`);
+    if (uploadNames().length !== before.length) throw new Error("거절됐는데 파일이 생겼다");
+  } finally {
+    await tab.close();
+  }
+});
+await step("앨범 사진은 원본 그대로 저장된다 — 투명 PNG 도 바이트 그대로", async () => {
+  // 가족이 고른 방향: 사진첩은 **원본으로 저장**(줄이지도, 다시 누르지도 않는다).
+  // 예전에는 올리기 전에 2000px JPEG 로 다시 눌러서, 투명 PNG 의 빈 곳이 검게 칠해졌다.
+  const before = uploadNames();
   await page.getByRole("button", { name: /사진 추가/ }).first().click();
   await page.waitForTimeout(700);
-  await page.locator('input[type="file"]').first().setInputFiles(BIG_IMG);
-  await page.waitForTimeout(5000);
-  // 올린 직후의 <img> 는 파일이 다 쓰이기 전에 한 번 실패해 있을 수 있다 —
-  // 그러면 naturalWidth 가 0 이라 "2000 이하" 검사가 공허하게 통과한다. 새로 받아서 잰다.
+  const dlg = page.locator('[role="dialog"]').filter({ hasText: "여기로 사진을 끌어다 놓으세요" });
+  await dlg.locator('input[type="file"]').setInputFiles(BIG_IMG);
+  // 앨범에 적히기까지(올리기 → /api/photos) 기다린다.
+  await until("1장 추가됨", async () => (await dlg.innerText()).includes("1장 추가됨"));
+  const name = newUpload(before);
+  assertByteIdentical(name);
+  console.log(`      ${BIG_W}×${BIG_H} ${(window_bigSize / 1024 / 1024).toFixed(1)}MB → 저장 ${name} (sha256 같음)`);
+
+  // 화면에는 줄인 것이 간다 — 격자의 그 사진이 최적화 주소로 뜨고 실제로 그려지는가.
+  //
+  // ⚠️ 새로고침 **전에** 방금 붙은 격자 사진이 다 받아지기를 기다린다. 최적화 도중에 새로고침으로 요청을 끊으면
+  // 개발 서버의 최적화가 **그 주소만 영영 대답하지 않는다**(실측: 같은 사진의 w=384 는 바로 오는데 끊긴 w=256 은
+  // curl 로 2분을 기다려도 안 왔다 — 진행 중 요청을 묶어 두는 자리가 안 풀린다). 그러면 새로고침이 30초를 넘긴다.
+  const decoded = (n) =>
+    page.evaluate(async (name) => {
+      const img = [...document.querySelectorAll("img")].find((i) =>
+        (i.getAttribute("src") || "").includes(encodeURIComponent("/uploads/" + name))
+      );
+      if (!img) return false;
+      img.scrollIntoView({ block: "center" }); // loading="lazy" — 화면에 들어와야 받는다
+      await img.decode().catch(() => {});
+      return img.naturalWidth > 0;
+    }, n);
+  await page.keyboard.press("Escape");
+  await until("붙은 사진이 그려진다", () => decoded(name), 60000);
   await page.reload({ waitUntil: "networkidle" });
-  await page.waitForTimeout(1200);
-  const shot = await page.evaluate(async () => {
-    const img = [...document.querySelectorAll("img")].find((i) => /uploads|blob/.test(i.src));
+  const shot = await page.evaluate(async (n) => {
+    const img = [...document.querySelectorAll("img")].find((i) =>
+      (i.getAttribute("src") || "").includes(encodeURIComponent("/uploads/" + n))
+    );
     if (!img) return null;
-    // `complete` 는 실패한 사진에도 true 다. 크기를 재려면 **디코드까지** 기다려야 한다 —
-    // 안 그러면 0×0 이 나오고 "2000 이하" 검사가 공허하게 통과한다(한 번 그랬다).
+    img.scrollIntoView({ block: "center" });
     await img.decode().catch(() => {});
-    const bytes = await fetch(img.src).then((r) => r.blob()).then((b) => b.size).catch(() => -1);
-    return { w: img.naturalWidth, h: img.naturalHeight, bytes };
-  });
-  if (!shot) throw new Error("올린 사진이 안 보인다");
-  if (!shot.w || !shot.h) throw new Error("사진 크기를 못 쟀다 — 0×0 이면 아무것도 확인 못 한다");
-  const originalBytes = window_bigSize;
-  if (shot.w > 2000 || shot.h > 2000)
-    throw new Error(`안 줄었다 — ${shot.w}×${shot.h} (긴 변 2000px 이하여야)`);
-  if (shot.bytes >= originalBytes)
-    throw new Error(`용량이 안 줄었다 — ${(shot.bytes / 1024) | 0}KB (원본 ${(originalBytes / 1024) | 0}KB)`);
-  console.log(
-    `      ${BIG_W}×${BIG_H} ${(originalBytes / 1024 / 1024).toFixed(1)}MB → ${shot.w}×${shot.h} ${(shot.bytes / 1024) | 0}KB`
-  );
+    return {
+      src: img.getAttribute("src"),
+      srcset: img.getAttribute("srcset") || "",
+      current: img.currentSrc,
+      w: img.naturalWidth,
+    };
+  }, name);
+  if (!shot) throw new Error("격자에 그 사진이 최적화 주소로 안 뜬다(원본을 그대로 받는다)");
+  if (!shot.src.startsWith("/_next/image?")) throw new Error("최적화 주소가 아니다: " + shot.src.slice(0, 80));
+  if (!/ \d+w(,|$)/.test(shot.srcset)) throw new Error("srcset 에 w 표시가 없다");
+  if (!shot.current.includes("/_next/image")) throw new Error("원본으로 떨어졌다(최적화 실패) — " + shot.current.slice(0, 80));
+  if (!shot.w) throw new Error("그려지지 않았다 — naturalWidth 0");
+  console.log(`      격자: ${shot.current.match(/w=\d+/)?.[0]} 로 받아 그림(가로 ${shot.w}px)`);
 });
 await step("새로고침해도 사진이 남아 있다", async () => {
   await page.reload({ waitUntil: "networkidle" });
@@ -1139,6 +1292,45 @@ await step("준비 단계로 돌아간 뒤 히어로에 '지남' 이 없다", as
 
 // ── 꾸미기 스티커 ────────────────────────────────────────
 console.log("꾸미기");
+await step("스티커도 원본 그대로 저장된다 — 편집 중엔 고정된 줄인 주소", async () => {
+  // 꾸미기 사진도 원본(투명 그대로). 예전엔 600px JPEG 로 눌러 투명한 곳이 검게 됐다.
+  await page.goto(BASE + "/", { waitUntil: "networkidle" });
+  await page.evaluate(() => localStorage.setItem("podong_edit_mode", "1"));
+  let made = null;
+  try {
+    await page.reload({ waitUntil: "networkidle" });
+    const decos = () =>
+      page.evaluate(() => fetch("/api/decorations?page=%2F").then((r) => (r.ok ? r.json() : [])));
+    const beforeIds = (await decos()).map((d) => d.id);
+    const before = uploadNames();
+    const toolbar = page.locator('[data-deco-ui="/"]').filter({ hasText: "사진 추가" });
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      toolbar.getByRole("button", { name: /사진 추가/ }).click(),
+    ]);
+    await chooser.setFiles(BIG_IMG);
+    made = await until("스티커가 생긴다", async () => (await decos()).find((d) => !beforeIds.includes(d.id)));
+    const name = newUpload(before);
+    if (!made.url.endsWith("/" + name)) throw new Error(`스티커 주소가 새 파일이 아니다: ${made.url}`);
+    assertByteIdentical(name);
+    console.log(`      저장 ${name} (sha256 같음)`);
+
+    // 편집 중: 원본(16MB)이 아니라 고정된 줄인 주소. 크기를 끄는 동안 주소가 안 바뀌어야 깜빡이지 않는다.
+    const src = await until("편집 중 스티커가 보인다", () =>
+      page.evaluate((id) => {
+        const img = [...document.querySelectorAll('[data-sticker="/"] img')].find((i) =>
+          (i.getAttribute("src") || "").includes(encodeURIComponent(id))
+        );
+        return img ? img.getAttribute("src") : null;
+      }, "/uploads/" + name)
+    );
+    if (!src.startsWith("/_next/image?") || !src.includes("&w=1200&"))
+      throw new Error("편집 중 주소가 고정된 최적화 주소가 아니다: " + src.slice(0, 90));
+  } finally {
+    await page.evaluate(() => localStorage.setItem("podong_edit_mode", "0"));
+    if (made) await page.evaluate((id) => fetch(`/api/decorations/${id}`, { method: "DELETE" }), made.id);
+  }
+});
 await step("넓은 화면에서 오른쪽 끝에 붙인 스티커가 폰에서 화면 밖으로 안 나간다", async () => {
   // 자리는 xPct(가운데, %)로 저장된다. 같은 값이 화면 폭에 따라 다른 자리를 뜻한다:
   // 데스크톱(내용 폭 ~1160px)에서 92.6% 는 999~1149px 로 안쪽이지만,

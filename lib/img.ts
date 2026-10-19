@@ -25,14 +25,27 @@ export function pickWidth(want: number): number {
   return IMAGE_WIDTHS.find((w) => w >= want) ?? IMAGE_WIDTHS[IMAGE_WIDTHS.length - 1];
 }
 
+/**
+ * 최적화가 못 읽는 형식. 확장자로 본다(쿼리·해시는 떼고).
+ * - SVG: 최적화가 **400** 을 준다(`dangerouslyAllowSVG` 를 켜지 않았다 — 켤 이유도 없다, 벡터라 원래 가볍다).
+ * - HEIC/HEIF: 최적화가 못 읽는다. 크롬·안드로이드는 그대로 줘도 못 그리지만, 사파리는 그린다.
+ */
+const PASS_THROUGH_EXT = /\.(svg|heic|heif)$/i;
+
 /** 최적화를 태울 수 있는 주소인가. 우리 저장소의 사진만 태운다. */
 export function canOptimize(url: string): boolean {
   if (!url) return false;
   // 로컬 업로드(`/uploads/…`)는 같은 출처라 그대로 된다. `//` 로 시작하는 것은 남의 서버다.
-  if (url.startsWith("/") && !url.startsWith("//")) return true;
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return !PASS_THROUGH_EXT.test(url.split(/[?#]/)[0]);
+  }
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && u.hostname.endsWith(".public.blob.vercel-storage.com");
+    return (
+      u.protocol === "https:" &&
+      u.hostname.endsWith(".public.blob.vercel-storage.com") &&
+      !PASS_THROUGH_EXT.test(u.pathname)
+    );
   } catch {
     return false; // data: URL, 빈 값, 이상한 글자
   }
@@ -56,4 +69,27 @@ export function sized(url: string, cssWidth: number, dpr = 1): string {
 export function sizedSrcSet(url: string, cssWidth: number): string | undefined {
   if (!canOptimize(url)) return undefined;
   return `${sized(url, cssWidth, 1)} 1x, ${sized(url, cssWidth, 2)} 2x`;
+}
+
+/**
+ * 칸 너비가 CSS 로 정해지는 사진(앨범 격자·표지·사진 보기)용. `sizes` 와 함께 쓴다.
+ *
+ * `sized()` 는 그려질 너비를 **알 때** 쓴다(스티커). 격자 칸은 화면 폭마다 달라 너비를 모른다 —
+ * 그래서 여러 너비를 `w` 표시로 내놓고 고르는 일은 브라우저에 맡긴다(`sizes` × 화면 배율).
+ * `maxCssWidth` 는 그 사진이 가장 크게 그려지는 CSS 너비 — 그 2배까지만 내놓는다(더 큰 건 헛되다).
+ *
+ * 못 태우는 주소면 원래 주소 하나만 준다.
+ */
+export function responsive(
+  url: string,
+  maxCssWidth: number,
+): { src: string; srcSet?: string } {
+  if (!canOptimize(url)) return { src: url };
+  const cap = pickWidth(Math.max(1, Math.round(maxCssWidth * 2)));
+  const widths = IMAGE_WIDTHS.filter((w) => w <= cap);
+  const at = (w: number) => `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=${QUALITY}`;
+  return {
+    src: at(cap),
+    srcSet: widths.map((w) => `${at(w)} ${w}w`).join(", "),
+  };
 }

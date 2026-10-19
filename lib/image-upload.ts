@@ -1,21 +1,25 @@
-// 올리기 전에 브라우저에서 사진을 줄인다.
+// 올리기 전에 브라우저에서 사진을 줄인다 — **글 속 사진과 브랜드·홈 그림에만.**
 //
-// 왜: 배포본 홈이 한 번 열릴 때마다 **2.2MB 짜리 스티커 사진 한 장**을 받고 있었다.
-// 화면에서는 150px 로 그려지는 꾸미기 사진이다. 폰 카메라 원본은 대개 4000px·3~5MB 라,
-// 아무것도 안 하면 앨범 한 장 올릴 때마다 그만큼이 저장되고 볼 때마다 그만큼을 받는다.
+// 앨범 사진과 꾸미기 스티커는 여기를 거치지 않는다. 가족이 고른 방향이다: **원본 그대로 저장**하고
+// (바이트 하나 안 바꾼다), 화면에는 `lib/img.ts` 가 줄인 것을 보낸다. 올리는 길은 `lib/upload-client.ts`.
+//
+// 여기서 줄이는 것들도 **투명은 지킨다.** 예전에는 무엇이든 JPEG 로 다시 눌러서 투명 PNG 의
+// 빈 곳이 검게(불투명하게) 칠해졌다. 이제 투명을 담을 수 있는 형식(PNG·WebP·AVIF)은 PNG 로,
+// 나머지만 JPEG 로 다시 쓴다. 픽셀을 훑지 않고 **형식만 보고** 정한다(큰 사진을 훑으면 느리다).
+//
+// 바뀐 점 하나: PNG 는 PNG 로 다시 써도 잘 안 줄어서, "줄인 게 원본보다 크면 원본" 규칙에
+// 자주 걸린다 — 그러면 **원래 해상도 원본**이 그대로 올라간다. 투명을 깨는 것보다 낫다.
 //
 // 왜 브라우저에서: 사진이 이미 거기 있고, `sharp` 같은 의존성이 늘지 않고,
 // 저장소(개발=public/uploads, 운영=Blob)를 되읽는 갈래를 만들지 않아도 된다.
 // (`components/agent/image-attach.ts` 가 모델에게 보낼 사본에 쓰는 것과 같은 방식이다.)
 
-/** 쓰임새별 긴 변 상한. 쓰는 쪽에서 고른다 — 추억과 장식은 다른 잣대다. */
+/** 쓰임새별 긴 변 상한. 쓰는 쪽에서 고른다. */
 export const MAX_EDGE = {
-  /** 앨범 사진·글 속 사진. 추억이라 넉넉히 남긴다(폰 화면의 4배 이상). */
+  /** 글 속 사진(게시판·계획·아기 일기). 폰 화면의 4배 이상. */
   photo: 2000,
   /** 브랜드·홈 큰 그림. 화면에서 최대 200px 남짓이다. */
   brand: 800,
-  /** 꾸미기 스티커. 화면에서 최대 300px 이다. */
-  sticker: 600,
 } as const;
 
 /** JPEG 품질. 0.82 아래로 내리면 사람 얼굴에 얼룩이 보이기 시작한다. */
@@ -49,6 +53,23 @@ export function keepAsIs(type: string): boolean {
 }
 
 /**
+ * 다시 쓸 형식. 투명을 담을 수 있는 형식이면 PNG(투명 보존), 아니면 JPEG.
+ * 사진에 실제로 투명한 곳이 있는지는 보지 않는다 — 형식만 본다.
+ */
+export function outputTypeFor(inputType: string): "image/png" | "image/jpeg" {
+  return inputType === "image/png" || inputType === "image/webp" || inputType === "image/avif"
+    ? "image/png"
+    : "image/jpeg";
+}
+
+/** 실제로 나온 형식의 확장자. 브라우저가 요청한 형식 대신 PNG 로 돌려줄 수도 있다. */
+export function extForEncoded(type: string): string {
+  if (type === "image/png") return ".png";
+  if (type === "image/webp") return ".webp";
+  return ".jpg";
+}
+
+/**
  * 올리기 좋은 크기로 줄인 파일. 브라우저에서만 쓴다.
  *
  * **못 줄이면 원본을 그대로 돌려준다.** 사진을 못 올리는 것보다 큰 걸 올리는 게 낫다 —
@@ -78,21 +99,19 @@ export async function shrinkForUpload(file: File, maxEdge: number): Promise<File
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, width, height);
 
+    const want = outputTypeFor(file.type);
     const blob = await new Promise<Blob | null>((res) =>
-      canvas.toBlob(res, "image/jpeg", QUALITY),
+      canvas.toBlob(res, want, want === "image/jpeg" ? QUALITY : undefined),
     );
     if (!blob || blob.size >= file.size) return file;
 
-    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
-    return new File([blob], name, { type: "image/jpeg", lastModified: file.lastModified });
+    // 형식·확장자는 **실제로 나온 것**으로 붙인다(요청한 것이 아니라).
+    const type = blob.type || want;
+    const name = file.name.replace(/\.[^.]+$/, "") + extForEncoded(type);
+    return new File([blob], name, { type, lastModified: file.lastModified });
   } catch {
     return file;
   } finally {
     bitmap.close();
   }
-}
-
-/** 여러 장. 한 장이 실패해도 나머지는 줄여서 올린다. */
-export async function shrinkAllForUpload(files: File[], maxEdge: number): Promise<File[]> {
-  return Promise.all(files.map((f) => shrinkForUpload(f, maxEdge).catch(() => f)));
 }

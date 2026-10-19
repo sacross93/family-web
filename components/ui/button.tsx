@@ -44,6 +44,8 @@ type LinkProps = CommonProps & {
   /** 바깥 주소를 새 탭으로 열 때. rel 은 target="_blank" 면 반드시 함께 준다. */
   target?: "_blank";
   rel?: string;
+  /** 페이지가 아닌 파일(원본 사진 등)로 갈 때 false — 미리 받기가 수 MB 짜리 파일을 통째로 받는다. */
+  prefetch?: false;
 };
 
 export function Button(props: ButtonProps | LinkProps) {
@@ -52,7 +54,14 @@ export function Button(props: ButtonProps | LinkProps) {
 
   if ("href" in props && props.href) {
     return (
-      <Link href={props.href} className={classes} onClick={props.onClick} target={props.target} rel={props.rel}>
+      <Link
+        href={props.href}
+        className={classes}
+        onClick={props.onClick}
+        target={props.target}
+        rel={props.rel}
+        prefetch={props.prefetch}
+      >
         {children}
       </Link>
     );

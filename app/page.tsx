@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { palette } from "@/lib/colors";
 import { cn } from "@/lib/utils";
-import { Card, Tag, Avatar } from "@/components/ui";
+import { Card, Tag, Avatar, PhotoImg } from "@/components/ui";
 import {
   kDate,
   kDateShort,
@@ -313,9 +313,12 @@ export default async function HomePage() {
         </div>
         {site.heroImageUrl ? (
           <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md sm:h-28 sm:w-28">
-            <img
+            {/* 판은 80px(폰)·112px(sm 이상)으로 고정이다. */}
+            <PhotoImg
               src={site.heroImageUrl}
               alt=""
+              maxWidth={112}
+              sizes="(min-width: 640px) 112px, 80px"
               className="h-full w-full object-cover"
             />
           </div>
@@ -597,9 +600,13 @@ export default async function HomePage() {
                   key={p.id}
                   className="relative aspect-square overflow-hidden rounded-md bg-sunken ring-1 ring-line"
                 >
-                  <img
+                  {/* 앨범 사진은 원본으로 저장된다 — 칸에 맞게 줄여 받는다. 2026-10-19 에 재 본 칸 너비:
+                      360→89 · 390→99 · 430→112 · 640→83 · 768→105 · 1024→51 · 1280→80 · 1536→95. */}
+                  <PhotoImg
                     src={p.url}
                     alt={p.caption ?? "사진"}
+                    maxWidth={182}
+                    sizes="(min-width: 1024px) 96px, (min-width: 640px) calc((100vw - 142px) / 6), calc((100vw - 93px) / 3)"
                     className="h-full w-full object-cover"
                     loading="lazy"
                   />

@@ -150,3 +150,15 @@ CREATE TABLE IF NOT EXISTS "AnniversaryOwner" (
     CONSTRAINT "AnniversaryOwner_pkey" PRIMARY KEY ("anniversaryId"),
     CONSTRAINT "AnniversaryOwner_anniversaryId_fkey" FOREIGN KEY ("anniversaryId") REFERENCES "Anniversary"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- 사진 저장 공간 사용량 (2026-10-19). 싱글턴 id='main' — lib/blob-usage.ts.
+-- Blob Hobby 한도를 넘으면 저장소가 통째로 멈춘다(이미 올린 사진까지 403). 잰 값을 기억해 두고 90% 에서 올리기를 막는다.
+CREATE TABLE IF NOT EXISTS "BlobUsage" (
+    "id" TEXT NOT NULL DEFAULT 'main',
+    "bytes" BIGINT NOT NULL DEFAULT 0,
+    "count" INTEGER NOT NULL DEFAULT 0,
+    "measuredAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BlobUsage_pkey" PRIMARY KEY ("id")
+);

@@ -11,6 +11,7 @@ import {
   Pencil,
   UploadCloud,
   Star,
+  ExternalLink,
 } from "lucide-react";
 import {
   Button,
@@ -23,14 +24,32 @@ import {
   ColorPicker,
   Spinner,
   useToast,
+  PhotoImg,
 } from "@/components/ui";
 import { type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDateShort } from "@/lib/date";
 import type { Album, Photo, AlbumWithPhotos } from "@/lib/types";
-import { MAX_EDGE, shrinkAllForUpload } from "@/lib/image-upload";
+import { ORIGINAL, isStorageFull, uploadErrorMessage, uploadImage } from "@/lib/upload-client";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
+
+// 사진은 원본으로 저장된다(폰 사진 수 MB). 화면에는 칸 너비에 맞게 줄인 것이 간다 — 그 너비들.
+// 2026-10-19 에 재 본 값(폭 → 그려진 CSS px). 레이아웃을 바꾸면 다시 재고 고칠 것.
+
+/** 격자(`columns-2 md:columns-3`): 360→158 · 390→173 · 430→193 · 640→290 · 768→232 · 1024→219 · 1280→304 · 1536 이상→349. */
+const GRID_SIZES =
+  "(min-width: 1414px) 349px, (min-width: 1024px) calc((100vw - 367px) / 3), (min-width: 768px) calc((100vw - 72px) / 3), (min-width: 640px) calc((100vw - 60px) / 2), calc((100vw - 44px) / 2)";
+
+/** 머리 배경(투명도 15%, 판 전체): 390→358 · 640→592 · 768→720 · 1024→680 · 1280→936 · 1536 이상→1072. */
+const HERO_SIZES =
+  "(min-width: 1416px) 1072px, (min-width: 1024px) calc(100vw - 344px), (min-width: 640px) calc(100vw - 48px), calc(100vw - 32px)";
+
+/**
+ * 사진 보기 판(창 `lg`, 높이 58dvh 상한): 360→320 · 390→350 · 430→390 · 672 이상→632.
+ * 가로 사진 기준이다 — 세로 사진은 높이에 걸려 더 좁게 그려지니 조금 크게 받는다.
+ */
+const LIGHTBOX_SIZES = "(min-width: 672px) 632px, calc(100vw - 40px)";
 
 /** Date | string | null → yyyy-MM-dd (date input용) */
 function toDateInput(d?: Date | string | null): string {
@@ -135,10 +154,12 @@ export function AlbumDetailClient({
       <section className="group on-chrome relative mb-7 overflow-hidden rounded-xl bg-gradient-to-br from-chrome via-chrome to-peach-soft p-6 sm:p-8">
         {album.coverUrl && (
           <>
-            <img
+            <PhotoImg
               src={album.coverUrl}
               alt=""
               aria-hidden
+              maxWidth={1072}
+              sizes={HERO_SIZES}
               className="absolute inset-0 h-full w-full object-cover opacity-15"
               loading="lazy"
             />
@@ -213,9 +234,11 @@ export function AlbumDetailClient({
               onClick={() => setLightbox(i)}
               className="group relative mb-3 block w-full break-inside-avoid overflow-hidden rounded-md bg-sunken ring-1 ring-line transition hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              <img
+              <PhotoImg
                 src={photo.url}
                 alt={photo.caption ?? "사진"}
+                maxWidth={360}
+                sizes={GRID_SIZES}
                 className="w-full transition-transform duration-500 group-hover:scale-[1.04]"
                 loading="lazy"
               />
@@ -316,6 +339,7 @@ function AddPhotoModal({
   const [urlInput, setUrlInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   function close() {
     if (busy) return;
@@ -331,25 +355,38 @@ function AddPhotoModal({
     if (images.length === 0 || busy) return;
     setBusy(true);
     setError(null);
+    // 앨범 사진은 **원본 그대로** 저장한다(가족이 고른 방향). 화면에는 줄인 것이 간다(lib/img.ts).
+    // 한 장씩 올리고 곧바로 앨범에 적는다 — 한 장이 실패해도 나머지는 들어가고,
+    // 올렸는데 앨범에 못 적힌 파일이 무더기로 남지 않는다.
+    let ok = 0;
+    let full: unknown = null;
     try {
-      // 앨범 사진은 추억이라 넉넉히 남긴다(긴 변 2000px) — 그래도 폰 원본의 1/5 쯤이다.
-      const fd = new FormData();
-      (await shrinkAllForUpload(images, MAX_EDGE.photo)).forEach((f) => fd.append("files", f));
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!res.ok) throw new Error();
-      const data: { urls?: string[] } = await res.json();
-      const urls = data.urls ?? [];
-      let ok = 0;
-      for (const url of urls) {
-        const created = await onCreate(url);
-        if (created) ok += 1;
+      for (const [i, file] of images.entries()) {
+        setProgress({ done: i, total: images.length });
+        try {
+          const url = await uploadImage(file, ORIGINAL);
+          if (await onCreate(url)) ok += 1;
+        } catch (e) {
+          // 저장 공간이 찼으면 남은 장도 안 들어간다 — 멈추고 그 까닭을 알린다. 그 밖엔 이 장만 건너뛴다.
+          if (isStorageFull(e)) {
+            full = e;
+            break;
+          }
+        }
       }
-      if (ok === 0) throw new Error();
-      setAddedCount((c) => c + ok);
-    } catch {
-      setError("사진을 못 올렸어요. 잠시 후 다시 시도해 주세요.");
+      if (ok > 0) setAddedCount((c) => c + ok);
+      if (full) {
+        setError(uploadErrorMessage(full));
+      } else if (ok < images.length) {
+        setError(
+          ok === 0
+            ? "사진을 못 올렸어요. 잠시 후 다시 시도해 주세요."
+            : `${images.length - ok}장은 못 올렸어요. 잠시 후 다시 시도해 주세요.`,
+        );
+      }
     } finally {
       setBusy(false);
+      setProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -409,7 +446,19 @@ function AddPhotoModal({
           </span>
           <div>
             <p className="text-sm font-semibold text-ink">
-              {busy ? "올리는 중이에요…" : "여기로 사진을 끌어다 놓으세요"}
+              {busy ? (
+                <>
+                  올리는 중이에요…
+                  {progress && progress.total > 1 && (
+                    <span className="font-num">
+                      {" "}
+                      ({progress.done + 1}/{progress.total})
+                    </span>
+                  )}
+                </>
+              ) : (
+                "여기로 사진을 끌어다 놓으세요"
+              )}
             </p>
             <p className="mt-0.5 text-xs text-ink-faint">
               여러 장을 한 번에 올릴 수 있어요
@@ -669,9 +718,11 @@ function Lightbox({
     >
       <div className="flex flex-col gap-4">
         <div className="relative flex items-center justify-center overflow-hidden rounded-md bg-sunken">
-          <img
+          <PhotoImg
             src={photo.url}
             alt={photo.caption ?? "사진"}
+            maxWidth={632}
+            sizes={LIGHTBOX_SIZES}
             className="mx-auto max-h-[58dvh] w-auto max-w-full"
           />
           {photos.length > 1 && (
@@ -697,6 +748,20 @@ function Lightbox({
           <span className="font-num absolute bottom-2 right-2 rounded-full bg-ink/55 px-2.5 py-1 text-xs font-semibold text-white">
             {index + 1} / {photos.length}
           </span>
+        </div>
+
+        {/* 화면에는 줄인 사진이 뜬다. 저장된 원본(폰으로 찍은 그대로)은 여기서 연다. */}
+        <div className="-mt-2 flex justify-end">
+          <Button
+            href={photo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            prefetch={false}
+            variant="ghost"
+            size="sm"
+          >
+            <ExternalLink className="h-4 w-4" /> 원본 보기
+          </Button>
         </div>
 
         <Field label="캡션">

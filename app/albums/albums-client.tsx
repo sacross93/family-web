@@ -14,11 +14,20 @@ import {
   Textarea,
   ColorPicker,
   useToast,
+  PhotoImg,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 import { kDateShort } from "@/lib/date";
 import type { AlbumWithCount } from "@/lib/types";
+
+/**
+ * 표지 칸 너비(`grid-cols-2 lg:grid-cols-3`). 2026-10-19 에 재 본 값:
+ * 360→156 · 390→171 · 430→191 · 640→286 · 768→350 · 1024→214 · 1280→299 · 1536 이상→345.
+ * 가장 넓을 때는 lg 바로 앞(1023px)의 2칸 — 약 477px.
+ */
+const COVER_SIZES =
+  "(min-width: 1417px) 345px, (min-width: 1024px) calc((100vw - 382px) / 3), (min-width: 640px) calc((100vw - 68px) / 2), calc((100vw - 48px) / 2)";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -131,9 +140,11 @@ export function AlbumsClient({
                     )}
                   >
                     {album.coverUrl ? (
-                      <img
+                      <PhotoImg
                         src={album.coverUrl}
                         alt={album.title}
+                        maxWidth={480}
+                        sizes={COVER_SIZES}
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                         loading="lazy"
                       />

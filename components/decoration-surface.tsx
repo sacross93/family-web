@@ -13,9 +13,9 @@ import {
 } from "lucide-react";
 import type { Decoration } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { sized, sizedSrcSet } from "@/lib/img";
-import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
-import { Button } from "@/components/ui";
+import { IMAGE_WIDTHS, sized, sizedSrcSet } from "@/lib/img";
+import { ORIGINAL, uploadErrorMessage, uploadImage } from "@/lib/upload-client";
+import { Button, fallbackToRaw, useToast } from "@/components/ui";
 
 
 // z-index (같은 컨테이너): back<10=콘텐츠 뒤, 콘텐츠=10, front>10=콘텐츠 앞, 선택=50
@@ -43,6 +43,12 @@ interface DragState {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * 편집 중에 쓰는 고정 너비. 크기 조절 상한(1200px, 아래 `clamp(…, 40, 1200)`)에서도
+ * 흐려지지 않게 최적화가 받아 주는 가장 큰 너비로 둔다 — 편집 중엔 주소가 한 번도 안 바뀐다.
+ */
+const EDIT_WIDTH = IMAGE_WIDTHS[IMAGE_WIDTHS.length - 1];
 
 /**
  * 재사용 꾸미기 표면.
@@ -84,6 +90,7 @@ export function DecorationSurface({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const { say } = useToast();
   const measureRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -197,14 +204,15 @@ export function DecorationSurface({
   async function addSticker(file: File) {
     setUploading(true);
     try {
-      // 스티커는 화면에서 300px 이하로 그려진다. 폰 원본(4000px·3MB)을 그대로 올리면
-      // 홈을 열 때마다 그만큼을 받는다 — 실제로 2.2MB 짜리가 올라가 있었다.
-      const fd = new FormData();
-      fd.append("file", await shrinkForUpload(file, MAX_EDGE.sticker));
-      const up = await fetch("/api/upload", { method: "POST", body: fd });
-      const { urls } = await up.json();
-      const url = urls?.[0];
-      if (!url) return;
+      // 스티커도 **원본 그대로** 저장한다(투명 PNG 의 빈 곳이 그대로 남는다).
+      // 홈을 열 때 2.2MB 를 받던 문제는 그리는 쪽(`sized`)이 막는다 — 화면에는 줄인 것이 간다.
+      let url: string;
+      try {
+        url = await uploadImage(file, ORIGINAL);
+      } catch (e) {
+        say(uploadErrorMessage(e), "error"); // 저장 공간이 찼으면 그 말이 뜬다
+        return;
+      }
       const rect = measureRef.current?.getBoundingClientRect();
       const yPx = rect
         ? clamp(window.innerHeight / 2 - rect.top, 40, Math.max(60, rect.height - 40))
@@ -264,10 +272,12 @@ export function DecorationSurface({
         <img
           // **줄여서 받는다.** 홈 스티커 한 장이 2,208KB 였다(운영 실측) — 폰으로 홈을
           // 열 때마다 그만큼을 내려받았다. 원본은 저장소에 그대로 있고 화면에만 줄인 것이 온다.
-          // 편집 중에는 원본을 쓴다: 크기를 키우는 중에 주소가 계속 바뀌면 그때마다 다시
-          // 받느라 깜빡이고, 어차피 편집은 한 사람이 잠깐 하는 일이다.
-          src={editing ? d.url : sized(d.url, d.width)}
+          // 편집 중에는 **고정된 한 주소**(가장 큰 너비)를 쓴다: 크기를 끄는 동안 주소가 바뀌면
+          // 그때마다 다시 받느라 깜빡인다. 원본을 쓰지 않는 건 이제 원본이 폰 사진(수 MB)이라서다.
+          // SVG·GIF 처럼 못 태우는 것은 `sized` 가 원래 주소를 그대로 준다.
+          src={editing ? sized(d.url, EDIT_WIDTH) : sized(d.url, d.width)}
           srcSet={editing ? undefined : sizedSrcSet(d.url, d.width)}
+          onError={(e) => fallbackToRaw(e.currentTarget, d.url)}
           alt=""
           draggable={false}
           onPointerDown={(e) => startDrag(e, d, "move")}

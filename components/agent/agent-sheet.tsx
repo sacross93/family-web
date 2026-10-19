@@ -18,6 +18,7 @@ import { ArrowUp, Menu, Paperclip, Plus, Square, X } from "lucide-react";
 import { IconButton, Spinner, Textarea, useFocusTrap } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AGENT_NAME } from "@/lib/agent/name";
+import { ORIGINAL, isStorageFull, uploadErrorMessage, uploadImage } from "@/lib/upload-client";
 import { AgentHistory } from "./agent-history";
 import { AgentThread } from "./agent-thread";
 import { shrinkImage } from "./image-attach";
@@ -40,16 +41,9 @@ interface Attachment {
   data?: string;
 }
 
-/** 업로드 응답에서 주소 하나를 꺼낸다. 모양이 다르면 실패로 본다. */
-async function uploadPhoto(file: File): Promise<string> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/upload", { method: "POST", body: form });
-  if (!res.ok) throw new Error("upload failed");
-  const body = (await res.json()) as { urls?: unknown };
-  const url = Array.isArray(body.urls) ? body.urls[0] : null;
-  if (typeof url !== "string" || !url) throw new Error("upload failed");
-  return url;
+/** 붙인 사진은 앨범 사진이 될 수 있다 — 앨범과 같이 **원본 그대로** 올린다. 실패하면 던진다. */
+function uploadPhoto(file: File): Promise<string> {
+  return uploadImage(file, ORIGINAL);
 }
 
 /** 포털은 서버 렌더에서 쓸 수 없다. "브라우저에 붙었는가"를 setState 없이 묻는 방법. */
@@ -127,7 +121,8 @@ export function AgentSheet({ open, onClose }: { open: boolean; onClose: () => vo
       if (uploaded.status !== "fulfilled") {
         releasePreview();
         setAttach(null);
-        setAttachError(UPLOAD_FAILED);
+        // 저장 공간이 찼으면 그 말을(관리자에게 알릴 일이다), 아니면 흔한 실패 문구를.
+        setAttachError(isStorageFull(uploaded.reason) ? uploadErrorMessage(uploaded.reason) : UPLOAD_FAILED);
         return;
       }
       setAttach({

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui";
+import { Button, PhotoImg } from "@/components/ui";
 import { MarkdownView } from "@/components/markdown-view";
 import { cn } from "@/lib/utils";
 import { readMe, writeMe } from "@/lib/me";
@@ -375,10 +375,14 @@ export function AgentThread({
                 >
                   {/* 붙인 사진은 글 위에. next/image 가 아니라 <img> 를 쓰는 건 이 저장소 규칙이다(AGENTS.md). */}
                   {bubble.imageUrl && (
-                    <img
+                    // 붙인 사진은 앨범처럼 원본으로 저장된다 — 풍선 너비에 맞게 줄여 받는다.
+                    // 2026-10-19 에 재 본 너비(풍선 최대 85%): 360→247 · 390→272 · 430→306 · 640 이상→264(창 380px).
+                    <PhotoImg
                       src={bubble.imageUrl}
                       loading="lazy"
                       alt=""
+                      maxWidth={484}
+                      sizes="(min-width: 640px) 264px, calc(85vw - 59px)"
                       className="mb-2 max-h-56 w-full rounded-md object-cover"
                     />
                   )}

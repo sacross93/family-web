@@ -526,3 +526,18 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ─────────────────────────────────────────────
+// 사진 저장 공간 사용량 (2026-10-19) — lib/blob-usage.ts
+// ─────────────────────────────────────────────
+
+/// 싱글턴(id="main"). Blob Hobby 한도(1GB·고급 요청 2천/월)를 넘기 전에 올리기를 막으려고 **잰 값을 기억**한다.
+/// 재기(`list()`)는 고급 요청이라 요청마다 하지 않는다 — 6시간마다 또는 관리자가 [다시 재기]를 눌렀을 때만.
+/// 그 사이에는 올리기를 허락할 때마다 그 크기를 더한다(지운 것은 빼지 않는다 — 크게 보는 쪽이 안전하다).
+model BlobUsage {
+  id         String   @id @default("main")
+  bytes      BigInt   @default(0)
+  count      Int      @default(0)
+  measuredAt DateTime
+  updatedAt  DateTime @updatedAt
+}

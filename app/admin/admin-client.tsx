@@ -30,15 +30,19 @@ import {
   IconButton,
   useConfirm,
   useToast,
+  PhotoImg,
 } from "@/components/ui";
 import { NAV, TAB_COUNT, type NavItem } from "@/lib/nav";
 import { AGENT_NAME } from "@/lib/agent/name";
 import type { SiteConfigData } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { MAX_EDGE, shrinkForUpload } from "@/lib/image-upload";
+import { MAX_EDGE } from "@/lib/image-upload";
+import { ORIGINAL, uploadErrorMessage, uploadImage, type UploadMode } from "@/lib/upload-client";
 import { AgentConnectCard, type AgentConnection } from "./agent-connect-card";
 import { AccountsCard } from "./accounts-card";
 import { GoogleCalendarCard } from "./google-calendar-card";
+import { StorageCard } from "./storage-card";
+import type { StorageStatus } from "@/lib/blob-budget";
 import type { GcalStatus } from "@/lib/gcal/contract";
 
 const PAGE_OPTIONS = [
@@ -50,15 +54,23 @@ function pageLabel(value: string) {
   return PAGE_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }
 
-/** 업로드 후 URL 반환 */
-async function uploadImage(file: File): Promise<string | null> {
-  const fd = new FormData();
-  fd.append("file", await shrinkForUpload(file, MAX_EDGE.brand));
-  const res = await fetch("/api/upload", { method: "POST", body: fd });
-  if (!res.ok) return null;
-  const { urls } = await res.json();
-  return urls?.[0] ?? null;
+/**
+ * 업로드 후 URL 반환(실패하면 알리고 null — 저장 공간이 찼으면 그 말이 뜬다).
+ * 브랜드·홈 그림은 줄여서(화면에서 200px 남짓), 페이지 스티커는 **원본 그대로**(꾸미기 표면과 같다).
+ */
+async function upload(
+  file: File,
+  mode: UploadMode,
+  say: (text: string, tone?: "error") => void,
+): Promise<string | null> {
+  try {
+    return await uploadImage(file, mode);
+  } catch (e) {
+    say(uploadErrorMessage(e), "error");
+    return null;
+  }
 }
+const BRAND: UploadMode = { maxEdge: MAX_EDGE.brand };
 
 export function AdminClient({
   decorations,
@@ -66,6 +78,7 @@ export function AdminClient({
   nav,
   agentConnection,
   gcal,
+  storage,
   currentUid,
 }: {
   decorations: Decoration[];
@@ -74,6 +87,8 @@ export function AdminClient({
   agentConnection: AgentConnection;
   /** 서버가 못 읽었으면 null — 카드가 열릴 때 다시 읽는다. */
   gcal: GcalStatus | null;
+  /** 사진 저장 공간(서버가 기억한 값). 못 쟀으면 null. */
+  storage: StorageStatus | null;
   /** 지금 로그인한 관리자 — 계정 목록에서 "(나)" 를 붙인다. */
   currentUid: string;
 }) {
@@ -88,6 +103,7 @@ export function AdminClient({
       <SiteSettingsCard site={site} onSaved={() => router.refresh()} />
       <NavEditorCard nav={nav} onSaved={() => router.refresh()} />
       <DecorationManager decorations={decorations} />
+      <StorageCard initial={storage} />
       <FamilyCard />
       <AccountsCard currentUid={currentUid} />
       <AgentConnectCard initial={agentConnection} />
@@ -229,11 +245,12 @@ function IconField({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const { say } = useToast();
 
   async function pick(file: File) {
     setBusy(true);
     try {
-      const url = await uploadImage(file);
+      const url = await upload(file, BRAND, say);
       if (url) onImage(url);
     } finally {
       setBusy(false);
@@ -446,16 +463,17 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
   const [page, setPage] = useState("global");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { say } = useToast();
 
   function startDecorating() {
     localStorage.setItem("podong_edit_mode", "1");
     router.push("/");
   }
 
-  async function upload(file: File) {
+  async function addSticker(file: File) {
     setUploading(true);
     try {
-      const url = await uploadImage(file);
+      const url = await upload(file, ORIGINAL, say);
       if (!url) return;
       const rotation = Math.round((Math.random() * 16 - 8) * 10) / 10;
       const res = await fetch("/api/decorations", {
@@ -517,7 +535,7 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) upload(f);
+              if (f) addSticker(f);
               e.target.value = "";
             }}
           />
@@ -551,11 +569,16 @@ function DecorationManager({ decorations }: { decorations: Decoration[] }) {
                 {list.map((d) => (
                   <div key={d.id} className="group relative overflow-hidden rounded-md border border-line bg-sunken">
                     <div className="flex aspect-square items-center justify-center p-3">
-                      <img
+                      {/* 스티커는 원본으로 저장된다 — 작은 칸에 맞게 줄여 받는다. 2026-10-19 에 재 본 칸 안 너비:
+                          360→111 · 390→126 · 430→146 · 640→103 · 768→135 · 1024→70 · 1280 이상→85. */}
+                      <PhotoImg
                         src={d.url}
                         alt=""
+                        maxWidth={250}
+                        sizes="(min-width: 1024px) 85px, (min-width: 640px) calc((100vw - 228px) / 4), calc((100vw - 138px) / 2)"
                         className="max-h-full max-w-full object-contain"
                         style={{ transform: `rotate(${d.rotation}deg)` }}
+                        loading="lazy"
                       />
                     </div>
                     <button

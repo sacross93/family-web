@@ -18,3 +18,4 @@ export { useConfirm } from "./confirm-dialog";
 export { useFocusTrap } from "./use-focus-trap";
 export { ToastProvider, useToast } from "./toast";
 export { CollapsibleCard } from "./collapsible-card";
+export { PhotoImg, fallbackToRaw } from "./photo-img";
