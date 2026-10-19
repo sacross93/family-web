@@ -40,15 +40,17 @@ export const AGENT_SYNC_WAIT_MS = 3_000;
 const STATE_ID = "main";
 /**
  * 동시에 두 번 돌지 않게(스펙 §5-1). 실행 상한(RUN_BUDGET_MS)보다 **넉넉히** 길어야 한다 — 목록 몇 쪽(쪽당 5초) +
- * 20초 실행 + 마지막 액션(5초) 이 다 들어가고도 남게. 짧으면 느린 실행 도중에 잠금이 풀려 다른 요청이 같은 일을 한다.
+ * 20초 실행 + 마지막 액션 하나가 다 들어가고도 남게. 쓰는 액션 하나는 이제 요청이 두세 개다(토큰 + 다시 묻기 GET + 쓰기,
+ * 각각 5초 상한) — 길면 10~15초, 409 되찾기(insert + GET + 연결)까지 쳐도 20초 안이다. 그래도 목록 + 20초 + 20초 < 60초.
+ * 짧으면 느린 실행 도중에 잠금이 풀려 다른 요청이 같은 일을 한다.
  */
 const LOCK_MS = 60_000;
 /** 화면을 열 때마다 부르므로 — 마지막 시도가 이보다 가까우면 건너뛴다(force 제외) */
 const THROTTLE_MS = 60_000;
 /**
  * 한 실행이 액션을 실행하는 시간 상한. 잠금(60초)보다 한참 짧게 — 넘기면 다른 요청이 잠금을 잡아 같은 구글 일정을
- * 두 번 가져온다. 액션 하나가 길어야 5초(구글 요청 상한)라 20초에서 멈추면 잠금 안에서 끝난다. 남은 것은 다음 실행이
- * 다시 계획한다(모든 판단이 DB·구글 상태에서 다시 나오므로 잃는 것이 없다).
+ * 두 번 가져온다. 이 값은 "새 액션을 시작하지 않는" 경계라, 마지막 액션(길면 10~20초 — 위 LOCK_MS)이 넘쳐도 잠금 안에서
+ * 끝난다. 남은 것은 다음 실행이 다시 계획한다(모든 판단이 DB·구글 상태에서 다시 나오므로 잃는 것이 없다).
  */
 const RUN_BUDGET_MS = 20_000;
 const DAY = 86_400_000;
@@ -235,11 +237,31 @@ async function createLink(eventId: string, g: GEvent, siteSyncedAt: Date, google
 }
 
 /**
+ * 다시 묻기의 404·410 을 "지워졌다" 로 믿어도 되는가. **같은 실행에서 이 캘린더를 읽은 적이 있을 때만**(동기화가 목록을
+ * 끝까지 읽은 뒤, 방금 insert·409 를 받은 뒤). 구글은 공유가 풀리거나 캘린더가 지워져도 404 를 주고 getEvent 는 그 이유를
+ * 버린다 — 증명 없이 404 를 "지워짐" 으로 치면 공유가 끊긴 날 사이트에서 고친 일정마다 사이트에서 지워진다.
+ * 증명이 없으면(쓰기 훅) 404 는 **실패**다: 아무것도 지우지 않고 대기로 남긴다. 200 + cancelled 는 접근 자체가 증명이다.
+ */
+type Access = { accessProven: boolean };
+
+/** 증명 없이 받은 404·410 — 실패로 던진다(부르는 쪽이 대기·묘비로 남긴다). 문구는 공유 안내(auth.ts 의 404 문구). */
+function unprovenMissing(): GcalError {
+  return new GcalError(404, "notFound");
+}
+
+/**
  * 구글 일정 하나를 지운다 — **다시 물어 평범한 하나짜리일 때만.** 반복(원본·회차)·여러 날이면 지우지 않는다(위 머리 주석).
  * 이미 없거나 취소됐으면 할 일이 없다. 다시 묻기가 실패하면 던진다(부르는 쪽은 아무것도 지우지 않은 채로 남는다).
+ * 접근이 증명되지 않았는데 404 면 역시 던진다(위 Access).
  */
-async function deleteIfPlain(cfg: GcalOn, googleEventId: string, deps?: GcalDeps): Promise<"deleted" | "gone" | "readOnly"> {
+async function deleteIfPlain(
+  cfg: GcalOn,
+  googleEventId: string,
+  deps: GcalDeps | undefined,
+  { accessProven }: Access,
+): Promise<"deleted" | "gone" | "readOnly"> {
   const cur = await getEvent(cfg, googleEventId, deps);
+  if (!cur && !accessProven) throw unprovenMissing();
   if (!cur || cur.status === "cancelled") return "gone";
   if (readOnlyOf(cur)) return "readOnly";
   await deleteEvent(cfg, googleEventId, deps); // 404·410 = 이미 없음 = 성공
@@ -251,8 +273,14 @@ async function deleteIfPlain(cfg: GcalOn, googleEventId: string, deps?: GcalDeps
  * 안 지운 경우 사이트 일정은 이미 지워졌다 — 그 구글 일정은 연결이 없어졌으니 회차면 다음 동기화가 다시 가져온다
  * (사이트에서 반복 일정을 지우는 길은 없다). 원본이면 목록에 안 오므로 회차들이 그대로 보인다.
  */
-async function settleTombstone(cfg: GcalOn, linkId: string, googleEventId: string, deps?: GcalDeps): Promise<void> {
-  const done = await deleteIfPlain(cfg, googleEventId, deps);
+async function settleTombstone(
+  cfg: GcalOn,
+  linkId: string,
+  googleEventId: string,
+  deps: GcalDeps | undefined,
+  access: Access,
+): Promise<void> {
+  const done = await deleteIfPlain(cfg, googleEventId, deps, access);
   if (done === "readOnly") console.warn("[gcal] 반복·여러 날이 된 구글 일정이라 지우지 않고 연결만 거뒀어요");
   await prisma.googleEventLink.deleteMany({ where: { id: linkId } });
 }
@@ -299,7 +327,10 @@ async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Pr
       .findUnique({ where: { id: ev.id }, select: { id: true } })
       .catch(() => ({ id: ev.id })); // 못 읽으면 "있다" 로 — 모르는 채로 진짜 캘린더의 일정을 지우지 않는다
     if (!site) {
-      await deleteIfPlain(cfg, made.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
+      // 방금 이 캘린더에 만들었다(또는 409 를 받았다) — 접근은 증명됐다.
+      await deleteIfPlain(cfg, made.id, deps, { accessProven: true }).catch((err) =>
+        logFail("지워진 일정의 구글 일정 거두기", err),
+      );
     } else if (
       await prisma.googleEventLink
         .findUnique({ where: { googleEventId: made.id }, select: { id: true } })
@@ -319,16 +350,20 @@ async function pushNewEvent(cfg: GcalOn, ev: CalendarEvent, deps?: GcalDeps): Pr
  * 보내기 전에 다시 묻는다(던지면 그대로 실패 — 부르는 쪽이 pendingPush 로 남긴다):
  * - 반복(원본·회차)·여러 날이 됐으면 **보내지 않는다.** 연결을 readOnly 로 바꾸고 대기를 내린다 — 이제 사이트에서 고칠 수
  *   없는 일정이다(라우트가 409). googleUpdated 는 그대로 두어 다음 동기화가 구글 내용을 사이트로 가져오게 한다.
- * - 없거나 취소됐으면 가족이 구글에서 지운 것이다 — **구글의 지우기가 이긴다**(처음 맞추기 409 와 같은 규칙). 사이트 일정과
- *   연결을 지운다. 안 그러면 창 밖의 보내기 대기 연결은 동기화마다 404 실패를 되풀이한다(창 밖이라 다시 묻기도 안 온다).
+ * - 취소됐으면(200) 가족이 구글에서 지운 것이다 — **구글의 지우기가 이긴다**(처음 맞추기 409 와 같은 규칙). 사이트 일정과
+ *   연결을 지운다. 404·410(없음)도 그렇게 치지만 **접근이 증명됐을 때만**(동기화 경로 — 위 Access). 쓰기 훅에서의 404 는
+ *   공유가 풀린 것일 수 있어 실패로 던진다(일정·연결 그대로, pendingPush). 동기화 경로에서 안 지우면 창 밖의 보내기 대기
+ *   연결은 동기화마다 404 실패를 되풀이한다(창 밖이라 다시 묻기도 안 온다).
  */
 async function pushUpdate(
   cfg: GcalOn,
   link: { id: string; googleEventId: string },
   ev: CalendarEvent,
-  deps?: GcalDeps,
+  deps: GcalDeps | undefined,
+  { accessProven }: Access,
 ): Promise<"pushed" | "readOnly" | "gone"> {
   const cur = await getEvent(cfg, link.googleEventId, deps);
+  if (!cur && !accessProven) throw unprovenMissing();
   if (!cur || cur.status === "cancelled") {
     await deleteSiteAndLink(link.id, ev.id);
     return "gone";
@@ -436,7 +471,9 @@ async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
           .findUnique({ where: { id: site.id }, select: { id: true } })
           .catch(() => ({ id: site.id }));
         if (!still && a.google.id === googleIdFor(site.id)) {
-          await deleteIfPlain(cfg, a.google.id, deps).catch((err) => logFail("지워진 일정의 구글 일정 거두기", err));
+          await deleteIfPlain(cfg, a.google.id, deps, { accessProven: true }).catch((err) =>
+            logFail("지워진 일정의 구글 일정 거두기", err),
+          );
         }
         throw e;
       }
@@ -445,10 +482,13 @@ async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
     case "pushNew":
       return pushNewEvent(cfg, siteOf(a.eventId), deps);
     case "pushUpdate":
-      await pushUpdate(cfg, { id: a.linkId, googleEventId: a.googleEventId }, siteOf(a.eventId), deps);
+      // 이 실행이 목록을 끝까지 읽은 뒤다 — 캘린더 접근은 증명됐다.
+      await pushUpdate(cfg, { id: a.linkId, googleEventId: a.googleEventId }, siteOf(a.eventId), deps, {
+        accessProven: true,
+      });
       return true;
     case "deleteGoogle":
-      await settleTombstone(cfg, a.linkId, a.googleEventId, deps);
+      await settleTombstone(cfg, a.linkId, a.googleEventId, deps, { accessProven: true });
       return true;
     case "dropTombstone":
       await prisma.googleEventLink.deleteMany({ where: { id: a.linkId, pendingDelete: true } });
@@ -757,7 +797,8 @@ export async function afterSiteUpdate(eventId: string, deps?: GcalDeps): Promise
     linkId = link.id;
     const ev = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
     if (!ev) return;
-    await pushUpdate(cfg, link, ev, deps);
+    // 쓰기 훅은 이 캘린더를 읽은 적이 없다 — 404 를 "지워짐" 으로 믿지 않는다(실패 → pendingPush).
+    await pushUpdate(cfg, link, ev, deps, { accessProven: false });
   } catch (e) {
     logFail("고친 일정 보내기", e);
     if (linkId) await markPendingPush(linkId);
@@ -800,7 +841,8 @@ export async function afterSiteDelete(
     const cfg = await startedConfig();
     if (!cfg) return; // 묘비는 beforeSiteDelete 가 이미 세웠다
     // 다시 물어 평범한 일정일 때만 지운다 — 반복·여러 날이 됐으면 구글은 그대로 두고 연결만 거둔다(settleTombstone).
-    await settleTombstone(cfg, link.linkId, link.googleEventId, deps);
+    // 404 면 묘비를 남긴다 — 다음 동기화가 목록을 끝까지 읽은 뒤(접근 증명) 처리한다.
+    await settleTombstone(cfg, link.linkId, link.googleEventId, deps, { accessProven: false });
   } catch (e) {
     logFail("지운 일정 구글에서 지우기", e);
     // FK(SetNull)가 eventId 를 비웠겠지만 거기에 기대지 않는다 — 묘비 모양을 여기서 확실히.

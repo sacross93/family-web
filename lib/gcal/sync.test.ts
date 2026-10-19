@@ -973,6 +973,15 @@ describe("runSync — 실행", () => {
     expect(link("l1")).toBeUndefined();
   });
 
+  it("묘비인데 구글에 이미 없음(404) → 동기화는 목록을 끝까지 읽었으니 '지워짐' 으로 믿고 연결을 거둔다", async () => {
+    seedState();
+    seedLink("l1", null, "g-gone", { pendingDelete: true });
+    const g = fakeGoogle();
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
+    expect(link("l1")).toBeUndefined();
+    expect(g.writes()).toHaveLength(0);
+  });
+
   it("처음 맞추기 뒤 사이트에서 만들었는데 못 보낸 것 → 보낸다(pushNew)", async () => {
     seedState();
     seedEvent("e-new", { title: "새 일정", createdAt: new Date(h.clock.ms - DAY) });
@@ -1383,6 +1392,44 @@ describe("반복으로 바뀐 일정 — 시리즈를 사이트에서 고치거�
     await afterSiteUpdate("e1", deps(g));
     expect(g.calls.filter((c) => c.kind === "patch")).toHaveLength(0);
     expect(link("l1")).toMatchObject({ readOnly: "multiday", pendingPush: false });
+  });
+
+  it("고치기 훅 — GET 이 404(접근을 증명 못 함: 공유가 풀렸을 수도) → 실패로 둔다: 일정·연결 그대로, pendingPush, 구글 쓰기 0", async () => {
+    seedState();
+    seedEvent("e1", { title: "고친 제목", updatedAt: now() });
+    seedLink("l1", "e1", "g1");
+    // 공유가 풀리거나 캘린더가 지워져도 구글은 404 를 준다 — "지워졌다" 와 구별할 수 없다
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(404, "notFound") : undefined) });
+    g.put(gev("g1"));
+    await afterSiteUpdate("e1", deps(g));
+    expect(event("e1")).toMatchObject({ title: "고친 제목" });
+    expect(link("l1")).toMatchObject({ eventId: "e1", pendingPush: true });
+    expect(g.writes()).toHaveLength(0);
+  });
+
+  it("고치기 훅 — GET 이 200 으로 cancelled 를 주면(접근은 확인됨) 구글의 지우기가 이긴다: 사이트 일정·연결을 지운다", async () => {
+    seedState();
+    seedEvent("e1", { updatedAt: now() });
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    g.put({ id: "g1", status: "cancelled", updated: "2026-10-15T00:00:00.000Z" });
+    await afterSiteUpdate("e1", deps(g));
+    expect(event("e1")).toBeUndefined();
+    expect(link("l1")).toBeUndefined();
+    expect(g.writes()).toHaveLength(0);
+  });
+
+  it("지우기 훅 — GET 이 404 면 묘비를 남긴다(다음 동기화가 목록을 끝까지 읽은 뒤 처리), 구글 쓰기 0", async () => {
+    seedState();
+    seedEvent("e1");
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle({ fail: (c) => (c.kind === "get" ? googleError(404, "notFound") : undefined) });
+    g.put(gev("g1"));
+    const ticket = await beforeSiteDelete("e1");
+    await h.client.calendarEvent.deleteMany({ where: { id: "e1" } });
+    await afterSiteDelete(ticket, deps(g));
+    expect(link("l1")).toMatchObject({ eventId: null, pendingDelete: true });
+    expect(g.writes()).toHaveLength(0);
   });
 
   it("고치기 훅 — GET 이 실패(500)하면 쓰지 않는다: PATCH 0, pendingPush", async () => {
