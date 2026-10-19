@@ -101,6 +101,11 @@ function logFail(where: string, e: unknown): void {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
+/** 쓰는 순간의 시각 — 일정의 updatedAt 과 연결의 siteSyncedAt 에 **같은 값**으로 넣는다. 시험은 deps.now 로 가짜 시계를 쓴다. */
+function writeTime(deps?: GcalDeps): Date {
+  return new Date(deps?.now?.() ?? Date.now());
+}
+
 export function syncWindow(now: Date): { min: Date; max: Date } {
   const today = seoulMidnight(seoulDate(now)).getTime();
   return { min: new Date(today - WINDOW_PAST_DAYS * DAY), max: new Date(today + WINDOW_FUTURE_DAYS * DAY) };
@@ -146,30 +151,45 @@ async function startedConfig(): Promise<GcalOn | null> {
 // 한 건씩 실행 — runSync 와 쓰기 훅이 같은 함수를 쓴다
 // ─────────────────────────────────────────────
 
-/** 구글 일정을 사이트에 새로 만든다. 일정과 연결을 **한 문장**으로(중첩 쓰기) — 연결이 유일키에 걸리면 일정도 안 생긴다. */
-async function createSiteFrom(g: GEvent): Promise<void> {
+/*
+ * 구글 → 사이트로 쓸 때(아래 둘)는 **일정과 연결을 한 번에** 쓰고, 일정의 updatedAt 과 연결의 siteSyncedAt 을 같은 값으로
+ * **직접** 적는다(@updatedAt 칸도 값을 주면 그 값이 들어간다).
+ *
+ * 왜: 둘을 따로 쓰다 두 번째가 실패하거나 그 사이 함수가 죽으면 updatedAt > siteSyncedAt 이 남는다. 다음 동기화는 그것을
+ * "사이트에서 고쳤다" 로 보고 pushUpdate 로 구글에 되보내는데, 그 내용은 toGoogle(fromGoogle(g)) — 왕복에서 잃는 것이 있다
+ * (제목 없음 → "(제목 없음)", 모르는 색 → 7번, 끝 없음 → 시작 + 1시간, 시간대 고정). **가족의 진짜 일정이 그렇게 덮어써진다.**
+ * 그래서 "한 번 더 보낼 뿐 해가 없다" 가 아니다 — 어긋날 길을 아예 없앤다.
+ *
+ * 사이트 → 구글 쪽(pushNew·pushUpdate·link)은 일정을 쓰지 않는다. 연결 하나만 쓰고, siteSyncedAt 에는 **보내기 전에 읽은**
+ * updatedAt 을 적는다 — 보내는 사이 사이트에서 또 고쳤으면 다음 동기화가 그것을 보낸다(나중 것을 잃지 않는다).
+ */
+
+/** 구글 일정을 사이트에 새로 만든다. 일정과 연결을 **한 문장**으로(중첩 쓰기) — 연결이 걸리면(유일키 등) 일정도 안 생긴다. */
+async function createSiteFrom(g: GEvent, deps?: GcalDeps): Promise<void> {
   const { fields, readOnly } = fromGoogle(g);
-  const ev = await prisma.calendarEvent.create({
+  const stamp = writeTime(deps);
+  await prisma.calendarEvent.create({
     data: {
       ...fields,
       source: "google",
-      // siteSyncedAt 은 일정이 생긴 뒤에야 안다 — 일단 옛 시각으로 두고 아래에서 바로 고친다.
-      // 고치기가 실패해도 다음 동기화가 "사이트가 바뀜" 으로 보고 같은 내용을 한 번 더 보낼 뿐이다(해가 없다).
+      updatedAt: stamp,
       googleLink: {
-        create: { googleEventId: g.id, googleUpdated: new Date(g.updated), siteSyncedAt: new Date(0), readOnly },
+        create: { googleEventId: g.id, googleUpdated: new Date(g.updated), siteSyncedAt: stamp, readOnly },
       },
     },
   });
-  await prisma.googleEventLink.update({ where: { eventId: ev.id }, data: { siteSyncedAt: ev.updatedAt } });
 }
 
-/** 구글 내용을 사이트로. 사이트에 못 보낸 변경이 있었어도 구글이 이겼으니 pendingPush 는 내린다. */
-async function updateSiteFrom(linkId: string, eventId: string, g: GEvent): Promise<void> {
+/** 구글 내용을 사이트로 — 한 트랜잭션. 사이트에 못 보낸 변경이 있었어도 구글이 이겼으니 pendingPush 는 내린다. */
+async function updateSiteFrom(linkId: string, eventId: string, g: GEvent, deps?: GcalDeps): Promise<void> {
   const { fields, readOnly } = fromGoogle(g);
-  const ev = await prisma.calendarEvent.update({ where: { id: eventId }, data: fields });
-  await prisma.googleEventLink.update({
-    where: { id: linkId },
-    data: { googleUpdated: new Date(g.updated), siteSyncedAt: ev.updatedAt, readOnly, pendingPush: false },
+  const stamp = writeTime(deps);
+  await prisma.$transaction(async (tx) => {
+    await tx.calendarEvent.update({ where: { id: eventId }, data: { ...fields, updatedAt: stamp } });
+    await tx.googleEventLink.update({
+      where: { id: linkId },
+      data: { googleUpdated: new Date(g.updated), siteSyncedAt: stamp, readOnly, pendingPush: false },
+    });
   });
 }
 
@@ -288,10 +308,10 @@ async function execute(a: RunAction, ctx: RunCtx): Promise<boolean> {
 
   switch (a.kind) {
     case "createSite":
-      await createSiteFrom(a.google);
+      await createSiteFrom(a.google, deps);
       return true;
     case "updateSite":
-      await updateSiteFrom(a.linkId, a.eventId, a.google);
+      await updateSiteFrom(a.linkId, a.eventId, a.google, deps);
       return true;
     case "deleteSite":
       await deleteSiteAndLink(a.linkId, a.eventId);

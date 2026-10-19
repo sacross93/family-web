@@ -150,7 +150,8 @@ const h = vi.hoisted(() => {
         const { googleLink, ...data } = a.data as Row & { googleLink?: { create: Row } };
         if (googleLink) {
           if (model !== "calendarEvent" || !googleLink.create) throw new Error("가짜 prisma: 모르는 중첩 쓰기");
-          // 한 문장 = 한 트랜잭션: 연결이 유일키에 걸리면 일정도 안 생긴다
+          // 한 문장 = 한 트랜잭션: 연결이 실패하면(주입한 오류·유일키) 일정도 안 생긴다
+          maybeFail("googleEventLink", "create");
           const probe = { ...DEFAULTS.googleEventLink(), id: "probe", ...googleLink.create, eventId: "probe-event" };
           checkUnique("googleEventLink", { ...probe, eventId: null, id: null });
           const ev = insert(model, data);
@@ -214,8 +215,18 @@ const h = vi.hoisted(() => {
     {
       get(_t, name: string) {
         if (name === "$transaction") {
-          return async (arg: unknown) =>
-            Array.isArray(arg) ? Promise.all(arg) : (arg as (tx: unknown) => Promise<unknown>)(client);
+          return async (arg: unknown) => {
+            if (Array.isArray(arg)) return Promise.all(arg);
+            // 대화형 트랜잭션: 안에서 던지면 그 안에서 쓴 것을 **모두 되돌린다**(진짜 DB 처럼). 이게 없으면
+            // "연결 쓰기가 실패해도 일정은 그대로" 시험이 아무것도 증명하지 못한다.
+            const snap = Object.fromEntries(Object.entries(tables).map(([k, rows]) => [k, rows.map((r) => ({ ...r }))]));
+            try {
+              return await (arg as (tx: unknown) => Promise<unknown>)(client);
+            } catch (e) {
+              for (const [k, rows] of Object.entries(snap)) tables[k] = rows;
+              throw e;
+            }
+          };
         }
         if (name in models) return models[name];
         throw new Error(`가짜 prisma: 모르는 모델 ${name}`);
@@ -946,6 +957,78 @@ describe("runSync — 실행", () => {
     const made = g.events.get(googleIdFor("e-new"))!;
     expect(linkOf("e-new")).toMatchObject({ googleEventId: googleIdFor("e-new"), pendingPush: false });
     expect((linkOf("e-new")!.googleUpdated as Date).toISOString()).toBe(made.updated);
+  });
+});
+
+describe("구글 → 사이트 쓰기는 한 번에 — 어긋난 시각으로 진짜 일정을 되보내지 않는다", () => {
+  // 왕복에서 잃는 것이 있는 구글 일정: 제목 없음 · 색 없음 · 끝 없음. 사이트에 들어온 뒤 "사이트에서 고쳤다" 로 잘못 보이면
+  // pushUpdate 가 "(제목 없음)"·colorId 7·끝 +1시간으로 가족의 진짜 일정을 덮어쓴다.
+  const lossy = (id: string, over: Partial<GEvent> = {}) =>
+    gev(id, { summary: "", colorId: undefined, end: undefined, updated: "2026-10-15T00:00:00.000Z", ...over });
+
+  it("가져오기 — 일정과 연결을 한 문장으로, updatedAt = siteSyncedAt · 다음 동기화는 구글에 아무것도 안 쓴다", async () => {
+    seedState();
+    const g = fakeGoogle();
+    g.put(lossy("g-new"));
+    expect(await runSync({ deps: deps(g), force: true })).toEqual({ ran: true, changed: 1, error: null });
+    const ev = h.tables.calendarEvent.find((e) => e.source === "google")!;
+    expect((linkOf(ev.id as string)!.siteSyncedAt as Date).getTime()).toBe((ev.updatedAt as Date).getTime());
+    expect(h.writes).not.toContain("googleEventLink.update"); // 연결을 따로 고쳐 쓰지 않는다
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.writes()).toHaveLength(0);
+  });
+
+  it("가져오기 — 두 번째 문장이 죽는 자리가 없다: 연결 고치기를 실패시켜도 다음 동기화가 구글에 쓰지 않는다", async () => {
+    seedState();
+    const g = fakeGoogle();
+    g.put(lossy("g-new"));
+    h.failOnce["googleEventLink.update"] = true; // 예전에는 여기서 siteSyncedAt 이 1970 으로 남았다
+    await runSync({ deps: deps(g), force: true });
+    h.clock.ms += 61_000;
+    await runSync({ deps: deps(g) });
+    expect(g.writes()).toHaveLength(0);
+    const ev = h.tables.calendarEvent.find((e) => e.source === "google")!;
+    expect((linkOf(ev.id as string)!.siteSyncedAt as Date).getTime()).toBe((ev.updatedAt as Date).getTime());
+  });
+
+  it("가져오기 — 연결 쓰기가 실패하면 일정도 안 생긴다, 다음 동기화가 다시 가져오고 구글엔 쓰지 않는다", async () => {
+    seedState();
+    const g = fakeGoogle();
+    g.put(lossy("g-new"));
+    h.failOnce["googleEventLink.create"] = true;
+    const out = (await runSync({ deps: deps(g), force: true })) as Extract<SyncOutcome, { ran: true }>;
+    expect(out.changed).toBe(0);
+    expect(out.error).not.toBeNull();
+    expect(h.tables.calendarEvent).toHaveLength(0);
+    expect(h.tables.googleEventLink).toHaveLength(0);
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 1, error: null });
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.writes()).toHaveLength(0);
+  });
+
+  it("구글에서 고친 것 — 연결 쓰기가 실패하면 일정도 그대로(트랜잭션), 다음 동기화가 다시 가져오고 구글엔 쓰지 않는다", async () => {
+    seedState();
+    const seededAt = seedEvent("e1", { title: "옛 제목", end: null }).updatedAt.getTime(); // 값으로 — 행 객체는 가짜가 고쳐 쓴다
+    seedLink("l1", "e1", "g1");
+    const g = fakeGoogle();
+    g.put(lossy("g1"));
+    h.failOnce["googleEventLink.update"] = true;
+    const out = (await runSync({ deps: deps(g), force: true })) as Extract<SyncOutcome, { ran: true }>;
+    expect(out.changed).toBe(0);
+    expect(out.error).not.toBeNull();
+    expect(event("e1")).toMatchObject({ title: "옛 제목", color: "rose" });
+    expect((event("e1")!.updatedAt as Date).getTime()).toBe(seededAt);
+
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 1, error: null });
+    expect(event("e1")).toMatchObject({ title: "(제목 없음)", color: "sky", end: null });
+    expect((link("l1")!.siteSyncedAt as Date).getTime()).toBe((event("e1")!.updatedAt as Date).getTime());
+    h.clock.ms += 61_000;
+    expect(await runSync({ deps: deps(g) })).toEqual({ ran: true, changed: 0, error: null });
+    expect(g.writes()).toHaveLength(0);
   });
 });
 

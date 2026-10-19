@@ -1,23 +1,35 @@
 // 진짜 구글 캘린더로 동기화 왕복을 한 번 밟는다.  npm run gcal:check
 //
 // **가족의 진짜 캘린더를 건드린다.** 시험용 캘린더를 따로 두지 않기로 했다(사용자 결정 2026-10-16, 스펙 §2·§9).
+//
+// **돌리기 전에:** ① 개발 서버(npm run dev / dev:lan / start)를 끈다 — 시험 도중(처음 맞추기를 마친 동안) 브라우저 탭·LAN 기기·
+// 포동이·ui:flows 가 만든 일정이 쓰기 훅을 타고 진짜 캘린더로 간다. 떠 있으면 아래 2번에서 멈춘다.
+// ② 로컬 DB 의 견본 일정(연결 없는 일정)을 비운다 — db:seed 직후라면 시드가 다시 만들어 둔 것까지. 아래 4번에서 멈춘다.
+//
 // 그래서 이 파일의 절반은 안전장치다. 순서대로:
 // 1. 로컬 DB 에서만 돈다 — DATABASE_URL 의 호스트가 localhost·127.0.0.1 이 아니면 멈춘다.
-// 2. 구글 설정(환경변수 두 개)이 꺼져 있으면 멈춘다.
-// 3. **연결 없는 로컬 일정**이 하나라도 있으면 멈춘다. 그대로 처음 맞추기를 하면 시드의 견본 일정("치과 정기검진" 등)이
+// 2. localhost:3000·3001 에 무엇이든 응답하면 멈춘다(연결 거절만 통과 — 시간 초과는 첫 컴파일 중인 dev 서버일 수 있다).
+// 3. 구글 설정(환경변수 두 개)이 꺼져 있으면 멈춘다.
+// 4. **연결 없는 로컬 일정**이 하나라도 있으면 멈춘다. 그대로 처음 맞추기를 하면 시드의 견본 일정("치과 정기검진" 등)이
 //    진짜 캘린더로 간다.
-// 4. 못 보낸 변경(묘비·보내기 대기·연결된 채 사이트에서 고친 것)이 있으면 멈춘다 — 동기화가 그것을 진짜 일정에 그대로 쓴다.
-// 5. 처음 맞추기 전이면 미리보기를 먼저 보고 **보낼 것 0개**일 때만 처음 맞추기를 한다.
+// 5. 못 보낸 변경(묘비·보내기 대기·연결된 채 사이트에서 고친 것)이 있으면 멈춘다 — 동기화가 그것을 진짜 일정에 그대로 쓴다.
+// 6. 처음 맞추기 전이면 미리보기를 먼저 보고 **보낼 것 0개**일 때만 처음 맞추기를 한다.
 // 여기까지는 아무것도 바꾸지 않는다. 멈추면 그대로 끝난다(정리도 돌지 않는다 — 정리할 것이 없다).
 //
 // 그다음부터는 만드는 일정이 전부 제목에 `[포동시험]`, 날짜는 약 300일 뒤(알림이 울릴 일이 없게)다.
-// 끝나면(실패해도, Ctrl+C 를 눌러도) `finally` 에서:
+// 끝나면(실패해도, Ctrl+C·터미널 닫기·kill(SIGINT·SIGTERM·SIGHUP)이어도) `finally` 에서:
 // - **로컬 동기화 상태를 처음으로 되돌린다** — GoogleSyncState 를 맨 먼저 지운다. 이것 하나로 엔진은 "처음 맞추기 전" 이 되어
 //   이 뒤로 로컬에서 화면을 열거나 포동이에게 묻거나 ui:flows 를 돌려도 진짜 캘린더에 아무것도 쓰지 않는다.
 // - 구글에서 `[포동시험]` 을 전부 지운다(목록에서 찾은 것 + 이번에 만든 id).
 // - 로컬의 `[포동시험]`·구글에서 가져온 일정(source="google")·연결을 지운다. 가져온 일정을 남기면 연결 없는 로컬 일정이 되어
 //   다음 처음 맞추기가 구글로 되돌려 보낸다(쌍둥이). 모두 **로컬 DB 만** — 구글의 진짜 일정에는 손대지 않는다.
 // - 구글 목록을 다시 읽어 `[포동시험]` 이 **하나도 없는지** 본다. 남았거나 확인을 못 하면 크게 실패한다(종료 코드 1).
+//
+// **강제로 꺼졌다면(kill -9·전원 등 — 정리가 못 돈 경우)** 로컬은 "처음 맞추기를 마친" 채로 남아, 다음에 로컬 화면을 열기만 해도
+// 진짜 캘린더와 맞추기 시작한다. **먼저** 로컬 동기화 표를 비우고(둘 중 하나 — 로컬 DB 만):
+//   npm run db:seed        (연결·상태를 비운다. 다만 견본 일정을 다시 만드니 그것도 지워야 다시 돌 수 있다)
+//   psql postgresql://ascentai@localhost:5432/podong -c 'DELETE FROM "GoogleEventLink"; DELETE FROM "GoogleSyncState"; DELETE FROM "CalendarEvent";'
+// 그다음 이 스크립트를 다시 돌린다 — 끝의 정리가 창 안의 `[포동시험]` 을 제목으로 찾아 전부 지운다.
 //
 // 출력은 단계별 ✓/✗ 와 숫자뿐 — 진짜 일정의 제목·메모, 키·토큰, DB 주소, 캘린더 ID 는 찍지 않는다.
 // 엔진 함수를 직접 부른다(서버 불필요). 사이트 쪽 순서는 /api/events 라우트가 부르는 순서 그대로다.
@@ -51,6 +63,8 @@ const AHEAD_DAYS = 300;
 /** 잠금(sync.ts LOCK_MS 60초)을 넉넉히 넘게 기다린다 — 열어 둔 사이트 탭이 동기화 중일 수 있다 */
 const LOCK_WAIT_TRIES = 25;
 const LOCK_WAIT_MS = 3_000;
+/** 사이트 서버가 뜨는 자리 — next 는 3000 이 차 있으면 3001 로 간다 */
+const SERVER_PORTS = [3000, 3001];
 
 // ─────────────────────────────────────────────
 // 작은 도우미
@@ -117,21 +131,53 @@ function isLocalDb(url: string): boolean {
   }
 }
 
+/** "거기 아무도 없음" 인 연결 오류 — localhost 는 ::1·127.0.0.1 둘 다 시도하므로 AggregateError 안의 것까지 본다 */
+const NOBODY = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "ENETUNREACH", "EHOSTUNREACH", "EAFNOSUPPORT"]);
+function nobodyThere(e: unknown, depth = 0): boolean {
+  if (!e || typeof e !== "object" || depth > 4) return false;
+  const o = e as { code?: unknown; cause?: unknown; errors?: unknown };
+  if (typeof o.code === "string" && NOBODY.has(o.code)) return true;
+  if (Array.isArray(o.errors) && o.errors.length > 0 && o.errors.every((x) => nobodyThere(x, depth + 1))) return true;
+  return nobodyThere(o.cause, depth + 1);
+}
+
+/**
+ * 이 컴퓨터에 사이트 서버가 떠 있는가. 무슨 응답이든 오면 떠 있는 것이다(로그인으로 돌려보내는 307 도).
+ * **연결 거절만** "없음" 으로 본다 — 1초 시간 초과는 첫 요청을 컴파일하는 dev 서버일 수 있어 떠 있는 것으로 친다.
+ */
+async function serverAnswering(port: number): Promise<boolean> {
+  try {
+    await fetch(`http://localhost:${port}/`, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(1_000) });
+    return true;
+  } catch (e) {
+    return !nobodyThere(e);
+  }
+}
+
 // ─────────────────────────────────────────────
 // Ctrl+C — 바로 끄지 않고 정리까지 마친다
 // ─────────────────────────────────────────────
 
 let interrupted = false;
-/** 쓰기를 시작할 때만 건다 — 그 전(멈춤 장치)에는 Ctrl+C 가 평소처럼 바로 끈다(바꾼 것이 없다). */
+/**
+ * 쓰기를 시작할 때만 건다 — 그 전(멈춤 장치)에는 Ctrl+C 가 평소처럼 바로 끈다(바꾼 것이 없다).
+ * SIGINT(Ctrl+C) 만이 아니라 SIGTERM(kill)·SIGHUP(터미널 닫기)도 똑같이 — 정리를 건너뛰면 로컬이 "처음 맞추기를 마친" 채로
+ * 남아 다음에 로컬 화면을 열기만 해도 진짜 캘린더와 맞추기 시작한다. (kill -9 는 잡을 수 없다 — 머리 주석의 되살리기 참고)
+ */
 function catchInterrupt(): void {
-  process.on("SIGINT", () => {
-    if (interrupted) return;
-    interrupted = true;
-    console.log("\n  … 멈출게요 — 만든 시험 일정을 지우고 끝냅니다. 잠시 기다려 주세요(강제로 끄면 [포동시험] 이 남을 수 있어요).");
-  });
+  // 터미널이 닫힌 뒤에는 출력이 EIO 로 실패한다 — 그 오류가 프로세스를 죽여 정리를 끊지 않게 삼킨다.
+  process.stdout.on("error", () => undefined);
+  process.stderr.on("error", () => undefined);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      if (interrupted) return;
+      interrupted = true;
+      console.log(`\n  … 멈출게요(${sig}) — 만든 시험 일정을 지우고 끝냅니다. 잠시 기다려 주세요(강제로 끄면 [포동시험] 이 남을 수 있어요).`);
+    });
+  }
 }
 function halt(): void {
-  if (interrupted) fail("멈춤", "Ctrl+C");
+  if (interrupted) fail("멈춤", "신호를 받았어요");
 }
 
 // ─────────────────────────────────────────────
@@ -207,7 +253,20 @@ async function preflight(): Promise<{ cfg: GcalOn; needInitial: boolean } | null
   }
   check("로컬 DB", true);
 
-  // ② 구글 설정
+  // ② 개발 서버 — 떠 있으면 시험 도중 그쪽의 쓰기(탭·LAN 기기·포동이·ui:flows)가 쓰기 훅을 타고 진짜 캘린더로 간다
+  for (const port of SERVER_PORTS) {
+    if (await serverAnswering(port)) {
+      refuse(
+        `localhost:${port} 에서 서버가 응답해요.`,
+        "개발 서버(npm run dev / dev:lan / start)를 끄고 다시 실행해 주세요.",
+        "시험 도중 화면·LAN 기기·포동이·ui:flows 가 만든 일정이 진짜 캘린더로 갈 수 있어요.",
+      );
+      return null;
+    }
+  }
+  check("사이트 서버 꺼짐", true, SERVER_PORTS.map((p) => `:${p}`).join(" · "));
+
+  // ③ 구글 설정
   const cfg = gcalConfig();
   if (!cfg.enabled) {
     refuse(
@@ -219,7 +278,7 @@ async function preflight(): Promise<{ cfg: GcalOn; needInitial: boolean } | null
   }
   check("구글 설정 켜짐", true);
 
-  // ③ 연결 없는 로컬 일정 — 처음 맞추기(또는 평소 동기화)가 진짜 캘린더로 보낼 수 있는 것
+  // ④ 연결 없는 로컬 일정 — 처음 맞추기(또는 평소 동기화)가 진짜 캘린더로 보낼 수 있는 것
   const [unlinked, unlinkedGoogle] = await Promise.all([
     prisma.calendarEvent.count({ where: { googleLink: { is: null } } }),
     prisma.calendarEvent.count({ where: { googleLink: { is: null }, source: "google" } }),
@@ -228,25 +287,27 @@ async function preflight(): Promise<{ cfg: GcalOn; needInitial: boolean } | null
     refuse(
       `연결 없는 로컬 일정이 ${unlinked}개 있어요(그중 구글에서 왔던 것 ${unlinkedGoogle}개).`,
       "로컬 견본 일정을 먼저 비워 주세요(그대로 두면 진짜 캘린더로 갑니다).",
-      "로컬 DB 의 CalendarEvent 중 구글 연결(GoogleEventLink)이 없는 것을 지우면 돼요 — 로컬 DB 인지 꼭 확인하고.",
+      "로컬 DB 의 CalendarEvent 중 구글 연결(GoogleEventLink)이 없는 것을 지우면 돼요 — 로컬 DB 인지 꼭 확인하고:",
+      `psql postgresql://ascentai@localhost:5432/podong -c 'DELETE FROM "CalendarEvent" e WHERE NOT EXISTS (SELECT 1 FROM "GoogleEventLink" l WHERE l."eventId" = e.id);'`,
     );
     return null;
   }
   check("연결 없는 로컬 일정 0개", true);
 
-  // ④ 못 보낸 변경
+  // ⑤ 못 보낸 변경
   const pending = await pendingWrites();
   if (pending.deletes + pending.pushes > 0) {
     refuse(
       `진짜 캘린더에 보낼 변경이 남아 있어요 — 지우기 ${pending.deletes}개 · 고치기 ${pending.pushes}개.`,
       "이 스크립트가 동기화를 돌리면 그대로 진짜 일정에 쓰여요. 지난 실행이 강제로 꺼진 것이라면",
-      "로컬 DB 의 GoogleEventLink·GoogleSyncState 와 연결 없는 일정을 비우고 다시 돌려 주세요(로컬만).",
+      "로컬 동기화 표와 일정을 비우고 다시 돌려 주세요(로컬 DB 만 — 머리 주석의 되살리기):",
+      `psql postgresql://ascentai@localhost:5432/podong -c 'DELETE FROM "GoogleEventLink"; DELETE FROM "GoogleSyncState"; DELETE FROM "CalendarEvent";'`,
     );
     return null;
   }
   check("못 보낸 변경 0개", true);
 
-  // ⑤ 처음 맞추기 전이면 미리보기 — 보낼 것이 0개여야 한다
+  // ⑥ 처음 맞추기 전이면 미리보기 — 보낼 것이 0개여야 한다
   const status = await gcalStatus(); // 캘린더가 바뀌었으면 initialDoneAt 을 비운 것으로 본다
   if (status.initialDoneAt) {
     console.log("  · 처음 맞추기는 이미 되어 있어요 — 건너뜁니다");
@@ -318,36 +379,45 @@ async function steps(cfg: GcalOn, made: Set<string>): Promise<void> {
   // ── 3. 구글에서 만들기(종일) → 사이트에 생김 ──
   console.log("\n3. 구글에서 만들기(종일)");
   const title3 = `${TAG} 구글`;
+  // id 를 우리가 정해 **부르기 전에** made 에 넣는다 — 응답을 못 받아도(구글엔 들어갔는데) 정리가 그 id 로 지운다.
+  const gid = googleIdFor(`gcal-check:${TAG}`);
+  made.add(gid);
   // 끝 날짜는 다음 날(구글 규칙). 하루짜리로 둔다 — 이틀이면 readOnly(multiday)로 들어온다.
-  const gIns = await insertEvent(cfg, { summary: title3, description: NOTE, start: { date: d301 }, end: { date: d302 } });
-  made.add(gIns.id);
-  const local3 = await eventually("동기화", async () => {
-    const l = await prisma.googleEventLink.findUnique({ where: { googleEventId: gIns.id }, include: { event: true } });
-    return l?.event ?? null;
-  });
-  need("사이트에 생김(연결과 함께)", local3 !== null);
+  await insertEvent(cfg, { id: gid, summary: title3, description: NOTE, start: { date: d301 }, end: { date: d302 } });
+  const link3 = await eventually("동기화", () =>
+    prisma.googleEventLink.findUnique({ where: { googleEventId: gid }, include: { event: true } }),
+  );
+  const local3 = link3?.event ?? null;
+  need("사이트에 생김(연결과 함께)", link3 !== null && local3 !== null);
   check("종일 · 날짜가 맞음", local3.allDay && seoulDate(local3.start) === d301);
   check("제목이 같고 출처는 구글", local3.title === title3 && local3.source === "google");
+  // 두 시각이 같아야 다음 동기화가 이 일정을 "사이트에서 고쳤다" 로 보고 구글에 되보내지 않는다(sync.ts createSiteFrom)
+  check("연결 시각 = 일정 시각(되보내지 않음)", link3.siteSyncedAt.getTime() === local3.updatedAt.getTime());
   const localId = local3.id;
   halt();
 
   // ── 4. 구글에서 고치기 → 사이트 반영, 구글에서 지우기 → 사이트에서 사라짐 ──
   console.log("\n4. 구글에서 고치기 · 지우기");
   const title4 = `${TAG} 구글 고침`;
-  await patchEvent(cfg, gIns.id, { summary: title4 });
-  const local4 = await eventually("동기화", async () => {
-    const ev = await prisma.calendarEvent.findUnique({ where: { id: localId } });
-    return ev?.title === title4 ? ev : null;
+  await patchEvent(cfg, gid, { summary: title4 });
+  const link4 = await eventually("동기화", async () => {
+    const l = await prisma.googleEventLink.findUnique({ where: { googleEventId: gid }, include: { event: true } });
+    return l?.event?.title === title4 ? l : null;
   });
+  const local4 = link4?.event ?? null;
   check("구글에서 고친 제목이 사이트에 옴", local4 !== null);
   check("종일 · 날짜 그대로", local4?.allDay === true && seoulDate(local4.start) === d301);
+  check(
+    "연결 시각 = 일정 시각(되보내지 않음)",
+    link4 !== null && local4 !== null && link4.siteSyncedAt.getTime() === local4.updatedAt.getTime(),
+  );
   halt();
 
-  await deleteEvent(cfg, gIns.id);
+  await deleteEvent(cfg, gid);
   const gone4 = await eventually("동기화", async () => {
     const [ev, link] = await Promise.all([
       prisma.calendarEvent.findUnique({ where: { id: localId }, select: { id: true } }),
-      prisma.googleEventLink.findUnique({ where: { googleEventId: gIns.id }, select: { id: true } }),
+      prisma.googleEventLink.findUnique({ where: { googleEventId: gid }, select: { id: true } }),
     ]);
     return ev === null && link === null ? true : null;
   });
