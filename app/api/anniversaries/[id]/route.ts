@@ -6,6 +6,8 @@ import { canEditAnniversary } from "@/lib/anniversary";
 const ALLOWED_TYPES = ["birthday", "anniversary", "memorial", "event"];
 
 const FORBIDDEN = "만든 사람이나 관리자만 고칠 수 있어요.";
+// 이 문구는 포동이의 지우기 카드에도 그대로 뜬다 — [지우기]를 눌렀는데 "고칠 수" 라고 하면 어색하다.
+const FORBIDDEN_REMOVE = "만든 사람이나 관리자만 지울 수 있어요.";
 
 function parseDate(value: unknown): Date | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -65,7 +67,7 @@ export async function DELETE(
   // 이미 없으면 그걸로 된 것이다 — 403 보다 먼저 본다(지운 사람이 다시 눌러도 같은 결과).
   if (!row) return NextResponse.json({ ok: true });
   if (!canEditAnniversary(user, row.owner?.userId)) {
-    return NextResponse.json({ error: FORBIDDEN }, { status: 403 });
+    return NextResponse.json({ error: FORBIDDEN_REMOVE }, { status: 403 });
   }
   // `delete` 가 아니라 `deleteMany` — 없는 행을 지우면 prisma 가 P2025 를 던져 **500** 이 된다.
   // 공유 목록이라 실제로 일어난다: 두 사람이 같은 항목을 동시에 지우면 뒤쪽이 500 을 받고,

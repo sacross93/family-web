@@ -23,8 +23,9 @@ const SUGGESTIONS = [
   "다가오는 일정 알려줘",
 ];
 
-/** 되돌리기 실패 문구를 라우트가 못 준 경우에만 쓴다. */
+/** 실패 문구를 라우트가 못 준 경우에만 쓴다. */
 const UNDO_FAILED = "되돌리지 못했어요.";
+const REMOVE_FAILED = "지우지 못했어요.";
 
 /**
  * 도구가 돌려준 path 가 실제로 열리는 주소인가.
@@ -43,33 +44,87 @@ function isExternal(path: string): boolean {
   return /^https?:\/\//.test(path);
 }
 
-/** 결과 하나를 가리키는 열쇠. 같은 항목을 두 번 되돌리려 하지 않도록 resource+id 로 잡는다. */
-function undoKey(undo: { resource: string; id: string }): string {
-  return `${undo.resource}:${undo.id}`;
+/**
+ * 버튼 하나를 가리키는 열쇠. **갈래(kind)를 앞에 붙인다** — 같은 기념일을 한 대화에서 만들고
+ * 고치면 두 카드의 resource+id 가 같아, 하나를 되돌리면 다른 카드까지 "되돌렸어요" 가 됐을 것이다.
+ * 고친 것은 되돌릴 값까지 넣는다: 같은 항목을 두 번 고치면 카드도 둘이고 되돌릴 값도 다르다.
+ * 버튼이 없는 카드는 빈 문자열.
+ */
+function actionKey(result: OkResult): string {
+  if (result.confirmRemove) return `remove:${result.confirmRemove.resource}:${result.confirmRemove.id}`;
+  const undo = result.undo;
+  if (!undo) return "";
+  if (undo.kind === "update") return `update:${undo.resource}:${undo.id}:${JSON.stringify(undo.restore)}`;
+  // 옛 대화의 카드는 kind 가 없다 — 만든 것이다.
+  return `create:${undo.resource}:${undo.id}`;
 }
 
-/** 추가한 것 하나 — 제목 + [보러가기] [되돌리기]. */
-function ResultCard({
+/** 지우기 확인 카드 — 무엇을 지우는지(제목·날짜) + [지우기]. 이 카드가 곧 확인이다(브라우저 confirm 없음). */
+function RemoveCard({
   result,
-  undone,
+  done,
   busy,
   error,
-  onUndo,
+  onAction,
+}: {
+  result: OkResult;
+  done: boolean;
+  busy: boolean;
+  error: string | null;
+  onAction: (result: OkResult) => void;
+}) {
+  const hint = result.confirmRemove?.hint;
+  return (
+    <div className="mt-3 rounded-md border border-line bg-sunken px-3.5 py-3">
+      {done ? (
+        <>
+          <p className="text-sm font-semibold text-ink-soft">지웠어요</p>
+          <p className="mt-0.5 break-words text-xs text-ink-faint line-through">{result.label}</p>
+        </>
+      ) : (
+        <>
+          <p className="break-words text-sm font-semibold text-ink">{result.label}</p>
+          {hint && <p className="mt-0.5 break-words text-xs text-ink-soft">{hint}</p>}
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => onAction(result)}>
+              지우기
+            </Button>
+            <span className="text-xs text-ink-faint">지우면 되돌릴 수 없어요</span>
+          </div>
+        </>
+      )}
+      {error && <p className="mt-2 break-words text-xs text-danger-ink">{error}</p>}
+    </div>
+  );
+}
+
+/** 추가하거나 고친 것 하나 — 제목 + [보러가기] [되돌리기]. 지우기 확인은 RemoveCard. */
+function ResultCard({
+  result,
+  done,
+  busy,
+  error,
+  onAction,
   onNavigate,
 }: {
   result: OkResult;
-  undone: boolean;
+  done: boolean;
   busy: boolean;
   error: string | null;
-  onUndo: (undo: { resource: string; id: string }) => void;
+  onAction: (result: OkResult) => void;
   onNavigate: () => void;
 }) {
+  if (result.confirmRemove) {
+    return <RemoveCard result={result} done={done} busy={busy} error={error} onAction={onAction} />;
+  }
   const undo = result.undo;
   const visitable = canVisit(result.path) ? result.path : null;
+  // 고친 카드는 바뀐 모습(날짜 등)을 한 줄 더 — 무엇이 어떻게 됐는지 보고 되돌릴지 정한다.
+  const hint = undo?.kind === "update" ? result.stored?.hint : undefined;
 
   return (
     <div className="mt-3 rounded-md border border-line bg-sunken px-3.5 py-3">
-      {undone ? (
+      {done ? (
         <>
           <p className="text-sm font-semibold text-ink-soft">되돌렸어요</p>
           <p className="mt-0.5 break-words text-xs text-ink-faint line-through">{result.label}</p>
@@ -77,6 +132,7 @@ function ResultCard({
       ) : (
         <>
           <p className="break-words text-sm font-semibold text-ink">{result.label}</p>
+          {hint && <p className="mt-0.5 break-words text-xs text-ink-soft">{hint}</p>}
           {(visitable || undo) && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               {visitable &&
@@ -96,7 +152,7 @@ function ResultCard({
                   variant="ghost"
                   // 성공하면 카드가 통째로 바뀌므로 이 버튼은 사라진다. 진행 중 두 번 누르는 것만 여기서 막는다.
                   disabled={busy}
-                  onClick={() => onUndo(undo)}
+                  onClick={() => onAction(result)}
                 >
                   되돌리기
                 </Button>
@@ -203,7 +259,7 @@ export function AgentThread({
   onSuggest: (text: string) => void;
   /** 카드의 [보러가기]로 떠날 때. 폰에서는 시트가 덮고 있어 닫아 주지 않으면 도착한 곳이 안 보인다. */
   onNavigate: () => void;
-  /** 이미 되돌린 것들(`resource:id`). 시트가 쥔다 — 닫았다 열어도 같은 것을 두 번 되돌리지 않게. */
+  /** 이미 되돌리거나 지운 것들(`actionKey`). 시트가 쥔다 — 닫았다 열어도 같은 것을 두 번 누르지 않게. */
   undone: Record<string, boolean>;
   onUndone: (key: string) => void;
 }) {
@@ -220,9 +276,14 @@ export function AgentThread({
     if (el) el.scrollTop = el.scrollHeight;
   }, [bubbles, toolLabel, running, error]);
 
-  const runUndo = useCallback(
-    async (undo: { resource: string; id: string }) => {
-      const key = undoKey(undo);
+  /** 카드의 버튼 — 되돌리기(만든 것·고친 것) 또는 지우기. */
+  const runAction = useCallback(
+    async (result: OkResult) => {
+      const key = actionKey(result);
+      if (!key) return;
+      const remove = result.confirmRemove;
+      const undo = result.undo;
+      const failed = remove ? REMOVE_FAILED : UNDO_FAILED;
       setBusy((prev) => ({ ...prev, [key]: true }));
       setUndoErrors((prev) => {
         const next = { ...prev };
@@ -231,22 +292,27 @@ export function AgentThread({
       });
 
       try {
-        // 경로는 보내지 않는다 — 지울 주소는 서버가 화이트리스트에서 만든다.
-        const res = await fetch("/api/agent/undo", {
+        // 경로는 보내지 않는다 — 주소는 서버가 레지스트리(화이트리스트)에서 만든다.
+        const [url, body] = remove
+          ? ["/api/agent/remove", { resource: remove.resource, id: remove.id }]
+          : undo?.kind === "update"
+            ? ["/api/agent/undo", { kind: "update", resource: undo.resource, id: undo.id, restore: undo.restore }]
+            : ["/api/agent/undo", { resource: undo?.resource, id: undo?.id }];
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resource: undo.resource, id: undo.id }),
+          body: JSON.stringify(body),
         });
         if (res.ok) {
           onUndone(key);
           return;
         }
         // 라우트가 사람 말로 번역해서 보낸다. 상태코드는 화면에 쓰지 않는다.
-        const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
-        const message = typeof body?.error === "string" && body.error ? body.error : UNDO_FAILED;
+        const reply = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        const message = typeof reply?.error === "string" && reply.error ? reply.error : failed;
         setUndoErrors((prev) => ({ ...prev, [key]: message }));
       } catch {
-        setUndoErrors((prev) => ({ ...prev, [key]: UNDO_FAILED }));
+        setUndoErrors((prev) => ({ ...prev, [key]: failed }));
       } finally {
         setBusy((prev) => ({ ...prev, [key]: false }));
       }
@@ -324,15 +390,15 @@ export function AgentThread({
                 <div className="min-w-0 max-w-[92%] break-words rounded-xl rounded-bl-sm border border-line bg-surface px-4 py-2.5">
                   {bubble.text && <MarkdownView className="text-[0.9375rem]">{bubble.text}</MarkdownView>}
                   {visibleResults(bubble.results).map((result, rIndex) => {
-                    const key = result.undo ? undoKey(result.undo) : "";
+                    const key = actionKey(result);
                     return (
                       <ResultCard
                         key={`${index}-${rIndex}`}
                         result={result}
-                        undone={Boolean(key && undone[key])}
+                        done={Boolean(key && undone[key])}
                         busy={Boolean(key && busy[key])}
                         error={(key && undoErrors[key]) || null}
-                        onUndo={runUndo}
+                        onAction={runAction}
                         onNavigate={onNavigate}
                       />
                     );

@@ -200,6 +200,21 @@ describe("RESOURCES 계약", () => {
       for (const prop of Object.keys(r.create?.schema.properties ?? {})) {
         expect(INTERNAL_IDS, `${r.key}.${prop}`).not.toContain(prop);
       }
+      // 고치기도 같다 — 사람은 이름으로 받고 toBody 가 memberId 로 바꾼다.
+      for (const prop of Object.keys(r.update?.schema.properties ?? {})) {
+        expect(INTERNAL_IDS, `${r.key}.update.${prop}`).not.toContain(prop);
+      }
+    }
+  });
+
+  it("고치기·지우기는 기념일만 선언한다 — 늘릴 때는 이 줄을 같이 고친다(집주인이 정한 범위)", () => {
+    expect(RESOURCES.filter((r) => r.update).map((r) => r.key)).toEqual(["anniversary"]);
+    expect(RESOURCES.filter((r) => r.remove).map((r) => r.key)).toEqual(["anniversary"]);
+  });
+
+  it("고치기 스키마는 필수 칸이 없다(바꿀 것만 받는다)", () => {
+    for (const r of RESOURCES) {
+      if (r.update) expect(r.update.schema.required ?? [], `${r.key}.update.required`).toEqual([]);
     }
   });
 });
@@ -500,5 +515,85 @@ describe("글이 본체인 리소스는 본문을 싣는다", () => {
         if (e.body) expect(e.body.length).toBeGreaterThanOrEqual(e.title.replace(/…$/, "").length);
       }
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// 기념일 고치기·지우기 선언 (2026-10-19)
+// ─────────────────────────────────────────────────────────────
+
+describe("기념일 고치기 — 선언", () => {
+  const anniversary = () => RESOURCES.find((r) => r.key === "anniversary")!;
+
+  it("경로는 기존 라우트 하나다", () => {
+    expect(anniversary().update!.api("a1")).toBe("/api/anniversaries/a1");
+    expect(anniversary().remove!.api("a1")).toBe("/api/anniversaries/a1");
+  });
+
+  it("준 칸만 본문에 담는다 — 빠진 칸을 null 로 바꾸면 그 칸이 지워진다", async () => {
+    const body = await anniversary().update!.toBody({ note: "케이크 예약" });
+    expect(body).toEqual({ note: "케이크 예약" });
+  });
+
+  it("빈 문자열은 '안 바꿈' 이다 — 모델은 안 바꿀 칸을 \"\" 로 채워 보내곤 한다", async () => {
+    const body = await anniversary().update!.toBody({ title: "", date: "", note: "", memberName: "", emoji: "", date2: "x" });
+    expect(body).toEqual({});
+  });
+
+  it("비우기는 null·\"없음\" 일 때만", async () => {
+    expect(await anniversary().update!.toBody({ note: null })).toEqual({ note: null });
+    expect(await anniversary().update!.toBody({ note: "없음", memberName: "없음" })).toEqual({ note: null, memberId: null });
+  });
+
+  it("사람은 이름으로 받아 id 로 바꾼다", async () => {
+    db.first = { familyMember: { id: "m7" } };
+    expect(await anniversary().update!.toBody({ memberName: "엄마" })).toEqual({ memberId: "m7" });
+  });
+
+  it("없는 사람이면 한국어로 던진다 — 엉뚱한 사람으로 고치지 않는다", async () => {
+    db.first = { familyMember: null };
+    await expect(anniversary().update!.toBody({ memberName: "삼촌" })).rejects.toThrow("삼촌");
+  });
+
+  it("값은 PATCH 본문 모양 그대로 — 날짜는 **로컬** yyyy-MM-dd(한국 자정을 ISO 로 자르면 하루 당겨진다)", async () => {
+    const saved = process.env.TZ;
+    process.env.TZ = "Asia/Seoul"; // 운영과 같은 조건 — UTC 로 돌면 ISO 로 잘라도 우연히 맞는다
+    try {
+      db.first = {
+        anniversary: {
+          title: "결혼기념일", date: new Date(2026, 5, 20), type: "anniversary",
+          recurring: true, note: null, memberId: null, emoji: "💍",
+        },
+      };
+      const snap = await anniversary().update!.snapshot("a1");
+      expect(snap).toEqual({
+        title: "결혼기념일", date: "2026-06-20", type: "anniversary",
+        recurring: true, note: null, memberId: null, emoji: "💍",
+      });
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
+  });
+
+  it("없는 id 면 null", async () => {
+    db.first = { anniversary: null };
+    expect(await anniversary().update!.snapshot("nope")).toBeNull();
+  });
+
+  it("되돌릴 때 받는 칸(fields)은 지금 값이 내는 칸을 전부 담는다 — 빠지면 조용히 안 되돌아간다", async () => {
+    db.first = {
+      anniversary: { title: "t", date: new Date(2026, 0, 1), type: "event", recurring: false, note: "n", memberId: "m", emoji: "🎉" },
+    };
+    const snap = await anniversary().update!.snapshot("a1");
+    expect(Object.keys(snap!).sort()).toEqual([...anniversary().update!.fields].sort());
+  });
+
+  it("toBody 가 만들 수 있는 키는 모두 되돌릴 수 있다", async () => {
+    db.first = { familyMember: { id: "m7" } };
+    const body = await anniversary().update!.toBody({
+      title: "t", date: "2026-01-01", type: "event", recurring: false, note: "n", memberName: "엄마", emoji: "🎂",
+    });
+    for (const k of Object.keys(body)) expect(anniversary().update!.fields, k).toContain(k);
   });
 });

@@ -30,12 +30,14 @@ afterEach(() => {
 });
 
 describe("toolSchemas", () => {
-  it("도구는 4개 고정이다", () => {
+  it("도구는 6개 고정이다", () => {
     // 다섯째였던 `view_screen` 은 **언제나 "지원 안 함"** 만 돌려주던 껍데기였다.
     // 모델이 그걸 한 번 부르면 여섯 걸음 중 한 걸음이 사라진다. 화면 위치는 이제
     // 안내문으로 준다(loop.ts 의 `screenLine`) — 물어서 알 것이 아니라 아는 것이다.
+    // 2026-10-19 고치기·지우기가 열려(집주인 결정) 4 → 6. 고칠 수 있는 리소스가 없어도
+    // 도구는 그대로 있다(create_item 이 빈 목록일 때와 같은 규칙).
     expect(toolSchemas(FAKE).map((t) => t.name).sort()).toEqual(
-      ["create_item", "list_resource", "open_page", "read_url"]
+      ["create_item", "delete_item", "list_resource", "open_page", "read_url", "update_item"]
     );
   });
   it("create_item 의 resource enum 은 추가 가능한 리소스만 담는다", () => {
@@ -155,6 +157,30 @@ const STRICT: AgentResource = {
   },
 };
 
+/** 고치기·지우기를 선언한 리소스. snapshot·catalog 는 테스트가 바꿔 낀다. */
+const annvState = {
+  snapshot: { title: "결혼기념일", date: "2026-06-20", note: "옛 메모", recurring: true } as Record<string, string | boolean | null> | null,
+  entries: [{ id: "a1", title: "결혼기념일", hint: "6월 20일 (토) · D-244" }] as { id?: string; title: string; hint?: string }[],
+};
+const EDITABLE: AgentResource = {
+  key: "annv", label: "기념일", listPath: "/anniversaries",
+  catalog: async () => annvState.entries,
+  update: {
+    api: (id) => `/api/anniversaries/${id}`,
+    describe: "기념일을 고친다",
+    schema: { type: "object", properties: { note: { type: "string", description: "메모" }, date: { type: "string", description: "날짜" } } },
+    toBody: async (a) => {
+      const body: Record<string, unknown> = {};
+      if (typeof a.note === "string" && a.note) body.note = a.note;
+      if (typeof a.date === "string" && a.date) body.date = a.date;
+      return body;
+    },
+    snapshot: async () => annvState.snapshot,
+    fields: ["title", "date", "note", "recurring"],
+  },
+  remove: { api: (id) => `/api/anniversaries/${id}` },
+};
+
 const BROKEN: AgentResource = {
   key: "broken", label: "고장", listPath: "/broken",
   catalog: async () => {
@@ -177,7 +203,7 @@ const jsonFetch = (status: number, body: unknown) =>
 describe("toolSchemas 생성 규칙", () => {
   it("리소스를 더해도 도구 수는 그대로고 enum 만 늘어난다", () => {
     const schemas = toolSchemas([...FAKE, MEMO]);
-    expect(schemas).toHaveLength(4);
+    expect(schemas).toHaveLength(6);
     const create = schemas.find((t) => t.name === "create_item")!;
     expect(create.parameters.properties.resource.enum).toEqual(["link", "memo"]);
     const list = schemas.find((t) => t.name === "list_resource")!;
@@ -199,11 +225,30 @@ describe("toolSchemas 생성 규칙", () => {
     expect(open.description).toContain("/baby");
   });
 
-  it("수정·삭제 도구는 존재하지 않는다", () => {
-    const dump = JSON.stringify(toolSchemas([...FAKE, MEMO]));
-    for (const banned of ["update_", "edit_", "delete_", "remove_"]) {
-      expect(dump).not.toContain(banned);
-    }
+  it("고치기·지우기의 enum 은 선언한 리소스만 담는다 — 선언 안 한 것은 못 고친다", () => {
+    const schemas = toolSchemas([...FAKE, MEMO, EDITABLE]);
+    const update = schemas.find((t) => t.name === "update_item")!;
+    const remove = schemas.find((t) => t.name === "delete_item")!;
+    expect(update.parameters.properties.resource.enum).toEqual(["annv"]);
+    expect(remove.parameters.properties.resource.enum).toEqual(["annv"]);
+    // 아무도 선언하지 않으면 enum 이 비고 설명이 "없음" 을 말한다.
+    const none = toolSchemas([...FAKE, MEMO]);
+    expect(none.find((t) => t.name === "update_item")!.parameters.properties.resource.enum).toEqual([]);
+    expect(none.find((t) => t.name === "update_item")!.parameters.properties.args.description).toContain("고칠 수 있는 항목이 없습니다");
+  });
+
+  it("고치기 args 설명은 고칠 수 있는 리소스만 싣는다(왕복마다 나가는 글)", () => {
+    const update = toolSchemas([...FAKE, MEMO, EDITABLE]).find((t) => t.name === "update_item")!;
+    const help = update.parameters.properties.args.description;
+    expect(help).toContain("기념일을 고친다");
+    expect(help).not.toContain("메모를 남긴다");
+  });
+
+  it("지우기 설명은 '지우지 않는다·지웠다고 말하지 않는다' 를 말한다", () => {
+    const remove = toolSchemas([EDITABLE]).find((t) => t.name === "delete_item")!;
+    expect(remove.description).toContain("이 도구는 지우지 않는다");
+    expect(remove.description).toContain("지웠다고 말하지 않는다");
+    expect(remove.description).toContain("먼저 물어본다");
   });
 });
 
@@ -1010,5 +1055,129 @@ describe("상세에서 집안 사정을 걷어낸다", () => {
     let deep: Record<string, unknown> = { createdAt: "x" };
     for (let i = 0; i < 30; i += 1) deep = { child: deep };
     expect(() => stripInternals(deep)).not.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// 고치기·지우기 (2026-10-19)
+// ─────────────────────────────────────────────────────────────
+
+describe("update_item", () => {
+  afterEach(() => {
+    annvState.snapshot = { title: "결혼기념일", date: "2026-06-20", note: "옛 메모", recurring: true };
+    annvState.entries = [{ id: "a1", title: "결혼기념일", hint: "6월 20일 (토) · D-244" }];
+  });
+
+  it("고치기 전 값을 되돌리기에 담는다 — **바꾼 칸만**", async () => {
+    const f = jsonFetch(200, { id: "a1", title: "결혼기념일", note: "새 메모", canEdit: true });
+    const r = await executeTool("update_item", { resource: "annv", id: "a1", args: { note: "새 메모" } }, ctxOf([EDITABLE], f));
+    expect(r.ok).toBe(true);
+    const ok = r as Extract<typeof r, { ok: true }>;
+    expect(ok.undo).toEqual({ kind: "update", resource: "annv", id: "a1", restore: { note: "옛 메모" } });
+    // 날짜·제목은 안 바꿨으니 되돌리기에도 없다 — 담으면 그 사이 다른 사람이 고친 것을 덮는다.
+    expect(ok.undo).not.toHaveProperty("restore.date");
+    expect(ok.label).toBe("기념일 고침 · 결혼기념일");
+    expect(ok.stored).toEqual({ title: "결혼기념일", hint: "6월 20일 (토) · D-244" });
+    const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(url).toBe("http://t.local/api/anniversaries/a1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ note: "새 메모" });
+    expect((init.headers as Record<string, string>).cookie).toBe("podong_session=x");
+    expect(init.redirect).toBe("manual");
+  });
+
+  it("args 를 감싸지 않고 보내도 id 는 고칠 칸으로 새지 않는다", async () => {
+    const f = jsonFetch(200, { id: "a1" });
+    await executeTool("update_item", { resource: "annv", id: "a1", note: "평평" }, ctxOf([EDITABLE], f));
+    const [, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({ note: "평평" });
+  });
+
+  it("없는 항목이면 PATCH 를 보내지 않고 실패한다", async () => {
+    annvState.snapshot = null;
+    const f = jsonFetch(200, {});
+    const r = await executeTool("update_item", { resource: "annv", id: "gone", args: { note: "x" } }, ctxOf([EDITABLE], f));
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("찾지 못했어요");
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("id 가 경로 조각이 될 수 없는 글자면 거절한다", async () => {
+    const f = jsonFetch(200, {});
+    for (const id of ["../site-config", "a/b", "", "a?x=1"]) {
+      const r = await executeTool("update_item", { resource: "annv", id, args: { note: "x" } }, ctxOf([EDITABLE], f));
+      expect(r.ok, id).toBe(false);
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("바꿀 것이 없으면 묻는다 — 빈 PATCH 를 보내지 않는다", async () => {
+    const f = jsonFetch(200, {});
+    const r = await executeTool("update_item", { resource: "annv", id: "a1", args: { note: "" } }, ctxOf([EDITABLE], f));
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("무엇을");
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("403 문구를 그대로 모델에게 — 왜 못 하는지 정직하게 말하게", async () => {
+    const f = jsonFetch(403, { error: "만든 사람이나 관리자만 고칠 수 있어요." });
+    const r = await executeTool("update_item", { resource: "annv", id: "a1", args: { note: "x" } }, ctxOf([EDITABLE], f));
+    expect(r).toEqual({ ok: false, error: "만든 사람이나 관리자만 고칠 수 있어요." });
+  });
+
+  it("고칠 수 없는 리소스는 거절한다", async () => {
+    const r = await executeTool("update_item", { resource: "memo", id: "m1", args: { text: "x" } }, ctxOf([MEMO, EDITABLE]));
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("고칠 수 없어요");
+  });
+
+  it("toBody 가 던진 한국어 안내를 그대로 옮긴다", async () => {
+    const THROWS: AgentResource = {
+      ...EDITABLE,
+      update: { ...EDITABLE.update!, toBody: async () => { throw new Error("가족 구성원 \"삼촌\" 을(를) 찾지 못했어요."); } },
+    };
+    const r = await executeTool("update_item", { resource: "annv", id: "a1", args: { memberName: "삼촌" } }, ctxOf([THROWS]));
+    expect(r).toEqual({ ok: false, error: "가족 구성원 \"삼촌\" 을(를) 찾지 못했어요." });
+  });
+});
+
+describe("delete_item — 지우지 않는다", () => {
+  afterEach(() => {
+    annvState.entries = [{ id: "a1", title: "결혼기념일", hint: "6월 20일 (토) · D-244" }];
+  });
+
+  it("확인 카드만 돌려주고 **HTTP 요청을 하나도 보내지 않는다**", async () => {
+    const f = vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    const r = await executeTool("delete_item", { resource: "annv", id: "a1" }, ctxOf([EDITABLE], f));
+    expect(f).not.toHaveBeenCalled();
+    expect(r.ok).toBe(true);
+    const ok = r as Extract<typeof r, { ok: true }>;
+    expect(ok.confirmRemove).toEqual({ resource: "annv", id: "a1", title: "결혼기념일", hint: "6월 20일 (토) · D-244" });
+    expect(ok.label).toBe("기념일 · 결혼기념일");
+    // 되돌리기는 없다 — 아직 아무 일도 일어나지 않았다.
+    expect(ok).not.toHaveProperty("undo");
+    // 모델이 읽는 data 가 "아직 안 지웠다" 를 말한다.
+    const data = ok.data as { pending: boolean; message: string };
+    expect(data.pending).toBe(true);
+    expect(data.message).toContain("아직 지워지지 않았다");
+    expect(data.message).toContain("지웠다고 말하지 않는다");
+  });
+
+  it("목록에 없는 id 면 실패한다", async () => {
+    const r = await executeTool("delete_item", { resource: "annv", id: "zz" }, ctxOf([EDITABLE]));
+    expect(r).toEqual({ ok: false, error: "그 항목을 찾지 못했어요. 목록에서 id 를 다시 확인해 주세요." });
+  });
+
+  it("지울 수 없는 리소스는 거절한다", async () => {
+    const r = await executeTool("delete_item", { resource: "memo", id: "m1" }, ctxOf([MEMO, EDITABLE]));
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("지울 수 없어요");
+  });
+
+  it("목록을 못 읽으면 실패로 — 없다고 단정하지 않는다", async () => {
+    const BROKEN_ANNV: AgentResource = { ...EDITABLE, catalog: async () => { throw new Error("db down"); } };
+    const r = await executeTool("delete_item", { resource: "annv", id: "a1" }, ctxOf([BROKEN_ANNV]));
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("목록을 읽지 못했어요");
   });
 });

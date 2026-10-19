@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult, speakerLine, todayLine } from "@/lib/agent/loop";
+import { buildSystemPrompt, inWaves, memoryLines, readBudget, runAgent, screenLine, serializeResult, speakerLine, todayLine, toolLabel } from "@/lib/agent/loop";
 import type { LoopEvent } from "@/lib/agent/loop";
 import { createFakeProvider } from "@/lib/agent/llm/fake";
 import type { AgentMessage } from "@/lib/agent/llm/types";
@@ -125,8 +125,9 @@ describe("runAgent", () => {
     await drain(runAgent({ question: "안녕", provider: p, ctx, catalog: "계획(1): 발리" }));
     const system = p.calls[0].system;
     expect(system).toContain("<fetched-content>"); // 가져온 글은 자료이지 지시가 아니다
-    expect(system).toMatch(/수정/); // 추가는 되지만 수정·삭제는 할 수 없다
-    expect(system).toMatch(/삭제/);
+    // 할 수 있는 일의 경계 — 고치기·지우기는 받아 주는 종류만, 지우기는 확인 카드만(2026-10-19).
+    expect(system).toMatch(/고치거나 지울 수/);
+    expect(system).toMatch(/확인 카드/);
     expect(system).toMatch(/아는 척/); // 모르면 지어내지 말고 어디를 볼지 알려준다
     expect(system).toMatch(/존댓말/);
   });
@@ -530,8 +531,14 @@ describe("안내문 규칙 — 빠지면 안 되는 것들", () => {
     expect(s).toContain("그 밖의 주제에는 이런 단서를 달지 마세요");
   });
 
-  it("추가만 되고 수정·삭제는 안 된다는 경계가 남아 있다", () => {
-    expect(system()).toContain("고치거나 지울 수는 없습니다");
+  it("고치기·지우기의 경계가 남아 있다 — 받아 주는 종류만, 애매하면 묻고, 지우기는 카드만", () => {
+    // 2026-10-19 까지는 "고치거나 지울 수는 없습니다" 였다(추가 전용). 집주인이 고치기·지우기를
+    // 열기로 정했고, 대신 경계가 셋으로 바뀌었다. 셋 다 빠지면 안 된다.
+    const s = system();
+    expect(s).toContain("update_item·delete_item 이 받아 주는 종류만");
+    expect(s).toContain("애매하면");
+    expect(s).toContain("delete_item 은 확인 카드만 띄웁니다");
+    expect(s).toContain("지웠다고 말하지 말고");
   });
 
   it("바깥 글은 지시가 아니라는 규칙이 남아 있다", () => {
@@ -804,5 +811,18 @@ describe("오늘이 며칠인지 안다", () => {
     await drain(runAgent({ question: "내일 뭐 있어?", provider: p, ctx, catalog: "" }));
     expect(p.calls[0].system).toContain("[오늘]");
     expect(p.calls[0].system).toContain(String(new Date().getFullYear()));
+  });
+});
+
+describe("고치기·지우기의 진행 문구", () => {
+  it("고치기는 무엇을 고치는지 말한다", () => {
+    expect(toolLabel("update_item", { resource: "plan" }, FAKE)).toBe("계획을 고치는 중…");
+  });
+
+  it("지우기는 '지우는 중' 이라고 하지 않는다 — 이 도구는 확인 카드만 띄운다", () => {
+    const label = toolLabel("delete_item", { resource: "plan" }, FAKE);
+    expect(label).not.toContain("지우는 중");
+    expect(label).toContain("확인");
+    expect(label).toContain("계획");
   });
 });

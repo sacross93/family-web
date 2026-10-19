@@ -1,4 +1,5 @@
-// 에이전트가 다루는 리소스 18종. 목차(catalog)·상세(detail)·추가(create)가 모두 여기서 파생된다.
+// 에이전트가 다루는 리소스 18종. 목차(catalog)·상세(detail)·추가(create)·고치기(update)·지우기(remove)가 모두 여기서 파생된다.
+// 고치기·지우기는 선언한 리소스만 된다(지금은 기념일 하나 — 2026-10-19 집주인이 정했다).
 // 규칙: LLM 에게 내부 식별자(cuid)를 묻지 않는다. 앨범/계획은 제목으로, 아기 페이지는 한 쪽(단계는 서버가 정한다)으로,
 // 가족 구성원은 이름(또는 역할)으로 찾아 toBody 가 채운다.
 // 값 검증은 기존 API 라우트가 하므로 여기서 중복하지 않는다(빈 값은 undefined 로 넘겨 기본값을 살린다).
@@ -9,10 +10,10 @@ import { CYCLE_KIND_META, TEST_RESULT_META, type CycleKind, type TestResult } fr
 import { journeyState, prepCountdown } from "@/lib/journey";
 // 날짜는 `kDateShortYear` 로. 다른 해면 해를 밝힌다 — 포동이가 "내일" 을 2020년으로
 // 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
-import { dday, kDateShortYear, kTime, startOfDay } from "@/lib/date";
+import { dday, kDateShortYear, kTime, startOfDay, toDateInput } from "@/lib/date";
 import { NAV } from "@/lib/nav";
 import { MEMORY_BY, byLabel } from "./name";
-import type { AgentResource, CatalogEntry } from "./registry";
+import type { AgentResource, CatalogEntry, FieldValue } from "./registry";
 
 /** 빈 문자열·공백은 "값 없음"으로 본다. */
 function optStr(v: unknown): string | undefined {
@@ -86,6 +87,15 @@ async function memberIdByName(name: unknown): Promise<string | undefined> {
   });
   if (!member) throw new Error(`가족 구성원 "${n}" 을(를) 찾지 못했어요.`);
   return member.id;
+}
+
+/**
+ * 고치기에서 "비워 달라" 는 신호인가. **빈 문자열은 신호가 아니다** — 모델은 안 바꿀 칸을
+ * `""` 로 채워 보내곤 해서, 그걸 비우기로 읽으면 "날짜 고쳐 줘" 에 메모가 사라진다.
+ * 그래서 JSON `null` 이나 말 그대로 "없음" 일 때만 비운다(스키마 설명이 모델에게 그렇게 알린다).
+ */
+function asClear(v: unknown): boolean {
+  return v === null || (typeof v === "string" && v.trim() === "없음");
 }
 
 /**
@@ -575,6 +585,77 @@ export const RESOURCES: AgentResource[] = [
         };
       },
       undoApi: (id) => `/api/anniversaries/${id}`,
+    },
+    // 고치기·지우기(2026-10-19, 집주인이 정했다). 권한은 라우트가 판단한다 — 만든 사람이나 관리자.
+    // 포동이는 요청자의 쿠키로 PATCH 하므로 화면에서 누른 것과 권한이 같다(lib/anniversary.ts).
+    update: {
+      api: (id) => `/api/anniversaries/${id}`,
+      describe: "기념일을 고친다. 바꿀 칸만 넣는다.",
+      schema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "새 이름(선택)" },
+          date: { type: "string", description: "새 날짜 yyyy-MM-dd(선택)" },
+          type: {
+            type: "string",
+            description: "새 종류(선택)",
+            enum: ["birthday", "anniversary", "memorial", "event"],
+          },
+          recurring: { type: "boolean", description: "매년 반복 여부(선택)" },
+          note: { type: "string", description: "새 메모(선택). 메모를 지우려면 \"없음\"" },
+          memberName: {
+            type: "string",
+            description: "관련된 사람(선택). 가족 이름이나 역할 그대로. 사람을 빼려면 \"없음\"",
+          },
+          emoji: { type: "string", description: "새 이모지 하나(선택)" },
+        },
+      },
+      async toBody(args) {
+        // 준 키만 담는다. undefined 는 JSON.stringify 가 떨궈 PATCH 본문에 안 실리지만,
+        // 되돌리기 값이 "보낸 키" 로 정해지므로 여기서부터 아예 빼 둔다.
+        const body: Record<string, unknown> = {};
+        const title = optStr(args.title);
+        if (title) body.title = title;
+        const date = optStr(args.date);
+        if (date) body.date = date;
+        const type = optStr(args.type);
+        if (type) body.type = type;
+        const recurring = optBool(args.recurring);
+        if (recurring !== undefined) body.recurring = recurring;
+        if (asClear(args.note)) body.note = null;
+        else if (optStr(args.note)) body.note = optStr(args.note);
+        // 사람: "없음" 이면 뺀다. 이름이 있는데 못 찾으면 memberIdByName 이 한국어로 던진다 →
+        // 도구가 그대로 모델에게 돌려준다(엉뚱한 사람으로 고치는 것보다 낫다).
+        if (asClear(args.memberName)) body.memberId = null;
+        else if (optStr(args.memberName)) body.memberId = await memberIdByName(args.memberName);
+        const emoji = optStr(args.emoji);
+        if (emoji) body.emoji = emoji;
+        return body;
+      },
+      async snapshot(id) {
+        const a = await prisma.anniversary.findUnique({
+          where: { id },
+          select: { title: true, date: true, type: true, recurring: true, note: true, memberId: true, emoji: true },
+        });
+        if (!a) return null;
+        const values: Record<string, FieldValue> = {
+          title: a.title,
+          // **toISOString 이 아니라 로컬 yyyy-MM-dd.** 라우트는 "yyyy-MM-dd" 를 서버 로컬 자정으로 읽는다.
+          // 한국 자정은 UTC 로 전날 15시라 ISO 앞 열 글자를 쓰면 되돌릴 때마다 하루씩 당겨진다.
+          // 이 함수는 라우트와 같은 서버에서 돌므로 로컬끼리 왕복한다.
+          date: toDateInput(a.date),
+          type: a.type,
+          recurring: a.recurring,
+          note: a.note,
+          memberId: a.memberId,
+          emoji: a.emoji,
+        };
+        return values;
+      },
+      fields: ["title", "date", "type", "recurring", "note", "memberId", "emoji"],
+    },
+    remove: {
+      api: (id) => `/api/anniversaries/${id}`,
     },
   },
 

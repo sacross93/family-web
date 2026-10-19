@@ -1,10 +1,12 @@
 // 2층 — 도구. 스키마는 레지스트리에서 "생성"하고, 실행은 기존 API 라우트를 그대로 부른다.
-// 규칙 셋: ① 도구 개수는 리소스 수와 무관하게 4개 고정 ② 추가만 되고 수정·삭제는 없다
-// ③ 어떤 도구도 예외를 던지지 않는다(실패는 { ok:false, error } 로 돌려 모델이 스스로 고치게 한다).
+// 규칙 넷: ① 도구 개수는 리소스 수와 무관하게 6개 고정 ② 고치기·지우기는 리소스가 선언한 것만
+// (`update`·`remove`), 리소스별 분기 없이 ③ **모델은 지우지 않는다** — `delete_item` 은 확인 카드만
+// 띄우고 가족이 눌러야 지워진다 ④ 어떤 도구도 예외를 던지지 않는다(실패는 { ok:false, error } 로
+// 돌려 모델이 스스로 고치게 한다).
 
 import { agentConfig } from "./config";
-import { detailPath, findResource, resolvePath } from "./registry";
-import type { AgentResource, CreateSpec, JsonSchema, ToolSchema } from "./registry";
+import { ITEM_ID_RE, detailPath, findResource, resolvePath } from "./registry";
+import type { AgentResource, CreateSpec, FieldValue, JsonSchema, ToolSchema } from "./registry";
 import { LIST_TAKE, MORE_TITLE, RESOURCES } from "./resources";
 import { budgetBodies, composeRead } from "./read/budget";
 import { extractPage, looksBlocked } from "./read/extract";
@@ -41,11 +43,33 @@ export interface ToolContext {
   maxChars?: number;
 }
 
+/**
+ * 되돌리기 서술자. 서버(`/api/agent/undo`)가 경로를 레지스트리에서 만든다 — 여기엔 경로가 없다.
+ *
+ * - 만든 것: `{ resource, id }` → DELETE. **`kind` 가 없다** — 이 모양으로 저장된 옛 대화가 있어서
+ *   없으면 만든 것으로 읽는다(라우트·화면 둘 다).
+ * - 고친 것: `{ kind:"update", resource, id, restore }` → 고치기 직전 값으로 다시 PATCH.
+ *   `restore` 는 **바꾼 칸만** 담는다. 다 담으면 그 사이 다른 사람이 고친 칸까지 옛 값으로 덮는다.
+ */
+export type CreateUndo = { kind?: "create"; resource: string; id: string };
+export type UpdateUndo = { kind: "update"; resource: string; id: string; restore: Record<string, FieldValue> };
+export type UndoInfo = CreateUndo | UpdateUndo;
+
+/** 지우기 확인 카드. 화면이 이것을 보고 [지우기] 버튼을 그린다 — 누르면 `/api/agent/remove`. */
+export interface ConfirmRemove {
+  resource: string;
+  id: string;
+  title: string;
+  hint?: string;
+}
+
 export type ToolResult =
   | {
       ok: true;
       data: unknown;
-      undo?: { resource: string; id: string };
+      undo?: UndoInfo;
+      /** `delete_item` 의 결과. **아직 안 지웠다** — 가족이 카드를 눌러야 지워진다. */
+      confirmRemove?: ConfirmRemove;
       label?: string;
       path?: string;
       /** 도구가 가져온 그림(data URL). **`data` 안에 넣지 않는다** — 루프가 data 를 JSON 으로
@@ -82,8 +106,8 @@ function resourceHints(resources: AgentResource[]): string {
   return resources.map((r) => `${r.key}=${r.label}`).join(" · ");
 }
 
-/** 리소스 하나의 인자 안내. JsonSchema 가 중첩 객체를 담지 못하므로 글로 풀어 준다. */
-function createHint(resource: AgentResource, spec: CreateSpec): string {
+/** 리소스 하나의 인자 안내. JsonSchema 가 중첩 객체를 담지 못하므로 글로 풀어 준다(추가·고치기 공통). */
+function createHint(resource: AgentResource, spec: Pick<CreateSpec, "describe" | "schema">): string {
   const required = new Set(spec.schema.required ?? []);
   const fields = Object.entries(spec.schema.properties).map(([name, f]) => {
     const mark = required.has(name) ? "*" : "";
@@ -100,6 +124,13 @@ function createHelp(creatable: AgentResource[]): string {
   return `resource 에 따라 넣을 값이 다릅니다(별표* 는 필수).\n${body}`;
 }
 
+/** 고치기 args 설명. 고칠 수 있는 리소스만 싣는다 — 왕복마다 나가는 글이라 16종을 다 적을 이유가 없다. */
+function updateHelp(editable: AgentResource[]): string {
+  if (editable.length === 0) return "지금은 고칠 수 있는 항목이 없습니다.";
+  const body = editable.map((r) => createHint(r, r.update!)).join("\n");
+  return `바꿀 칸만 넣습니다(안 바꿀 칸은 빼세요).\n${body}`;
+}
+
 function objectSchema(properties: JsonSchema["properties"], required?: string[]): JsonSchema {
   return required && required.length > 0
     ? { type: "object", properties, required }
@@ -107,11 +138,14 @@ function objectSchema(properties: JsonSchema["properties"], required?: string[])
 }
 
 /**
- * LLM 에게 노출할 도구 4개. 리소스가 15개든 50개든 개수는 그대로고,
+ * LLM 에게 노출할 도구 6개. 리소스가 15개든 50개든 개수는 그대로고,
  * 달라지는 것은 enum 과 설명뿐이다(그래서 새 기능이 생겨도 이 파일은 바뀌지 않는다).
+ * 고치기·지우기를 여는 것도 도구가 아니라 리소스의 `update`·`remove` 선언이다.
  */
 export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[] {
   const creatable = resources.filter((r) => r.create);
+  const editable = resources.filter((r) => r.update);
+  const removable = resources.filter((r) => r.remove);
 
   return [
     {
@@ -145,7 +179,7 @@ export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[
     {
       name: "create_item",
       description:
-        `사이트에 새 항목을 추가한다. 추가만 할 수 있고 고치거나 지울 수는 없다. ` +
+        `사이트에 새 항목을 추가한다. 이미 있는 것을 고치려면 update_item, 지우려면 delete_item 이다. ` +
         `사용자가 분명히 요청했을 때만 쓰고, 값이 모자라면 먼저 물어본다. ` +
         `결과의 stored 는 만든 뒤 목록에서 **다시 읽은 실제 저장 모습**이다 — ` +
         `사용자에게 알릴 때는 보낸 값이 아니라 stored 를 보고 말한다(날짜 같은 값이 빠졌으면 여기서 드러난다). ` +
@@ -160,6 +194,48 @@ export function toolSchemas(resources: AgentResource[] = RESOURCES): ToolSchema[
           args: { type: "object", description: createHelp(creatable) },
         },
         ["resource", "args"]
+      ),
+    },
+    {
+      name: "update_item",
+      description:
+        `이미 있는 항목을 고친다. 고칠 수 있는 종류: ${resourceHints(editable) || "없음"}. ` +
+        `사용자가 분명히 고쳐 달라고 했을 때만 쓴다. id 는 list_resource 로 본 목록의 id 를 그대로 쓴다(지어내지 않는다). ` +
+        `어느 항목인지 애매하면(이름이 같거나 비슷한 것이 둘 이상 — 예: "생일" 이 여럿) 고치기 전에 먼저 물어본다. ` +
+        `권한은 로그인한 계정을 따른다 — "만든 사람이나 관리자만" 같은 실패가 오면 다시 시도하지 말고 그대로 알린다. ` +
+        `결과의 stored 는 고친 뒤 다시 읽은 실제 모습이다(알릴 때는 이것을 보고 말한다). 결과 카드에 [되돌리기]가 붙는다.`,
+      parameters: objectSchema(
+        {
+          resource: {
+            type: "string",
+            description: "고칠 종류의 key",
+            enum: editable.map((r) => r.key),
+          },
+          id: { type: "string", description: "고칠 항목의 id(list_resource 목록의 id)" },
+          args: { type: "object", description: updateHelp(editable) },
+        },
+        ["resource", "id", "args"]
+      ),
+    },
+    {
+      name: "delete_item",
+      description:
+        `항목을 지울지 묻는 **확인 카드**를 가족 화면에 띄운다. **이 도구는 지우지 않는다** — 가족이 카드의 [지우기]를 눌러야 지워진다. ` +
+        `그래서 부른 뒤에는 "확인 카드를 띄웠어요. [지우기]를 눌러 주세요" 라고 말하고, **지웠다고 말하지 않는다.** ` +
+        `지울 수 있는 종류: ${resourceHints(removable) || "없음"}. ` +
+        `사용자가 분명히 지워 달라고 했을 때만 쓴다. id 는 list_resource 로 본 목록의 id 를 그대로 쓴다. ` +
+        `어느 항목인지 애매하면(이름이 같거나 비슷한 것이 둘 이상) 먼저 물어본다. ` +
+        `지운 것은 되돌릴 수 없다. 권한(만든 사람이나 관리자)은 가족이 카드를 누를 때 확인된다.`,
+      parameters: objectSchema(
+        {
+          resource: {
+            type: "string",
+            description: "지울 종류의 key",
+            enum: removable.map((r) => r.key),
+          },
+          id: { type: "string", description: "지울 항목의 id(list_resource 목록의 id)" },
+        },
+        ["resource", "id"]
       ),
     },
     {
@@ -353,13 +429,16 @@ async function listResource(args: Record<string, unknown>, resources: AgentResou
 
 // ── create_item ───────────────────────────────────────────────
 
-/** 모델이 args 로 감싸지 않고 값을 평평하게 보내는 경우까지 받아 준다. */
-function createArgs(args: Record<string, unknown>): Record<string, unknown> {
+/**
+ * 모델이 args 로 감싸지 않고 값을 평평하게 보내는 경우까지 받아 준다.
+ * `skip` 은 도구 자체의 인자 — 고치기에서는 `id` 가 여기 들어간다(빠지면 id 가 고칠 칸으로 샌다).
+ */
+function createArgs(args: Record<string, unknown>, skip: string[] = ["resource", "args"]): Record<string, unknown> {
   const nested = record(args.args);
   if (Object.keys(nested).length > 0) return nested;
   const rest: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args)) {
-    if (k !== "resource" && k !== "args") rest[k] = v;
+    if (!skip.includes(k)) rest[k] = v;
   }
   return rest;
 }
@@ -464,6 +543,131 @@ async function createItem(
     ...(stored ? { stored } : {}),
     label: createdLabel(resource, item, stored),
     path: id ? detailPath(resource, id) : resource.listPath,
+  };
+}
+
+// ── update_item ───────────────────────────────────────────────
+
+const ITEM_NOT_FOUND = "그 항목을 찾지 못했어요. 목록에서 id 를 다시 확인해 주세요.";
+
+function shortTitle(value: string): string {
+  return value.length > 40 ? `${value.slice(0, 40)}…` : value;
+}
+
+/**
+ * 고치기. 흐름은 추가와 같다(기존 PATCH 라우트를 요청자의 쿠키로 부르고, 되읽어 확인한다).
+ * 다른 점 하나: **고치기 전에 지금 값을 읽어 둔다** — 그것이 되돌리기다.
+ *
+ * 권한을 여기서 판단하지 않는다. 라우트가 판단하고(만든 사람이나 관리자), 403 문구는 그대로
+ * 모델에게 간다 — 모델이 "제가 못 고쳐요" 대신 **왜** 못 하는지를 정직하게 말하게.
+ */
+async function updateItem(
+  args: Record<string, unknown>,
+  resources: AgentResource[],
+  ctx: ToolContext
+): Promise<ToolResult> {
+  const editable = resources.filter((r) => r.update);
+  const key = str(args.resource);
+  const resource = key ? findResource(key, resources) : undefined;
+  if (!resource || !resource.update) {
+    return fail(`그건 고칠 수 없어요. 고칠 수 있는 종류: ${resourceHints(editable) || "없음"}`);
+  }
+  const spec = resource.update;
+
+  const id = str(args.id);
+  if (!id || !ITEM_ID_RE.test(id)) return fail(ITEM_NOT_FOUND);
+
+  const before = await spec.snapshot(id);
+  if (!before) return fail(ITEM_NOT_FOUND);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await spec.toBody(createArgs(args, ["resource", "id", "args"]));
+  } catch (e) {
+    return fail(humanError(e, `${resource.label}을(를) 고치지 못했어요. 값을 다시 확인해 주세요.`));
+  }
+  const sent = Object.keys(body).filter((k) => body[k] !== undefined);
+  if (sent.length === 0) return fail("무엇을 어떻게 바꿀지 알려 주세요. args 에 바꿀 칸을 넣어 주세요.");
+
+  const doFetch = ctx.fetchImpl ?? fetch;
+  let res: Response;
+  try {
+    res = await doFetch(`${ctx.origin}${spec.api(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", cookie: ctx.cookie },
+      body: JSON.stringify(body),
+      redirect: "manual",
+      signal: timeoutSignal(),
+    });
+  } catch {
+    return fail("사이트에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
+  }
+
+  const payload = await readJson(res);
+  if (!res.ok) return fail(humanError((payload as { error?: unknown } | undefined)?.error, statusMessage(res.status)));
+
+  // 되돌리기 값은 **보낸 칸만.** 안 바꾼 칸까지 담으면 그 사이 다른 사람이 고친 것을 옛 값으로 덮는다.
+  const restore: Record<string, FieldValue> = {};
+  for (const k of sent) {
+    if (k in before && spec.fields.includes(k)) restore[k] = before[k];
+  }
+  const stored = await confirmCreated(resource, id);
+  const title = stored?.title ?? str(body.title) ?? str(before.title);
+  return {
+    ok: true,
+    data: stripInternals(payload ?? {}),
+    undo: { kind: "update", resource: resource.key, id, restore },
+    ...(stored ? { stored } : {}),
+    label: title ? `${resource.label} 고침 · ${shortTitle(title)}` : `${resource.label} 고침`,
+    path: detailPath(resource, id),
+  };
+}
+
+// ── delete_item ───────────────────────────────────────────────
+
+/**
+ * 지우기 — **지우지 않는다.** 확인 카드만 돌려준다.
+ *
+ * 왜 모델이 직접 지우지 않는가: 추가·고치기는 카드의 [되돌리기]로 무를 수 있지만 지운 것은
+ * 되살릴 길이 없다. 모델이 "생일" 둘 중 엉뚱한 쪽을 골라도 가족이 카드의 제목·날짜를 보고
+ * 누르기 전에 알아챌 수 있어야 한다. 그래서 이 함수는 HTTP 요청을 하나도 보내지 않는다 —
+ * 실제 DELETE 는 가족이 누른 뒤 `/api/agent/remove` 가 레지스트리의 경로로만 한다.
+ *
+ * 항목은 목차(`catalog`)에서 찾는다. 모델이 볼 수 있는 것(list_resource)과 같은 범위라
+ * 상한(`LIST_TAKE`) 밖의 것은 못 찾는다 — 모델이 id 를 알 길도 없는 것들이다.
+ */
+async function deleteItem(args: Record<string, unknown>, resources: AgentResource[]): Promise<ToolResult> {
+  const removable = resources.filter((r) => r.remove);
+  const key = str(args.resource);
+  const resource = key ? findResource(key, resources) : undefined;
+  if (!resource || !resource.remove) {
+    return fail(`그건 지울 수 없어요. 지울 수 있는 종류: ${resourceHints(removable) || "없음"}`);
+  }
+
+  const id = str(args.id);
+  if (!id || !ITEM_ID_RE.test(id)) return fail(ITEM_NOT_FOUND);
+
+  let hit: { id?: string; title: string; hint?: string } | undefined;
+  try {
+    hit = (await resource.catalog()).find((e) => e.id === id);
+  } catch {
+    return fail("목록을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.");
+  }
+  if (!hit) return fail(ITEM_NOT_FOUND);
+
+  return {
+    ok: true,
+    data: {
+      pending: true,
+      message:
+        "아직 지워지지 않았다. 가족 화면에 확인 카드를 띄웠고, 가족이 카드의 [지우기]를 눌러야 지워진다. " +
+        "\"확인 카드를 띄웠어요. [지우기]를 눌러 주세요\" 라고 말하고, 지웠다고 말하지 않는다.",
+      title: hit.title,
+      ...(hit.hint ? { hint: hit.hint } : {}),
+    },
+    label: `${resource.label} · ${shortTitle(hit.title)}`,
+    path: detailPath(resource, id),
+    confirmRemove: { resource: resource.key, id, title: hit.title, ...(hit.hint ? { hint: hit.hint } : {}) },
   };
 }
 
@@ -938,7 +1142,7 @@ async function readUrl(args: Record<string, unknown>, ctx: ToolContext): Promise
   const target = externalUrl(rewriteKnownShell(requested ?? ""));
   if (!target) return fail(BLOCKED_MESSAGE); // 요청을 보내기 전에 막는다
 
-  // 유튜브는 읽는 방법이 다르다. 새 도구가 아니라 여기서 갈라진다(도구 수는 고정 — 지금 4개).
+  // 유튜브는 읽는 방법이 다르다. 새 도구가 아니라 여기서 갈라진다(도구 수는 고정 — 지금 6개).
   const videoId = youtubeId(target);
   if (videoId) return await readYoutube(videoId, ctx);
 
@@ -1018,6 +1222,10 @@ export async function executeTool(
         return await listResource(input, resources);
       case "create_item":
         return await createItem(input, resources, ctx);
+      case "update_item":
+        return await updateItem(input, resources, ctx);
+      case "delete_item":
+        return await deleteItem(input, resources);
       case "read_url":
         return await readUrl(input, ctx);
       default:

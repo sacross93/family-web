@@ -245,6 +245,57 @@ describe("visibleResults", () => {
   });
 });
 
+describe("visibleResults — 고친 것·지우기 확인 (2026-10-19)", () => {
+  const edited = (label: string, id: string, note: string) => ({
+    ok: true as const,
+    data: null,
+    label,
+    path: "/anniversaries",
+    undo: { kind: "update" as const, resource: "anniversary", id, restore: { note } },
+  });
+  const confirm = (label: string, id: string) => ({
+    ok: true as const,
+    data: { pending: true },
+    label,
+    path: "/anniversaries",
+    confirmRemove: { resource: "anniversary", id, title: label, hint: "11월 8일 (일)" },
+  });
+  const found = (label: string, path: string) => ({ ok: true as const, data: null, label, path });
+
+  it("기념일 카드는 path 가 전부 같아도 하나도 접지 않는다 — 접으면 되돌리기·지우기 버튼이 사라진다", () => {
+    const kept = visibleResults([
+      edited("기념일 고침 · 서연 생일", "a", "케이크"),
+      edited("기념일 고침 · 지훈 생일", "b", "선물"),
+      confirm("기념일 · 결혼기념일", "c"),
+      confirm("기념일 · 가족 여행", "d"),
+    ]);
+    expect(kept).toHaveLength(4);
+  });
+
+  it("지우기 확인 카드도 찾아준 곳의 상한을 받지 않는다", () => {
+    const places = ["가", "나", "다", "라", "마", "바"].map((n, i) => found(n, `/${i}`));
+    const kept = visibleResults([...places, confirm("기념일 · 결혼기념일", "c")]);
+    expect(kept.some((r) => r.confirmRemove)).toBe(true);
+  });
+
+  it("목록을 보고 지우기를 띄우면 같은 곳으로 가는 '찾아준 곳' 카드는 빠진다", () => {
+    const kept = visibleResults([found("기념일", "/anniversaries"), confirm("기념일 · 결혼기념일", "c")]);
+    expect(kept.map((r) => r.label)).toEqual(["기념일 · 결혼기념일"]);
+  });
+
+  it("새로고침 뒤에도 같은 카드가 나온다 — 저장된 tool 행에서 confirmRemove·restore 가 살아 온다", () => {
+    const bubbles = foldMessages([
+      { role: "user", content: "결혼기념일 지워 줘" },
+      { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "delete_item", args: {} }] },
+      { role: "tool", toolCallId: "c1", content: JSON.stringify(confirm("기념일 · 결혼기념일", "c")) },
+      { role: "assistant", content: "확인 카드를 띄웠어요." },
+    ]);
+    const assistant = bubbles[1] as Extract<(typeof bubbles)[number], { kind: "assistant" }>;
+    const [card] = visibleResults(assistant.results);
+    expect(card.confirmRemove).toEqual({ resource: "anniversary", id: "c", title: "기념일 · 결혼기념일", hint: "11월 8일 (일)" });
+  });
+});
+
 describe("사진 첨부", () => {
   it("foldMessages 가 사진 주소를 말풍선까지 옮긴다", () => {
     const messages: AgentMessage[] = [

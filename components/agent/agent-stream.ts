@@ -29,7 +29,8 @@ const MAX_PLACE_CARDS = 5;
  *
  * 카드는 두 종류다.
  *
- * - **만든 것**(`undo` 가 있다): 되돌리기를 품고 있는 **유일한 자리**다. 그래서 하나도 접지 않고
+ * - **만든 것**(`undo` 가 있다 — 만든 것·고친 것 둘 다 — 또는 지우기 확인 `confirmRemove`):
+ *   되돌리기·지우기 버튼을 품고 있는 **유일한 자리**다. 그래서 하나도 접지 않고
  *   합치지도 않는다. 리소스 18종 중 16종은 `detailPattern` 이 없어 만든 항목의 `path` 가
  *   목록 경로로 **모두 같아진다**(`lib/agent/registry.ts` 의 `detailPath`). 경로로 중복을 지우면
  *   "장보기에 우유·계란·빵 넣어줘" 의 두 번째·세 번째가 통째로 사라지고, 되돌릴 방법도 함께 사라진다.
@@ -37,15 +38,22 @@ const MAX_PLACE_CARDS = 5;
  *   바로 [보러가기]) 거쳐 간 곳이 다 쌓이면 방해가 된다. 같은 곳은 한 번만, 그리고 상한을 둔다.
  *   만든 카드가 이미 가리키는 곳도 빼 준다 — 같은 곳으로 가는 버튼이 둘일 이유가 없다.
  */
+/** 버튼을 품은 카드인가 — 접으면 그 버튼(되돌리기·지우기)이 함께 사라진다. */
+function holdsAction(result: OkResult): boolean {
+  return Boolean(result.undo || result.confirmRemove);
+}
+
 export function visibleResults(results: ToolResult[]): OkResult[] {
   const ok = results.filter((r): r is OkResult => r.ok && Boolean(r.label));
 
-  const made = ok.filter((r) => r.undo);
+  // 기념일은 detailPattern 이 없어 고친 카드·지우기 카드의 path 가 전부 `/anniversaries` 다.
+  // 경로로 접으면 "생일 둘 다 고쳐 줘" 의 둘째 카드가 되돌리기째 사라진다.
+  const made = ok.filter(holdsAction);
   const seen = new Set(made.map((r) => r.path).filter((p): p is string => Boolean(p)));
 
   const places: OkResult[] = [];
   for (const result of ok) {
-    if (result.undo) continue;
+    if (holdsAction(result)) continue;
     if (places.length === MAX_PLACE_CARDS) break;
     // 경로가 없는 결과(read_url 등)는 서로 겹칠 일이 없으니 라벨로 가른다.
     const at = result.path ?? `label:${result.label}`;
