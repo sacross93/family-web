@@ -18,6 +18,7 @@ import type {
   JourneyLink,
   CycleEvent,
 } from "@prisma/client";
+import type { LunarDate } from "@/lib/lunar";
 
 export type {
   FamilyMember,
@@ -47,7 +48,8 @@ export type PlanDetail = Plan & {
 };
 export type PlanWithCount = Plan & { _count: { items: number } };
 export type TodoWithMember = Todo & { member: FamilyMember | null };
-export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null };
+/** `lunar` 가 있으면 음력 기념일 — 읽을 때는 언제나 `ANNIVERSARY_LUNAR`(lib/anniversary.ts)로 같이 싣는다. */
+export type AnniversaryWithMember = Anniversary & { member: FamilyMember | null; lunar: LunarDate | null };
 /** 기념일 화면이 받는 것 — 고치기·지우기를 보일지는 서버가 정한다(lib/anniversary.ts). */
 export type AnniversaryItem = AnniversaryWithMember & { canEdit: boolean };
 export type BoardPostWithAuthor = BoardPost & { author: FamilyMember | null };

@@ -26,6 +26,7 @@ import { deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
+import { createRequire } from "node:module";
 
 const BASE = process.argv[2] || "http://localhost:3000";
 const USER = process.argv[3] || process.env.AUDIT_USER;
@@ -785,6 +786,125 @@ await step("기념일 지우기", async () => {
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(600);
   if ((await text()).includes(MARK + "기념")) throw new Error("서버엔 안 지워졌다");
+});
+
+// ── 음력 기념일 ───────────────────────────────────────────
+//
+// 음력 생일은 **저장된 양력 날짜로 세면 해마다 틀린다**(엄마 생일 음력 3월 15일 = 1962-04-19 지만
+// 올해는 다른 날이다). 계산 함수만 시험하면 화면 한 곳이 `dday`(양력)를 그대로 써도 통과한다 —
+// 그래서 화면에 찍힌 날짜를 **이 스크립트가 따로 센 값**과 맞춘다. 달력에도 그 날 칸에 서야 한다.
+const LUNAR_NAME = MARK + "음력";
+/** 음력 3월 15일이 오늘 이후 처음 오는 양력 날. 앱의 코드를 빌리지 않고 라이브러리로 직접 센다. */
+const nextLunarSolar = async (month, day) => {
+  // playwright 처럼 실행한 자리(저장소 루트)의 node_modules 에서 찾는다.
+  const KoreanLunarCalendar = createRequire(join(process.cwd(), "package.json"))("korean-lunar-calendar");
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let best = null;
+  for (const y of [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]) {
+    const c = new KoreanLunarCalendar();
+    if (!c.setLunarDate(y, month, day, false)) continue;
+    const s = c.getSolarCalendar();
+    const d = new Date(s.year, s.month - 1, s.day);
+    if (d >= today && (!best || d < best)) best = d;
+  }
+  return best;
+};
+/** 그 이름이 든 가장 작은 줄·카드의 글자(히어로에 서든 목록 줄에 서든). */
+const cardText = (name) =>
+  page.evaluate((n) => {
+    const hits = [...document.querySelectorAll("li, section")].filter((el) => (el.textContent || "").includes(n));
+    hits.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+    return hits[0]?.innerText ?? null;
+  }, name);
+
+await step("음력 기념일 추가 — 미리보기·음력 이름·음력으로 센 다음 날", async () => {
+  await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: /기념일 추가|첫 기념일/ }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByPlaceholder(/아빠 생일|제목/).first().fill(LUNAR_NAME);
+  await page.getByRole("dialog").getByRole("button", { name: "음력", exact: true }).click();
+  await page.getByLabel("음력 연도").fill("1962");
+  await page.getByLabel("음력 월").selectOption("3");
+  await page.getByLabel("음력 일").selectOption("15");
+  const dlg = await page.getByRole("dialog").innerText();
+  // KASI: 음력 1962-03-15 = 양력 1962-04-19
+  if (!dlg.includes("양력 1962년 4월 19일")) throw new Error(`미리보기가 다르다 — ${dlg.slice(0, 200)}`);
+  await page.getByRole("button", { name: /^추가$|^저장$/ }).last().click();
+  await page.waitForTimeout(1300);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(500);
+  const t = await cardText(LUNAR_NAME);
+  if (!t) throw new Error("안 보인다");
+  if (!t.includes("음력 3월 15일")) throw new Error(`"음력 3월 15일" 이 없다 — ${t}`);
+  const next = await nextLunarSolar(3, 15);
+  const want = `${next.getMonth() + 1}월 ${next.getDate()}일`;
+  if (!t.includes(want)) throw new Error(`다음 날이 ${want} 이어야 한다(양력 4/19 로 세면 틀린다) — ${t}`);
+});
+
+await step("음력 기념일 고치기 — 폼이 음력으로 열린다", async () => {
+  const idx = await page.evaluate((n) => {
+    const all = [...document.querySelectorAll("li, section")];
+    const hits = all.filter((el) => (el.textContent || "").includes(n));
+    hits.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+    return all.indexOf(hits[0]);
+  }, LUNAR_NAME);
+  await page.locator("li, section").nth(idx).getByRole("button", { name: "더보기" }).click();
+  await page.waitForTimeout(350);
+  await menuItem("수정").click();
+  await page.waitForTimeout(600);
+  const dlg = page.getByRole("dialog");
+  if ((await dlg.getByRole("button", { name: "음력", exact: true }).getAttribute("aria-pressed")) !== "true")
+    throw new Error("음력이 안 눌려 있다");
+  if ((await dlg.getByLabel("음력 연도").inputValue()) !== "1962") throw new Error("연도가 안 채워졌다");
+  if ((await dlg.getByLabel("음력 일").inputValue()) !== "15") throw new Error("날이 안 채워졌다");
+  await dlg.getByRole("button", { name: "취소" }).click();
+  await page.waitForTimeout(400);
+});
+
+await step("음력 기념일이 달력의 그 날 칸에 선다", async () => {
+  const next = await nextLunarSolar(3, 15);
+  await page.goto(BASE + "/calendar", { waitUntil: "networkidle" });
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "달력" }).click();
+  await page.waitForTimeout(400);
+  const now = new Date();
+  const hops = (next.getFullYear() - now.getFullYear()) * 12 + (next.getMonth() - now.getMonth());
+  for (let i = 0; i < hops; i++) {
+    await page.getByRole("button", { name: "다음 달" }).click();
+    await page.waitForTimeout(120);
+  }
+  const cell = page.locator(`button[aria-label^="${next.getMonth() + 1}월 ${next.getDate()}일 "]`);
+  const label = await cell.first().getAttribute("aria-label");
+  if (!label?.includes(`기념일 ${LUNAR_NAME}`)) throw new Error(`그 날 칸에 없다 — ${label}`);
+  await cell.first().click();
+  await page.waitForTimeout(500);
+  const dlg = await page.getByRole("dialog").innerText();
+  if (!dlg.includes(LUNAR_NAME) || !dlg.includes("기념일에서 보기")) throw new Error(`하루 모달에 없다 — ${dlg.slice(0, 200)}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "목록" }).click(); // 다음 판이 목록에서 시작하도록 되돌린다
+  await page.waitForTimeout(300);
+});
+
+await step("음력 기념일 지우기", async () => {
+  await page.goto(BASE + "/anniversaries", { waitUntil: "networkidle" });
+  await page.waitForTimeout(400);
+  const idx = await page.evaluate((n) => {
+    const all = [...document.querySelectorAll("li, section")];
+    const hits = all.filter((el) => (el.textContent || "").includes(n));
+    hits.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+    return all.indexOf(hits[0]);
+  }, LUNAR_NAME);
+  if (idx < 0) throw new Error("못 찾겠다");
+  await page.locator("li, section").nth(idx).getByRole("button", { name: "더보기" }).click();
+  await page.waitForTimeout(350);
+  await menuItem("삭제").click();
+  await page.waitForTimeout(1300);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  if ((await text()).includes(LUNAR_NAME)) throw new Error("서버엔 안 지워졌다");
 });
 
 // ── 아기 일기 ────────────────────────────────────────────

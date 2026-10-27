@@ -85,13 +85,14 @@ export function kWeekday(d: Date | string) {
 /**
  * D-day 계산. 반복 기념일(recurring)이면 올해/내년 중 가장 가까운 다음 날짜 기준.
  * 반환: 남은 일수(오늘=0, 미래=양수, 과거=음수) + 표시용 라벨.
+ * `today` 는 비우면 지금이다(시험·음력 기념일이 같은 "오늘" 로 양력 쪽을 셀 때 넘긴다).
  */
 export function dday(
   date: Date | string,
-  opts: { recurring?: boolean } = {}
+  opts: { recurring?: boolean; today?: Date } = {}
 ): { days: number; label: string; nextDate: Date } {
   const base = new Date(date);
-  const today = startOfDay(new Date());
+  const today = startOfDay(opts.today ?? new Date());
   let target = startOfDay(base);
 
   if (opts.recurring) {
@@ -101,13 +102,26 @@ export function dday(
     }
   }
 
-  const days = differenceInCalendarDays(target, today);
+  return ddayFrom(target, today);
+}
+
+/**
+ * 이미 정해진 날(`target`)까지의 D-day. `dday` 의 뒷부분을 떼어 낸 것이라 글자 규칙이 같다.
+ * 음력 기념일처럼 "다음 날" 을 다른 데서 구하는 곳이 쓴다(`lib/anniversary-dates.ts`) —
+ * 라벨을 따로 만들면 언젠가 "D-DAY" 와 "D-0" 처럼 화면마다 다른 말을 한다.
+ */
+export function ddayFrom(
+  target: Date,
+  today: Date = new Date()
+): { days: number; label: string; nextDate: Date } {
+  const t = startOfDay(target);
+  const days = differenceInCalendarDays(t, startOfDay(today));
   let label: string;
   if (days === 0) label = "D-DAY";
   else if (days > 0) label = `D-${days}`;
   else label = `D+${Math.abs(days)}`;
 
-  return { days, label, nextDate: target };
+  return { days, label, nextDate: t };
 }
 
 /** 나이 계산 (생일 기준, 만 나이) */

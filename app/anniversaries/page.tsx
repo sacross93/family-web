@@ -1,7 +1,7 @@
 import { pageTitle } from "@/lib/site";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
-import { withCanEdit } from "@/lib/anniversary";
+import { ANNIVERSARY_LUNAR, withCanEdit } from "@/lib/anniversary";
 import { AnniversariesClient } from "./anniversaries-client";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function AnniversariesPage() {
   const [anniversaries, members, user] = await Promise.all([
     prisma.anniversary.findMany({
       orderBy: { date: "asc" },
-      include: { member: true, owner: true },
+      include: { member: true, owner: true, lunar: ANNIVERSARY_LUNAR },
     }),
     prisma.familyMember.findMany({ orderBy: { createdAt: "asc" } }),
     getCurrentUser(),

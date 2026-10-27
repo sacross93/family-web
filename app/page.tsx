@@ -7,7 +7,6 @@ import {
   kDate,
   kDateShort,
   kTime,
-  dday,
   startOfDay,
   pregnancyProgress,
   weekLabel,
@@ -19,6 +18,9 @@ import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
 // prepCountdown: 준비 단계 "다음 생리 예정" 글자. 아기 페이지 히어로·포동이 목차와 같은 하나다.
 import { journeyState, prepCountdown } from "@/lib/journey";
 import { getSiteConfig } from "@/lib/site";
+import { ANNIVERSARY_LUNAR } from "@/lib/anniversary";
+import { anniversaryWhen } from "@/lib/anniversary-dates";
+import { lunarLabel } from "@/lib/lunar";
 import { GoogleSyncTrigger } from "@/components/google-sync-trigger";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -77,7 +79,8 @@ async function getData() {
       orderBy: { start: "asc" },
       take: 4,
     }),
-    prisma.anniversary.findMany(),
+    // 음력 줄을 같이 — 빠뜨리면 홈만 음력 생일을 양력으로 센다(기념일 화면과 D-day 가 다르다).
+    prisma.anniversary.findMany({ include: { lunar: ANNIVERSARY_LUNAR } }),
     prisma.album.findMany({
       orderBy: { updatedAt: "desc" },
       take: 3,
@@ -105,7 +108,7 @@ async function getData() {
   ]);
 
   const upcomingAnnis = annis
-    .map((a) => ({ ...a, d: dday(a.date, { recurring: a.recurring }) }))
+    .map((a) => ({ ...a, d: anniversaryWhen(a) }))
     .sort((a, b) => a.d.days - b.d.days)
     .slice(0, 4);
 
@@ -569,8 +572,10 @@ export default async function HomePage() {
                       <p className="truncate text-sm font-medium text-ink">
                         {a.title}
                       </p>
+                      {/* 음력이면 그 이름을 같이 — 양력 날짜만 보면 해마다 날이 바뀌는 까닭을 모른다. */}
                       <p className="text-xs text-ink-faint">
                         {kDateShort(a.d.nextDate)}
+                        {a.lunar && ` ${lunarLabel(a.lunar)}`}
                       </p>
                     </div>
                     <Tag color={a.color} className="font-num shrink-0">

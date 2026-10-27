@@ -10,7 +10,10 @@ import { CYCLE_KIND_META, TEST_RESULT_META, type CycleKind, type TestResult } fr
 import { journeyState, prepCountdown } from "@/lib/journey";
 // 날짜는 `kDateShortYear` 로. 다른 해면 해를 밝힌다 — 포동이가 "내일" 을 2020년으로
 // 적은 적이 있는데 `kDateShort` 로는 2026년 것과 글자가 같아 아무도 못 알아챘다.
-import { dday, kDateShortYear, kTime, startOfDay, toDateInput } from "@/lib/date";
+import { kDateShortYear, kTime, startOfDay, toDateInput } from "@/lib/date";
+import { ANNIVERSARY_LUNAR } from "@/lib/anniversary";
+import { anniversaryWhen } from "@/lib/anniversary-dates";
+import { lunarLabel } from "@/lib/lunar";
 import { NAV } from "@/lib/nav";
 import { MEMORY_BY, byLabel } from "./name";
 import type { AgentResource, CatalogEntry, FieldValue } from "./registry";
@@ -524,13 +527,17 @@ export const RESOURCES: AgentResource[] = [
     async catalog() {
       const rows = await prisma.anniversary.findMany({
         orderBy: { date: "asc" },
-        select: { id: true, title: true, date: true, type: true, recurring: true, note: true },
+        select: {
+          id: true, title: true, date: true, type: true, recurring: true, note: true,
+          lunar: ANNIVERSARY_LUNAR,
+        },
         take: LIST_TAKE,
       });
       // 저장된 원본 날짜를 그대로 쓰면 반복 기념일의 요일이 수십 년 전 요일이 된다.
-      // 화면들과 똑같이 dday 의 nextDate 를 쓴다(반복이 아니면 원본 날짜와 같다).
+      // 화면들과 똑같이 anniversaryWhen 의 nextDate 를 쓴다(반복이 아니면 원본 날짜와 같다) —
+      // 음력 기념일은 음력으로 센 다음 날이다. 저장된 양력 날짜로 세면 포동이만 다른 날을 말한다.
       const entries = rows
-        .map((a) => ({ ...a, d: dday(a.date, { recurring: a.recurring }) }))
+        .map((a) => ({ ...a, d: anniversaryWhen(a) }))
         // 다가오는 것을 가까운 순으로 앞에, 이미 지난 것(반복이 아닌 기념일)은 최근 순으로 뒤에.
         // 지난 것이 앞에 오면 "다음 기념일"을 지난 일로 답하게 된다.
         .sort((x, y) => {
@@ -546,6 +553,9 @@ export const RESOURCES: AgentResource[] = [
             a.d.days < 0 ? "지난 기념일" : null,
             kDateShortYear(a.d.nextDate),
             a.d.label,
+            // 음력이라는 사실을 같이 — 없으면 "엄마 생일이 왜 해마다 달라?" 에 답하지 못하고,
+            // 날짜를 고쳐 달라는 말에 양력 날짜를 보내 400 을 받는다(라우트가 막는다).
+            a.lunar ? lunarLabel(a.lunar) : null,
             a.recurring ? "매년" : null,
           ]),
           ...(a.note ? { body: a.note } : {}),
@@ -554,7 +564,9 @@ export const RESOURCES: AgentResource[] = [
     },
     create: {
       api: "/api/anniversaries",
-      describe: "생일·기념일을 추가한다. D-day 로 표시된다.",
+      // 날짜는 양력뿐이다(toBody 가 lunar 를 싣지 않는다). 말해 두지 않으면 "엄마 음력 생일 3월 15일" 을
+      // 양력 3월 15일로 만들고 만들었다고 답한다 — 화면으로 안내하는 편이 정직하다.
+      describe: "생일·기념일을 추가한다. D-day 로 표시된다. 날짜는 양력 — 음력 기념일은 기념일 화면에서만 만들 수 있다.",
       schema: {
         type: "object",
         properties: {
