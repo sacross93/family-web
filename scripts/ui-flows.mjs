@@ -306,6 +306,29 @@ await step("완료 비우기 — 새로고침해도 안 되살아난다", async 
   if ((await whereIs(NAME)) !== "없음") throw new Error("서버엔 안 지워졌다");
 });
 
+await step("다른 사람이 담은 것·지운 것이 새로고침 없이 보인다 — 홈 화면 앱엔 새로고침 버튼이 없다", async () => {
+  // 화면의 React 상태는 이 요청을 모른다 — 다른 가족의 폰이나 포동이(서버에서 담는다)가 담은 것과 같다.
+  // 예전 화면은 처음 받은 목록만 들고 있어서, 다시 열기 전에는 영영 안 보였다.
+  const OTHER = MARK + "다른집두부";
+  const id = await page.evaluate(async (n) => {
+    const r = await fetch("/api/shopping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: n }),
+    });
+    if (!r.ok) throw new Error(`담기 ${r.status}`);
+    return (await r.json()).id;
+  }, OTHER);
+  try {
+    // 5초마다 다시 읽는다 — 12초면 두 번은 돈다. 새로고침은 하지 않는다(그게 시험하는 것이다).
+    await until("다른 사람이 담은 것이 새로고침 없이 '살 것' 에 뜬다", async () => (await whereIs(OTHER)) === "살 것", 12000);
+  } finally {
+    // 실패해도 남기지 않는다(남으면 다음 판의 쓸기가 치우긴 한다).
+    await page.evaluate((i) => fetch(`/api/shopping/${i}`, { method: "DELETE" }), id);
+  }
+  await until("다른 사람이 지운 것이 새로고침 없이 사라진다", async () => (await whereIs(OTHER)) === "없음", 12000);
+});
+
 // ── 게시판 ──────────────────────────────────────────────
 console.log("게시판");
 await page.goto(BASE + "/board", { waitUntil: "networkidle" });

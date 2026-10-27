@@ -16,11 +16,15 @@ export async function PATCH(
   if (typeof body.addedById === "string" || body.addedById === null)
     data.addedById = body.addedById;
 
-  const item = await prisma.shoppingItem.update({
-    where: { id },
-    data,
-    include: { addedBy: true },
-  });
+  // update 는 없는 행에 P2025(500)를 던진다 — 공유 목록이라 다른 사람이 먼저 지웠을 수 있다.
+  // 404 여야 화면이 "되돌리기" 대신 목록에서 빼고 "이미 지워진 항목" 이라고 알려 줄 수 있다.
+  // 바꿀 칸이 없으면 updateMany 는 행이 있어도 count 0 을 돌려준다(실측) — 그땐 읽기만 한다.
+  if (Object.keys(data).length > 0) {
+    const { count } = await prisma.shoppingItem.updateMany({ where: { id }, data });
+    if (count === 0) return NextResponse.json({ error: "이미 지워진 항목이에요." }, { status: 404 });
+  }
+  const item = await prisma.shoppingItem.findUnique({ where: { id }, include: { addedBy: true } });
+  if (!item) return NextResponse.json({ error: "이미 지워진 항목이에요." }, { status: 404 });
   return NextResponse.json(item);
 }
 

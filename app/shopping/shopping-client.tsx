@@ -17,6 +17,8 @@ import {
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
+import { sortShopping } from "@/lib/shopping";
+import { useLiveList } from "@/components/use-live-list";
 import type { ShoppingItemWithMember, FamilyMember } from "@/lib/types";
 
 export function ShoppingClient({
@@ -34,65 +36,84 @@ export function ShoppingClient({
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const { say } = useToast();
+  // 다른 가족·다른 탭·포동이가 바꾼 것을 새로고침 없이 들여온다. 내 쓰기는 전부 `track` 으로 감싼다 —
+  // 그래야 내 쓰기보다 먼저 읽은 목록이 낙관적으로 바꿔 둔 것을 되돌리지 않는다(components/use-live-list.ts).
+  const { track } = useLiveList<ShoppingItemWithMember>("/api/shopping", setItems);
 
   const addedBy = members.find((m) => m.id === addedById);
-  const open = items.filter((i) => !i.done);
-  const done = items.filter((i) => i.done);
+  // 그릴 때마다 서버와 같은 순서로 세운다 — 방금 담은 것이 맨 위(입력칸 바로 밑)에 온다.
+  // 맨 아래에 붙이면 5초 뒤 다시 읽은 목록에서 맨 위로 튄다(lib/shopping.ts).
+  const sorted = sortShopping(items);
+  const open = sorted.filter((i) => !i.done);
+  const done = sorted.filter((i) => i.done);
 
-  async function addItem() {
+  function addItem() {
     if (!name.trim() || busy) return;
     setBusy(true);
-    try {
-      // 네트워크가 끊기면 fetch 는 **거부된다** — 응답이 안 오는 게 아니라 예외다.
-      // catch 가 없으면 조용히 사라져서 "눌렀는데 아무 일도 없다" 가 된다.
-      const res = await fetch("/api/shopping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, quantity, category, addedById: addedById || null }),
-      });
-      if (res.ok) {
-        const created: ShoppingItemWithMember = await res.json();
-        setItems((prev) => [...prev, created]);
-        setName("");
-        setQuantity("");
-      } else {
-        // 조용히 아무 일도 안 일어나면 자기가 잘못 눌렀다고 생각한다.
-        say("못 담았어요. 잠시 후 다시 해 주세요.", "error");
+    return track(async () => {
+      try {
+        // 네트워크가 끊기면 fetch 는 **거부된다** — 응답이 안 오는 게 아니라 예외다.
+        // catch 가 없으면 조용히 사라져서 "눌렀는데 아무 일도 없다" 가 된다.
+        const res = await fetch("/api/shopping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, quantity, category, addedById: addedById || null }),
+        });
+        if (res.ok) {
+          const created: ShoppingItemWithMember = await res.json();
+          setItems((prev) => [...prev, created]);
+          setName("");
+          setQuantity("");
+        } else {
+          // 조용히 아무 일도 안 일어나면 자기가 잘못 눌렀다고 생각한다.
+          say("못 담았어요. 잠시 후 다시 해 주세요.", "error");
+        }
+      } catch {
+        say("못 담았어요. 연결을 확인해 주세요.", "error");
+      } finally {
+        setBusy(false);
       }
-    } catch {
-      say("못 담았어요. 연결을 확인해 주세요.", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggle(item: ShoppingItemWithMember) {
-    const next = !item.done;
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: next } : i)));
-    await fetch(`/api/shopping/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: next }),
-    }).catch(() => {
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: item.done } : i)));
-      say("표시를 못 바꿨어요. 잠시 후 다시 해 주세요.", "error");
     });
   }
 
-  async function remove(id: string) {
-    const prev = items;
-    setItems((p) => p.filter((i) => i.id !== id));
-    const res = await fetch(`/api/shopping/${id}`, { method: "DELETE" }).catch(() => null);
-    if (!res || !res.ok) {
-      setItems(prev);
-      say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
-    }
+  function toggle(item: ShoppingItemWithMember) {
+    const next = !item.done;
+    return track(async () => {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: next } : i)));
+      const res = await fetch(`/api/shopping/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: next }),
+      }).catch(() => null);
+      if (res?.status === 404) {
+        // 다른 사람이 먼저 지웠다. 되돌리면 지워진 것이 화면에 되살아나니 목록에서 뺀다.
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        say("이미 지워진 항목이에요.");
+      } else if (!res || !res.ok) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: item.done } : i)));
+        say("표시를 못 바꿨어요. 잠시 후 다시 해 주세요.", "error");
+      }
+    });
   }
 
-  async function clearDone() {
+  function remove(id: string) {
+    const prev = items;
+    return track(async () => {
+      setItems((p) => p.filter((i) => i.id !== id));
+      const res = await fetch(`/api/shopping/${id}`, { method: "DELETE" }).catch(() => null);
+      if (!res || !res.ok) {
+        setItems(prev);
+        say("못 지웠어요. 잠시 후 다시 해 주세요.", "error");
+      }
+    });
+  }
+
+  function clearDone() {
     const doneIds = done.map((d) => d.id);
-    setItems((prev) => prev.filter((i) => !i.done));
-    await Promise.all(doneIds.map((id) => fetch(`/api/shopping/${id}`, { method: "DELETE" })));
+    return track(async () => {
+      setItems((prev) => prev.filter((i) => !i.done));
+      await Promise.all(doneIds.map((id) => fetch(`/api/shopping/${id}`, { method: "DELETE" })));
+    });
   }
 
   return (

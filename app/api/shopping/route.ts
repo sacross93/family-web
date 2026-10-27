@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const items = await prisma.shoppingItem.findMany({
+    // 화면은 그릴 때 `compareShopping`(lib/shopping.ts)으로 다시 세운다 — 둘이 같아야 한다.
     orderBy: [{ done: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
     include: { addedBy: true },
   });
