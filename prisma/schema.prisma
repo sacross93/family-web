@@ -215,6 +215,20 @@ model Anniversary {
   createdAt DateTime      @default(now())
 
   owner AnniversaryOwner? // DB 열 아님 — 관계 필드. memberId 는 "누구의 날" 이지 만든 사람이 아니다.
+  lunar AnniversaryLunar? // DB 열 아님 — 줄이 있으면 음력 기념일. date 는 그 음력 날짜의 **양력 날짜**다.
+}
+
+/// 음력 기념일(2026-10-27). 부모님 생일처럼 음력으로 지내는 날 — 구글 캘린더는 음력 반복을 잘 못 한다.
+/// 이 줄이 있으면 해마다 돌아오는 날을 음력으로 센다(`lib/anniversary-dates.ts`). 해(年)는 따로 두지 않는다 —
+/// `Anniversary.date` 가 원래 음력 날짜의 양력 날짜라 거기서 되짚는다(그래서 `ageFrom` 도 그대로 맞는다).
+/// AnniversaryOwner 와 같은 이유로 새 표다 — 운영 스키마는 ensure.sql 의 CREATE 만 가능하다.
+model AnniversaryLunar {
+  anniversaryId String      @id
+  anniversary   Anniversary @relation(fields: [anniversaryId], references: [id], onDelete: Cascade)
+  month         Int // 1~12
+  day           Int // 1~30
+  leap          Boolean     @default(false) // 윤달
+  createdAt     DateTime    @default(now())
 }
 
 /// 기념일을 만든 사람(2026-10-19). 고치기·지우기는 만든 사람이나 관리자만(lib/anniversary.ts).

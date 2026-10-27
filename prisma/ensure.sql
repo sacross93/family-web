@@ -151,6 +151,19 @@ CREATE TABLE IF NOT EXISTS "AnniversaryOwner" (
     CONSTRAINT "AnniversaryOwner_anniversaryId_fkey" FOREIGN KEY ("anniversaryId") REFERENCES "Anniversary"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- 음력 기념일 (2026-10-27). 줄이 있으면 해마다 음력으로 센다 — Anniversary.date 는 원래 음력 날짜의 양력 날짜.
+-- AnniversaryOwner 와 같은 모양: 기념일을 지우면(deleteMany) 이 줄도 같이 지워진다(CASCADE).
+CREATE TABLE IF NOT EXISTS "AnniversaryLunar" (
+    "anniversaryId" TEXT NOT NULL,
+    "month" INTEGER NOT NULL,
+    "day" INTEGER NOT NULL,
+    "leap" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AnniversaryLunar_pkey" PRIMARY KEY ("anniversaryId"),
+    CONSTRAINT "AnniversaryLunar_anniversaryId_fkey" FOREIGN KEY ("anniversaryId") REFERENCES "Anniversary"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- 사진 저장 공간 사용량 (2026-10-19). 싱글턴 id='main' — lib/blob-usage.ts.
 -- Blob Hobby 한도를 넘으면 저장소가 통째로 멈춘다(이미 올린 사진까지 403). 잰 값을 기억해 두고 90% 에서 올리기를 막는다.
 CREATE TABLE IF NOT EXISTS "BlobUsage" (

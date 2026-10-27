@@ -19,6 +19,7 @@ Next.js 16 (App Router) · React 19 · TS · Tailwind v4 (CSS-first `@theme` in 
 - 데이터 패턴: `app/<기능>/page.tsx`(서버, prisma로 read, `export const dynamic="force-dynamic"`) → `<기능>-client.tsx`("use client", 낙관적 업데이트 + `/api/...` fetch). 예시: `app/shopping/*`.
 - **`ItemActions` 는 `group` 이 붙은 조상 안에 둘 것.** 데스크톱 아이콘이 `group-hover` 로 뜨기 때문에, 없으면 **영영 투명해서** 데스크톱에서는 고칠·지울 길이 없다(폰 `…` 는 멀쩡해서 모른다 — 기념일·계획 히어로·앨범 히어로가 그랬다). 사용자가 손을 얹는 카드/줄에 `group`.
 - **기념일 고치기·지우기는 만든 사람이나 관리자만**(`lib/anniversary.ts` 한 곳 — 화면의 버튼과 라우트의 403 이 같이 쓴다). 만든 사람은 `AnniversaryOwner` 표(ensure.sql 이 ALTER 를 못 해서 따로 둔다 — `Anniversary.memberId` 는 "누구의 날" 이지 만든 사람이 아니다). 그 표가 생기기 전의 기념일·시드는 줄이 없어 **관리자만** 고친다.
+- **기념일이 언제 돌아오는지는 `lib/anniversary-dates.ts` 의 `anniversaryWhen()` 으로**(음력 기념일, 2026-10-27). 기념일에 `dday()` 를 직접 쓰면 음력 생일을 양력으로 센다. 음력은 `AnniversaryLunar` 표(달·날·윤달 — 해는 `Anniversary.date` 가 원래 음력 날의 양력이라 거기서 되짚는다)라 **기념일을 읽는 쿼리마다 `lunar: ANNIVERSARY_LUNAR`**(lib/anniversary.ts) — 한 곳이라도 빠지면 그 화면만 조용히 양력이 된다(변이 시험으로 확인). 음력 표 라이브러리(`korean-lunar-calendar`, KASI 기준, 음력 2050-11 까지)는 `lib/lunar.ts` 에서만 — `lib/date.ts` 에 넣으면 달력·계획·아기 묶음에도 실린다(달력은 서버가 센 날짜만 받는다). 음력 기념일에 `lunar` 없이 `date` 만 PATCH 하면 400 이다(포동이 몫 — 화면은 `lunar` 를 늘 싣는다).
 - **Next 16 동적 라우트 params는 Promise**: `{ params }: { params: Promise<{ id: string }> }` → `await params`.
 - 사진은 `<img loading="lazy">` (eslint 허용). 업로드는 `public/uploads/`(git 제외).
 - **사진을 올릴 때는 `lib/upload-client.ts` 의 `uploadImage(file, mode)` 만.** `/api/upload` 를 화면에서 직접 부르지 말 것.

@@ -1,6 +1,12 @@
 import type { SessionUser } from "@/lib/session";
 
 /**
+ * 기념일을 읽을 때 음력 줄을 싣는 모양(`include: { lunar: ANNIVERSARY_LUNAR }`). 화면·홈·포동이·달력·라우트가
+ * 이 한 곳을 쓴다 — 한 군데서 빠뜨리면 그 화면만 **조용히 양력으로** 센다(같은 생일에 D-day 가 둘).
+ */
+export const ANNIVERSARY_LUNAR = { select: { month: true, day: true, leap: true } } as const;
+
+/**
  * 이 기념일을 고치거나 지울 수 있나 — **만든 사람이나 관리자.** 화면(버튼을 보일지)과
  * 라우트(PATCH·DELETE 를 받을지)가 이 한 곳을 같이 쓴다. 둘이 따로 판단하면 버튼은 떠 있는데
  * 누르면 403 이 나는 날이 온다.

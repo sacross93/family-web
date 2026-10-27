@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  addDays,
   addMonths,
   subMonths,
   startOfMonth,
@@ -55,6 +56,18 @@ import {
   marksSpeech,
   upcomingMarks,
 } from "./journey-marks";
+import {
+  AnniversaryGlyph,
+  OCCASION_HORIZON_DAYS,
+  OccasionRows,
+  PlanBar,
+  UpcomingOccasionRow,
+  occasionsOn,
+  occasionsSpeech,
+  upcomingOccasions,
+  type UpcomingOccasion,
+} from "./occasion-marks";
+import type { CalendarOccasions } from "./occasions";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_KEY = "yyyy-MM-dd";
@@ -133,13 +146,20 @@ function GoogleTag({ onTint, className }: { onTint?: boolean; className?: string
   );
 }
 
+/** 폰 목록에 끼우는 읽기 전용 줄 — 아기 표시와 기념일·계획 둘 다. */
+type OverlayRow = JourneyMark | UpcomingOccasion;
+const isOccasion = (m: OverlayRow): m is UpcomingOccasion => m.kind === "anniversary" || m.kind === "plan";
+
 export function CalendarClient({
   initialEvents,
   marks,
+  occasions,
 }: {
   initialEvents: CalendarEventWithLink[];
   /** 아기 페이지에서 오는 읽기 전용 표시(`journey-marks.tsx`). 일정이 아니라 고치거나 지울 수 없다. */
   marks: JourneyMark[];
+  /** 기념일·계획 — 역시 읽기 전용 표시(`occasion-marks.tsx`). 고치기는 그 화면에서 한다. */
+  occasions: CalendarOccasions;
 }) {
   const { say } = useToast();
   const router = useRouter();
@@ -229,15 +249,18 @@ export function CalendarClient({
   // 마지막으로 보이는 일정 날까지만 — 몇 달 뒤 예정일이 8번째 일정 바로 밑에 붙으면
   // 그 사이에 아무 일정도 없는 것처럼 읽힌다.
   const dayOf = (e: CalendarEventWithLink) => format(new Date(e.start), DAY_KEY);
-  const upcomingRows = interleaveMarks(
-    upcoming,
-    dayOf,
-    upcomingMarks(
-      marks,
-      format(today, DAY_KEY),
-      upcomingAll.length > upcoming.length ? dayOf(upcoming[upcoming.length - 1]) : undefined
-    )
-  );
+  const todayKey = format(today, DAY_KEY);
+  const cutoff = upcomingAll.length > upcoming.length ? dayOf(upcoming[upcoming.length - 1]) : undefined;
+  // 기념일·계획은 같은 자름에 더해 **두 달 앞까지만** — 반복 기념일은 해마다 오므로 다 넣으면
+  // 일정이 적은 집의 목록이 한 해치 생일로 찬다(그 너머는 격자에 있다).
+  const horizon = format(addDays(today, OCCASION_HORIZON_DAYS), DAY_KEY);
+  const occasionUntil = cutoff !== undefined && cutoff < horizon ? cutoff : horizon;
+  // 아기 표시와 기념일·계획을 날짜순 한 줄로. 같은 날이면 아기 표시가 먼저(정렬이 안정적이라 넣은 순서를 지킨다).
+  const overlays: OverlayRow[] = [
+    ...upcomingMarks(marks, todayKey, cutoff),
+    ...upcomingOccasions(occasions, todayKey, occasionUntil),
+  ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const upcomingRows = interleaveMarks(upcoming, dayOf, overlays);
 
   function openNew(date: Date) {
     setEditingId(null);
@@ -355,6 +378,8 @@ export function CalendarClient({
     (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
   );
   const selectedMarks = marksByDay.get(format(selectedDate, DAY_KEY)) ?? [];
+  const selectedOccasions = occasionsOn(occasions, format(selectedDate, DAY_KEY));
+  const selectedHasOccasions = selectedOccasions.anniversaries.length + selectedOccasions.plans.length > 0;
 
   return (
     <div>
@@ -449,6 +474,8 @@ export function CalendarClient({
               const dow = day.getDay();
               const dayEvents = byDay.get(format(day, DAY_KEY)) ?? [];
               const dayMarks = marksByDay.get(format(day, DAY_KEY)) ?? [];
+              const dayOccasions = occasionsOn(occasions, format(day, DAY_KEY));
+              const hasPlan = dayOccasions.plans.length > 0;
               const visible = dayEvents.slice(0, 3);
               const extra = dayEvents.length - visible.length;
 
@@ -462,23 +489,28 @@ export function CalendarClient({
                     !inMonth && "bg-paper/50",
                     isToday && "bg-primary-soft/40"
                   )}
-                  aria-label={`${format(day, "M월 d일", { locale: ko })} 일정 ${dayEvents.length}개${marksSpeech(dayMarks)}`}
+                  aria-label={`${format(day, "M월 d일", { locale: ko })} 일정 ${dayEvents.length}개${marksSpeech(dayMarks)}${occasionsSpeech(dayOccasions)}`}
                 >
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-full font-num text-xs font-bold sm:h-7 sm:w-7 sm:text-sm",
-                      isToday
-                        ? "bg-primary text-ink shadow-sm"
-                        : !inMonth
-                        ? "text-ink-faint"
-                        : dow === 0
-                        ? "text-rose-ink"
-                        : dow === 6
-                        ? "text-sky-ink"
-                        : "text-ink"
-                    )}
-                  >
-                    {day.getDate()}
+                  {/* 날짜 숫자 + 그날 기념일 이모지(가운데는 일정, 아래는 막대). 넓은 칸에서는 숫자 오른편,
+                      폰 칸(내용 폭 39px 남짓)에서는 숫자 아래로 내려간다 — 나란히 두면 옆 칸으로 삐져나간다. */}
+                  <span className="flex flex-wrap items-start justify-between gap-0.5">
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full font-num text-xs font-bold sm:h-7 sm:w-7 sm:text-sm",
+                        isToday
+                          ? "bg-primary text-ink shadow-sm"
+                          : !inMonth
+                          ? "text-ink-faint"
+                          : dow === 0
+                          ? "text-rose-ink"
+                          : dow === 6
+                          ? "text-sky-ink"
+                          : "text-ink"
+                      )}
+                    >
+                      {day.getDate()}
+                    </span>
+                    <AnniversaryGlyph day={dayOccasions} dim={!inMonth} />
                   </span>
 
                   {/* 폰에서는 **점**, sm 부터 글자 칩.
@@ -527,8 +559,14 @@ export function CalendarClient({
                       </span>
                     )}
                   </span>
-                  {/* 아기 페이지 표시 — 칸 맨 아래 얇은 막대(일정은 점·칩이라 모양으로 갈린다) */}
-                  <MarkBars marks={dayMarks} dim={!inMonth} />
+                  {/* 칸 맨 아래 얇은 막대 — 계획(라벤더, 맨 위) + 아기 페이지 표시. 일정은 점·칩이라 모양으로 갈린다.
+                      한 묶음으로 쌓아야 둘 다 칸 바닥에 붙는다(따로 mt-auto 를 주면 빈자리를 나눠 가져 계획 막대가 뜬다). */}
+                  {(hasPlan || dayMarks.length > 0) && (
+                    <span aria-hidden className="mt-auto flex flex-col gap-0.5 px-0.5">
+                      {hasPlan && <PlanBar dim={!inMonth} />}
+                      <MarkBars marks={dayMarks} dim={!inMonth} className="mt-0 px-0" />
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -561,7 +599,12 @@ export function CalendarClient({
               <ul>
                 {upcomingRows.map((row, i) => {
                   if (row.type === "mark") {
-                    return <UpcomingMarkRow key={`mark:${row.mark.date}:${i}`} mark={row.mark} />;
+                    const m = row.mark;
+                    return isOccasion(m) ? (
+                      <UpcomingOccasionRow key={`${m.kind}:${m.id}:${m.date}`} occasion={m} />
+                    ) : (
+                      <UpcomingMarkRow key={`mark:${m.date}:${i}`} mark={m} />
+                    );
                   }
                   const ev = row.item;
                   const readOnly = isReadOnly(ev);
@@ -633,15 +676,16 @@ export function CalendarClient({
           </Button>
         }
       >
-        {/* 아기 페이지 표시가 일정 위에 선다. 표시만 있는 날에는 빈 화면을 띄우지 않는다 —
+        {/* 기념일·계획, 아기 페이지 표시가 일정 위에 선다. 표시만 있는 날에는 빈 화면을 띄우지 않는다 —
             "이 날은 일정이 없어요" 가 바로 위 병원 줄과 엇갈려 읽힌다(일정 추가는 아래 단추에 있다). */}
-        {selectedMarks.length > 0 && (
-          <div className={cn(selectedEvents.length > 0 && "mb-3")}>
+        {(selectedHasOccasions || selectedMarks.length > 0) && (
+          <div className={cn("flex flex-col gap-2", selectedEvents.length > 0 && "mb-3")}>
+            <OccasionRows day={selectedOccasions} />
             <MarkRows marks={selectedMarks} />
           </div>
         )}
         {selectedEvents.length === 0 ? (
-          selectedMarks.length === 0 && (
+          selectedMarks.length === 0 && !selectedHasOccasions && (
             <EmptyState
               emoji="🗓️"
               title="이 날은 일정이 없어요"

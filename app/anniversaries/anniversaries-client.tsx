@@ -10,17 +10,28 @@ import {
   EmptyState,
   Modal,
   Field,
+  Label,
   Input,
   Textarea,
   Select,
   Checkbox,
   ColorPicker,
   ItemActions,
+  Segmented,
   useToast,
 } from "@/components/ui";
 import { palette, type PaletteKey } from "@/lib/colors";
 import { cn } from "@/lib/utils";
-import { dday, kDate, kDateShort } from "@/lib/date";
+import { kDate, kDateShort } from "@/lib/date";
+import { anniversaryWhen, type AnniversaryWhen } from "@/lib/anniversary-dates";
+import {
+  LUNAR_MAX_YEAR,
+  LUNAR_MIN_YEAR,
+  hasLeapMonth,
+  lunarLabel,
+  lunarToSolar,
+  solarToLunar,
+} from "@/lib/lunar";
 import type { AnniversaryItem, FamilyMember } from "@/lib/types";
 
 type AnnivType = "birthday" | "anniversary" | "memorial" | "event";
@@ -39,6 +50,39 @@ function typeMeta(type: string) {
   return TYPE_META[(type as AnnivType)] ?? TYPE_META.anniversary;
 }
 
+type CalendarKind = "solar" | "lunar";
+
+const LUNAR_MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const LUNAR_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
+
+/**
+ * 폼의 음력 칸 → 양력 날짜. 적은 날이 **그 해에 정말 있을 때만** 날짜를 준다 — 생일 그 자체를 적는
+ * 자리라 없는 날을 다른 날로 바꿔 주면 안 된다(해마다 돌아오는 날에서만 평달·29일로 넘긴다, lib/lunar.ts).
+ * 없으면 왜 없는지 한 줄. 연도를 다 적기 전(네 자리 전)에는 아무 말도 하지 않는다 — 치는 중에 "범위 밖" 이 깜빡인다.
+ */
+function lunarPreview(
+  yearText: string,
+  month: number,
+  day: number,
+  leap: boolean
+): { date: Date | null; message: string | null } {
+  const t = yearText.trim();
+  if (!/^\d{4}$/.test(t)) return { date: null, message: null };
+  const year = Number(t);
+  if (year < LUNAR_MIN_YEAR || year > LUNAR_MAX_YEAR) {
+    return { date: null, message: `${LUNAR_MIN_YEAR}~${LUNAR_MAX_YEAR}년 사이로 적어 주세요.` };
+  }
+  if (leap && !hasLeapMonth(year, month)) {
+    return { date: null, message: `${year}년에는 윤${month}월이 없어요.` };
+  }
+  const date = lunarToSolar(year, { month, day, leap });
+  if (date) return { date, message: null };
+  if (day === 30 && lunarToSolar(year, { month, day: 29, leap })) {
+    return { date: null, message: `${year}년 음력 ${leap ? "윤" : ""}${month}월은 29일까지예요.` };
+  }
+  return { date: null, message: "이 날짜는 바꿀 수 없어요. 날짜를 다시 골라 주세요." };
+}
+
 /** Date → "yyyy-MM-dd" (date input 용, 로컬 기준) */
 function toDateInput(d: Date | string) {
   const dt = new Date(d);
@@ -50,7 +94,7 @@ function toDateInput(d: Date | string) {
 
 type Decorated = {
   item: AnniversaryItem;
-  d: ReturnType<typeof dday>;
+  d: AnniversaryWhen;
 };
 
 /** 다가오는 것 먼저(가까운 순), 지난 것은 뒤로(최근 지난 순) */
@@ -68,10 +112,9 @@ async function errorOf(res: Response, fallback: string) {
   return typeof body?.error === "string" && body.error ? body.error : fallback;
 }
 
-/** 다가오는 생일에 몇 살이 되는지 (반복 생일 기준) */
-function turningAge(item: AnniversaryItem, next: Date) {
-  const birthYear = new Date(item.date).getFullYear();
-  return next.getFullYear() - birthYear;
+/** 다가오는 생일에 몇 살이 되는지 (반복 생일 기준). 음력 생일은 음력 해로 센다(`anniversaryWhen`). */
+function turningAge(item: AnniversaryItem, d: AnniversaryWhen) {
+  return item.type === "birthday" ? d.years : 0;
 }
 
 export function AnniversariesClient({
@@ -90,6 +133,12 @@ export function AnniversariesClient({
   // 폼 상태
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
+  // 음력이면 해·달·날·윤달을 따로 받는다. 저장할 때는 양력 날짜(date)와 음력 줄을 함께 보낸다.
+  const [kind, setKind] = useState<CalendarKind>("solar");
+  const [lunarYear, setLunarYear] = useState("");
+  const [lunarMonth, setLunarMonth] = useState(1);
+  const [lunarDay, setLunarDay] = useState(1);
+  const [lunarLeap, setLunarLeap] = useState(false);
   const [type, setType] = useState<AnnivType>("anniversary");
   const [recurring, setRecurring] = useState(true);
   const [emoji, setEmoji] = useState("🎉");
@@ -97,9 +146,14 @@ export function AnniversariesClient({
   const [memberId, setMemberId] = useState("");
   const [note, setNote] = useState("");
 
+  // 음력 기념일은 음력으로 센 다음 날 — 홈·포동이·달력과 같은 한 곳(lib/anniversary-dates.ts)에서.
   const decorated = items
-    .map((item) => ({ item, d: dday(item.date, { recurring: item.recurring }) }))
+    .map((item) => ({ item, d: anniversaryWhen(item) }))
     .sort(compareDecorated);
+
+  const preview =
+    kind === "lunar" ? lunarPreview(lunarYear, lunarMonth, lunarDay, lunarLeap) : { date: null, message: null };
+  const canSave = !!title.trim() && (kind === "lunar" ? !!preview.date : !!date) && !busy;
 
   // 크게 보여 주는 것은 **가장 가까운 하나뿐**이다.
   // 전에는 셋을 큰 파스텔 카드로 그려, 폰에서 세 카드가 720px 을 먹고
@@ -109,10 +163,33 @@ export function AnniversariesClient({
   const featuredIds = new Set(featured.map((x) => x.item.id));
   const rest = decorated.filter((x) => !featuredIds.has(x.item.id));
 
+  /** 음력 칸을 양력 날짜에서 채운다(바꿀 수 없는 날이면 비워 둔다). */
+  function fillLunarFrom(solar: Date | null) {
+    const l = solar ? solarToLunar(solar) : null;
+    setLunarYear(l ? String(l.year) : "");
+    setLunarMonth(l?.month ?? 1);
+    setLunarDay(l?.day ?? 1);
+    setLunarLeap(l?.leap ?? false);
+  }
+
+  /**
+   * 양력 ↔ 음력을 바꾸면 **적어 둔 날을 옮겨 적는다** — 양력으로 고른 날을 음력으로 바꾸면 그 날의 음력이,
+   * 음력으로 적은 날을 양력으로 바꾸면 그 양력 날짜가 칸에 들어간다. 비워 두면 다시 적어야 하고,
+   * 무엇이 무엇인지 맞춰 볼 길도 사라진다.
+   */
+  function onKindChange(next: CalendarKind) {
+    if (next === kind) return;
+    if (next === "lunar") fillLunarFrom(date ? new Date(`${date}T00:00:00`) : null);
+    else if (preview.date) setDate(toDateInput(preview.date));
+    setKind(next);
+  }
+
   function openAdd() {
     setEditing(null);
     setTitle("");
     setDate("");
+    setKind("solar");
+    fillLunarFrom(null);
     setType("anniversary");
     setRecurring(true);
     setEmoji("🎉");
@@ -126,6 +203,17 @@ export function AnniversariesClient({
     setEditing(item);
     setTitle(item.title);
     setDate(toDateInput(item.date));
+    // 음력 기념일 — 달·날·윤달은 음력 줄에서, 해는 저장된 양력 날짜에서 되짚는다(표에 해가 없다).
+    setKind(item.lunar ? "lunar" : "solar");
+    if (item.lunar) {
+      const y = solarToLunar(new Date(item.date))?.year;
+      setLunarYear(y ? String(y) : "");
+      setLunarMonth(item.lunar.month);
+      setLunarDay(item.lunar.day);
+      setLunarLeap(item.lunar.leap);
+    } else {
+      fillLunarFrom(new Date(item.date));
+    }
     setType((item.type as AnnivType) ?? "anniversary");
     setRecurring(item.recurring);
     setEmoji(item.emoji);
@@ -144,11 +232,15 @@ export function AnniversariesClient({
   }
 
   async function save() {
-    if (!title.trim() || !date || busy) return;
+    if (!canSave) return;
     setBusy(true);
     const payload = {
       title: title.trim(),
-      date,
+      // 음력이면 그 음력 날의 양력 날짜. 라우트가 둘이 같은 날인지 다시 본다.
+      date: kind === "lunar" && preview.date ? toDateInput(preview.date) : date,
+      // **언제나 싣는다**(객체 아니면 null). 빼면 라우트는 "음력은 그대로" 로 읽고,
+      // 음력 기념일에 날짜만 오면 400 이다(포동이를 막는 규칙) — 화면이 그 규칙에 걸리면 안 된다.
+      lunar: kind === "lunar" ? { month: lunarMonth, day: lunarDay, leap: lunarLeap } : null,
       type,
       recurring,
       emoji: emoji.trim() || TYPE_META[type].emoji,
@@ -295,7 +387,7 @@ export function AnniversariesClient({
             <Button variant="ghost" onClick={() => setModalOpen(false)}>
               취소
             </Button>
-            <Button onClick={save} disabled={!title.trim() || !date || busy}>
+            <Button onClick={save} disabled={!canSave}>
               {editing ? "저장" : "추가"}
             </Button>
           </>
@@ -311,14 +403,100 @@ export function AnniversariesClient({
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="날짜">
+          {/* 날짜 — 양력/음력. 부모님 생일처럼 음력으로 지내는 날은 음력으로 적어 두면 해마다 음력으로 센다. */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+              {/* 음력일 때는 칸이 셋이라 각 칸이 제 이름(연도·월·일)을 갖는다 — 이 글자는 묶음의 제목이다. */}
+              <Label htmlFor={kind === "solar" ? "anniv-date" : undefined} className="mb-0">
+                날짜
+              </Label>
+              <Segmented
+                value={kind}
+                onChange={onKindChange}
+                options={[
+                  { value: "solar", label: "양력" },
+                  { value: "lunar", label: "음력" },
+                ]}
+              />
+            </div>
+            {kind === "solar" ? (
               <Input
+                id="anniv-date"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
-            </Field>
+            ) : (
+              <>
+                {/* 연도는 직접 적고(생년은 고르기엔 너무 길다) 달·날은 고른다. 폰 폭에서는 한 줄에 셋.
+                    격자로 셋을 박아 두면 글자 1.5배(360px)에서 달·날 칸이 화살표 자리만 남아 "3월" 이 안 보였다 —
+                    rem 너비로 두고 모자라면 아래로 내려가게 한다(DESIGN §9). */}
+                <div className="flex flex-wrap gap-2">
+                  <Field label="연도" className="min-w-0 grow basis-[7rem]">
+                    <Input
+                      inputMode="numeric"
+                      placeholder="1962"
+                      maxLength={4}
+                      value={lunarYear}
+                      onChange={(e) => setLunarYear(e.target.value.replace(/\D/g, ""))}
+                      aria-label="음력 연도"
+                    />
+                  </Field>
+                  <Field label="월" className="min-w-0 grow basis-[5.5rem]">
+                    <Select
+                      value={lunarMonth}
+                      onChange={(e) => setLunarMonth(Number(e.target.value))}
+                      aria-label="음력 월"
+                    >
+                      {LUNAR_MONTHS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}월
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="일" className="min-w-0 grow basis-[5.5rem]">
+                    <Select
+                      value={lunarDay}
+                      onChange={(e) => setLunarDay(Number(e.target.value))}
+                      aria-label="음력 일"
+                    >
+                      {LUNAR_DAYS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}일
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox checked={lunarLeap} onChange={setLunarLeap} color={color} label="윤달" />
+                  <button
+                    type="button"
+                    onClick={() => setLunarLeap((v) => !v)}
+                    className="flex flex-1 flex-wrap items-baseline gap-x-2 text-left"
+                  >
+                    <span className="text-sm font-semibold text-ink">윤달</span>
+                    <span className="text-xs text-ink-faint">윤{lunarMonth}월이면 켜 주세요</span>
+                  </button>
+                </div>
+                {/* 바꾼 양력 날짜를 바로 보여 준다 — 음력은 맞게 적었는지 눈으로 맞춰 볼 길이 이것뿐이다. */}
+                <p
+                  aria-live="polite"
+                  className={cn(
+                    "rounded-md px-4 py-3 text-sm",
+                    preview.message ? "bg-danger-soft text-danger-ink" : "bg-sunken text-ink-soft"
+                  )}
+                >
+                  {preview.date
+                    ? `양력 ${kDate(preview.date)}`
+                    : preview.message ?? "음력 날짜를 적으면 양력 날짜를 알려 드려요."}
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="종류">
               <Select
                 value={type}
@@ -423,13 +601,13 @@ function FeaturedCard({
   onRemove,
 }: {
   item: AnniversaryItem;
-  d: ReturnType<typeof dday>;
+  d: AnniversaryWhen;
   onEdit: () => void;
   onRemove: () => void;
 }) {
   const meta = typeMeta(item.type);
   const isToday = d.days === 0;
-  const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
+  const age = turningAge(item, d);
 
   return (
     /* `group` — 데스크톱의 수정·삭제 아이콘은 `group-hover` 로 뜬다. 이게 없으면 아이콘이
@@ -463,6 +641,8 @@ function FeaturedCard({
           <span>
             {meta.emoji} {meta.label}
           </span>
+          {/* 위의 날짜는 양력이다 — 음력으로 지내는 날이면 그 이름을 여기 둔다. */}
+          {item.lunar && <span className="font-num">{lunarLabel(item.lunar)}</span>}
           {age > 0 && <span className="font-num">올해 {age}살</span>}
         </span>
         {item.member && (
@@ -488,7 +668,7 @@ function AnniversaryRow({
   onRemove,
 }: {
   item: AnniversaryItem;
-  d: ReturnType<typeof dday>;
+  d: AnniversaryWhen;
   onEdit: () => void;
   onRemove: () => void;
 }) {
@@ -496,7 +676,7 @@ function AnniversaryRow({
   const meta = typeMeta(item.type);
   const isToday = d.days === 0;
   const isPast = d.days < 0;
-  const age = item.type === "birthday" ? turningAge(item, d.nextDate) : 0;
+  const age = turningAge(item, d);
 
   return (
     <li
@@ -516,6 +696,8 @@ function AnniversaryRow({
         <p className="font-semibold text-ink">{item.title}</p>
         <p className="text-xs text-ink-faint">
           {kDateShort(d.nextDate)}
+          {/* 음력이면 양력 날짜 뒤에 음력 이름 — 해마다 양력 날짜가 바뀌는 까닭이 여기서 보인다. */}
+          {item.lunar && ` ${lunarLabel(item.lunar)}`}
           {age > 0 && ` 올해 ${age}살`}
           {age === 0 && item.note ? ` ${item.note}` : ""}
         </p>

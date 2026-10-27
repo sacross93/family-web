@@ -41,11 +41,20 @@ function swatch(kind: MarkKind): string {
  * 보이기만 하는 장식이다(`aria-hidden`) — 무엇인지는 칸의 aria-label 이 말한다(`marksSpeech`).
  * 칸이 `<button>` 이라 안에는 `span` 만 둔다.
  */
-export function MarkBars({ marks, dim = false }: { marks: JourneyMark[]; dim?: boolean }) {
+export function MarkBars({
+  marks,
+  dim = false,
+  className,
+}: {
+  marks: JourneyMark[];
+  dim?: boolean;
+  /** 계획 막대와 한 묶음으로 쌓을 때 바깥 여백·밀어내기를 끈다(`mt-0 px-0`) — 달력 칸이 넘긴다. */
+  className?: string;
+}) {
   const kinds = BAR_ORDER.filter((k) => marks.some((m) => m.kind === k));
   if (kinds.length === 0) return null;
   return (
-    <span aria-hidden className="mt-auto flex flex-col gap-0.5 px-0.5">
+    <span aria-hidden className={cn("mt-auto flex flex-col gap-0.5 px-0.5", className)}>
       {kinds.map((k) => (
         <span
           key={k}
@@ -90,18 +99,21 @@ export function upcomingMarks(marks: JourneyMark[], from: string, until?: string
   );
 }
 
-export type TimelineRow<T> = { type: "item"; item: T } | { type: "mark"; mark: JourneyMark };
+export type TimelineRow<T, M extends { date: string } = JourneyMark> =
+  | { type: "item"; item: T }
+  | { type: "mark"; mark: M };
 
 /**
  * 날짜순 목록 사이에 표시를 날짜순으로 끼운다. 같은 날이면 표시가 먼저 — 시각 없는 하루짜리라
- * 종일 일정처럼 그날 맨 위에 선다. `items` 는 이미 날짜순이어야 한다(달력이 정렬해서 넘긴다).
+ * 종일 일정처럼 그날 맨 위에 선다. `items` 도 `marks` 도 이미 날짜순이어야 한다(달력이 정렬해서 넘긴다).
+ * 표시는 날짜 글자만 있으면 된다 — 아기 표시와 기념일·계획(`occasion-marks.tsx`)을 한 줄로 섞어 넘긴다.
  */
-export function interleaveMarks<T>(
+export function interleaveMarks<T, M extends { date: string } = JourneyMark>(
   items: T[],
   dayOf: (item: T) => string,
-  marks: JourneyMark[]
-): TimelineRow<T>[] {
-  const out: TimelineRow<T>[] = [];
+  marks: M[]
+): TimelineRow<T, M>[] {
+  const out: TimelineRow<T, M>[] = [];
   let i = 0;
   for (const item of items) {
     const day = dayOf(item);
