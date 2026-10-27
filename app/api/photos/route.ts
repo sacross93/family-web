@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseDateInput } from "@/lib/date";
 
 export async function GET(req: NextRequest) {
   const albumId = req.nextUrl.searchParams.get("albumId");
@@ -31,7 +32,9 @@ export async function POST(req: NextRequest) {
       caption: body.caption?.trim() || null,
       width: typeof body.width === "number" ? body.width : null,
       height: typeof body.height === "number" ? body.height : null,
-      takenAt: body.takenAt ? new Date(body.takenAt) : null,
+      // 찍은 날 "yyyy-MM-dd"(화면이 EXIF 에서 읽어 보낸다, lib/photo-date.ts) → 서버 로컬 자정.
+      // `new Date("2024-03-02")` 는 UTC 자정이라 다른 날짜들(기념일·할일)과 하루의 경계가 어긋난다.
+      takenAt: parseDateInput(body.takenAt),
       sortOrder,
     },
   });

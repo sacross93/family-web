@@ -156,6 +156,33 @@ writeFileSync(
   )
 );
 
+/**
+ * 찍은 날이 든 16×16 JPEG — EXIF `DateTimeOriginal` = 2019:10:27 14:30:00(그 밖의 날짜 태그 없음).
+ * Pillow 로 한 번 만들어 박았고, exifr 로 다시 읽어 확인했다(만든 쪽과 읽는 쪽이 같은 가정을 하지 않게).
+ * 앨범에 올리면 화면이 **올리기 전에 원본에서** 이 날짜를 읽어 `/api/photos` 에 `takenAt: "2019-10-27"` 로 보내야 한다.
+ */
+const EXIF_JPG = join(tmpdir(), "podong-ui-flows-exif.jpg");
+writeFileSync(
+  EXIF_JPG,
+  Buffer.from(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/4QBIRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAA" +
+    "AZADAAIAAAAUAAAALAAAAAAyMDE5OjEwOjI3IDE0OjMwOjAwAP/bAEMADQkKCwoIDQsKCw4ODQ8T" +
+    "IBUTEhITJxweFyAuKTEwLiktLDM6Sj4zNkY3LC1AV0FGTE5SU1IyPlphWlBgSlFST//bAEMBDg4O" +
+    "ExETJhUVJk81LTVPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09P" +
+    "T09PT//AABEIABAAEAMBIgACEQEDEQH/xAAfAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgv/" +
+    "xAC1EAACAQMDAgQDBQUEBAAAAX0BAgMABBEFEiExQQYTUWEHInEUMoGRoQgjQrHBFVLR8CQzYnKC" +
+    "CQoWFxgZGiUmJygpKjQ1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoOEhYaH" +
+    "iImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4eLj5OXm5+jp" +
+    "6vHy8/T19vf4+fr/xAAfAQADAQEBAQEBAQEBAAAAAAAAAQIDBAUGBwgJCgv/xAC1EQACAQIEBAME" +
+    "BwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGhscEJIzNS8BVictEKFiQ04SXxFxgZGiYn" +
+    "KCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeY" +
+    "mZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2dri4+Tl5ufo6ery8/T19vf4+fr/" +
+    "2gAMAwEAAhEDEQA/AOssLL7Z5n7zZsx/DnOc/wCFF/ZfY/L/AHm/fn+HGMY/xosL37H5n7vfvx/F" +
+    "jGM/40X979s8v93s2Z/iznOP8KZ6n7z2n90//9k=",
+    "base64"
+  )
+);
+
 const browser = await chromium.launch({ executablePath: findChromium() });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page = await ctx.newPage();
@@ -665,6 +692,114 @@ await step("새로고침해도 사진이 남아 있다", async () => {
   await page.waitForTimeout(1200);
   const imgs = await page.evaluate(() => [...document.querySelectorAll("img")].filter(i => /uploads|blob/.test(i.src)).length);
   if (!imgs) throw new Error("새로고침하니 사라졌다");
+});
+// ── 사진 보기: 찍은 날 · 밀어서 넘기기 · 지우기 전에 묻기 ──
+// 사진 두 장(위의 큰 PNG + 찍은 날이 든 JPEG)으로 한다. 끝에 JPEG 를 지워 큰 PNG 하나만 남긴다 —
+// 다음 단계(앨범 지우기)가 파일 수를 `filesBefore` 와 맞춰 본다.
+const ALBUM_NAME = MARK + "앨범";
+const viewer = (p = page) => p.locator(`[role="dialog"][aria-label="${ALBUM_NAME}"]`);
+/** 사진 보기의 "k / n" 에서 k. */
+const shownIndex = async (p = page) =>
+  Number((await viewer(p).locator("span.absolute.font-num").innerText()).split("/")[0].trim());
+/** 격자에서 그 파일의 사진을 찾는다 — 순서가 아니라 주소로. */
+const gridImg = (p, name) =>
+  p.locator(`.columns-2 button img[src*="${encodeURIComponent("/uploads/" + name)}"]`).first();
+let exifName = null;
+await step("찍은 날이 든 사진을 올리면 그 날짜가 같이 적히고 사진 보기에 뜬다", async () => {
+  const before = uploadNames();
+  const bodies = [];
+  const onRequest = (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/api/photos")) bodies.push(r.postData() || "");
+  };
+  page.on("request", onRequest);
+  try {
+    await page.getByRole("button", { name: /사진 추가/ }).first().click();
+    await page.waitForTimeout(700);
+    const dlg = page.locator('[role="dialog"]').filter({ hasText: "여기로 사진을 끌어다 놓으세요" });
+    await dlg.locator('input[type="file"]').setInputFiles(EXIF_JPG);
+    await until("1장 추가됨", async () => (await dlg.innerText()).includes("1장 추가됨"));
+  } finally {
+    page.off("request", onRequest);
+  }
+  exifName = newUpload(before);
+  const sent = JSON.parse(bodies.at(-1) || "{}");
+  if (sent.takenAt !== "2019-10-27") throw new Error(`찍은 날을 안 보냈다 — takenAt ${JSON.stringify(sent.takenAt)}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  await gridImg(page, exifName).click();
+  await viewer().waitFor();
+  if (!(await viewer().innerText()).includes("2019년 10월 27일 찍음")) throw new Error("사진 보기에 찍은 날이 없다");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+});
+await step("손가락으로 밀면 다음 사진 — 세로로 끌면 그대로", async () => {
+  // 폰이 먼저인 사이트인데 넘기는 길이 작은 버튼과 화살표 키뿐이었다. **진짜 터치**로 민다 —
+  // Playwright 의 touchscreen 은 tap 뿐이라 CDP 로 손가락을 움직인다(pointerType "touch" 가 된다).
+  // 마우스로 끌어서는 안 된다: 화면은 손가락·펜만 받는다(마우스는 버튼·키가 있다).
+  const tctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    storageState: await ctx.storageState(),
+  });
+  try {
+    const tp = await tctx.newPage();
+    const cdp = await tctx.newCDPSession(tp);
+    const drag = async (from, to) => {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+      for (let i = 1; i <= 8; i++) {
+        const point = { x: from.x + ((to.x - from.x) * i) / 8, y: from.y + ((to.y - from.y) * i) / 8 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await tp.waitForTimeout(350);
+    };
+    await tp.goto(page.url(), { waitUntil: "networkidle" });
+    await gridImg(tp, exifName).tap();
+    await viewer(tp).waitFor();
+    await tp.waitForTimeout(400);
+    const box = await viewer(tp).locator(".touch-pan-y").boundingBox();
+    const mid = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const start = await shownIndex(tp);
+    await drag({ x: mid.x, y: mid.y - 100 }, { x: mid.x + 20, y: mid.y + 100 });
+    if ((await shownIndex(tp)) !== start) throw new Error("세로로 끌었는데 사진이 넘어갔다");
+    await drag({ x: mid.x + 110, y: mid.y }, { x: mid.x - 110, y: mid.y + 8 });
+    const after = await shownIndex(tp);
+    if (after === start) throw new Error(`왼쪽으로 밀었는데 그대로다 (${start})`);
+    await drag({ x: mid.x - 110, y: mid.y }, { x: mid.x + 110, y: mid.y - 8 });
+    if ((await shownIndex(tp)) !== start) throw new Error("오른쪽으로 밀었는데 처음 사진으로 안 돌아왔다");
+  } finally {
+    await tctx.close();
+  }
+});
+await step("사진 지우기 전에 한 번 묻는다 — 그대로 두면 남고, Esc 는 묻는 판만 닫는다", async () => {
+  // 지우면 저장된 **원본 파일**까지 지워지고 따로 남겨 둔 사본이 없다. 한 번 누른 것으로 사라지면 안 된다.
+  await gridImg(page, exifName).click();
+  await viewer().waitFor();
+  await viewer().getByRole("button", { name: "삭제" }).click();
+  await page.waitForTimeout(500);
+  if (!(await text()).includes("이 사진을 지울까요?")) throw new Error("묻지 않고 바로 지운다");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+  if ((await text()).includes("이 사진을 지울까요?")) throw new Error("Esc 로 묻는 판이 안 닫혔다");
+  if (!(await viewer().count())) throw new Error("Esc 한 번에 사진 보기까지 닫혔다");
+  await viewer().getByRole("button", { name: "삭제" }).click();
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "그대로 두기" }).click();
+  await page.waitForTimeout(900);
+  if (!uploadNames().includes(exifName)) throw new Error("그대로 두었는데 파일이 지워졌다");
+  await page.reload({ waitUntil: "networkidle" });
+  if (!(await gridImg(page, exifName).count())) throw new Error("그대로 두었는데 사진이 사라졌다");
+});
+await step("사진 지우기 — 사진과 원본 파일이 같이 사라진다", async () => {
+  await gridImg(page, exifName).click();
+  await viewer().waitFor();
+  await viewer().getByRole("button", { name: "삭제" }).click();
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "지우기", exact: true }).click();
+  await until("파일이 지워진다", async () => !uploadNames().includes(exifName), 10000);
+  await page.reload({ waitUntil: "networkidle" });
+  if (await gridImg(page, exifName).count()) throw new Error("지웠는데 새로고침하니 되살아났다");
 });
 await step("앨범 지우기 — 올린 파일도 같이 지워진다", async () => {
   await page.getByRole("button", { name: "더보기" }).first().click();

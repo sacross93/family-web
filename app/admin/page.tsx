@@ -6,6 +6,7 @@ import { getSiteConfig, getNav } from "@/lib/site";
 import { authStatus } from "@/lib/agent/auth";
 import { gcalStatus } from "@/lib/gcal/sync";
 import { storageStatus } from "@/lib/blob-usage";
+import { MISSING_TAKEN_AT } from "@/lib/photo-date-server";
 import { AdminClient } from "./admin-client";
 import type { AgentConnection } from "./agent-connect-card";
 
@@ -19,7 +20,7 @@ export default async function AdminPage() {
   const user = await getCurrentUser();
   if (!user?.isAdmin) redirect("/");
 
-  const [decorations, site, nav, agentConnection, gcal, storage] = await Promise.all([
+  const [decorations, site, nav, agentConnection, gcal, storage, photoDatesPending] = await Promise.all([
     prisma.decoration.findMany({ orderBy: [{ page: "asc" }, { createdAt: "asc" }] }),
     getSiteConfig(),
     getNav(),
@@ -30,6 +31,8 @@ export default async function AdminPage() {
     // 사진 저장 공간 — 기억한 값(6시간보다 오래됐으면 서버에서 한 번 다시 잰다. 화면이 쓰기 요청을 보내지 않는다).
     // 못 재면 null → 카드가 "아직 확인할 수 없어요".
     storageStatus(),
+    // 찍은 날짜가 비어 있는 (우리가 올린) 사진 수 — 세기만 한다. 채우기는 관리자가 누를 때만.
+    prisma.photo.count({ where: MISSING_TAKEN_AT }).catch(() => null),
   ]);
 
   return (
@@ -40,6 +43,7 @@ export default async function AdminPage() {
       agentConnection={agentConnection}
       gcal={gcal}
       storage={storage}
+      photoDatesPending={photoDatesPending}
       currentUid={user.uid}
     />
   );

@@ -23,6 +23,7 @@ import {
   Textarea,
   ColorPicker,
   Spinner,
+  useConfirm,
   useToast,
   PhotoImg,
 } from "@/components/ui";
@@ -31,6 +32,9 @@ import { cn } from "@/lib/utils";
 import { kDateShort } from "@/lib/date";
 import type { Album, Photo, AlbumWithPhotos } from "@/lib/types";
 import { ORIGINAL, isStorageFull, uploadErrorMessage, uploadImage } from "@/lib/upload-client";
+import { readTakenDay } from "@/lib/photo-date-client";
+import { takenLabel } from "@/lib/photo-date";
+import { swipeStep } from "@/lib/swipe";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -63,6 +67,7 @@ export function AlbumDetailClient({
   initialAlbum: AlbumWithPhotos;
 }) {
   const { say } = useToast();
+  const { confirm, dialog } = useConfirm();
   const router = useRouter();
 
   const [album, setAlbum] = useState<Album>(initialAlbum);
@@ -74,11 +79,15 @@ export function AlbumDetailClient({
   const [lightbox, setLightbox] = useState<number | null>(null);
 
   const [busy, setBusy] = useState(false);
+  // "이 사진을 지울까요?" 가 떠 있는 동안. 그 사이 화살표 키가 뒤의 사진을 바꾸면
+  // 묻는 판 뒤에서 **다른 사진이 보이는 채로** 지우기를 누르게 된다(지워지는 건 처음 사진이다).
+  const asking = useRef(false);
 
   // ── 라이트박스 좌우 이동 (키보드) ──
   useEffect(() => {
     if (lightbox === null) return;
     const onKey = (e: KeyboardEvent) => {
+      if (asking.current) return;
       if (e.key === "ArrowLeft") {
         setLightbox((i) => (i === null ? i : (i - 1 + photos.length) % photos.length));
       } else if (e.key === "ArrowRight") {
@@ -90,11 +99,12 @@ export function AlbumDetailClient({
   }, [lightbox, photos.length]);
 
   // ── 사진 생성 (URL 또는 업로드 공통) ──
-  async function createPhoto(url: string): Promise<Photo | null> {
+  /** `takenAt` — 찍은 날 "yyyy-MM-dd"(올리기 전에 원본의 EXIF 에서 읽은 것). 모르면 비운다. */
+  async function createPhoto(url: string, takenAt?: string | null): Promise<Photo | null> {
     const res = await fetch("/api/photos", {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ albumId: album.id, url }),
+      body: JSON.stringify({ albumId: album.id, url, ...(takenAt ? { takenAt } : {}) }),
     });
     if (!res.ok) return null;
     const created: Photo = await res.json();
@@ -306,7 +316,17 @@ export function AlbumDetailClient({
         onNext={() =>
           setLightbox((i) => (i === null ? i : (i + 1) % photos.length))
         }
-        onDelete={(id) => {
+        onDelete={async (id) => {
+          // 한 번 묻는다 — 지우면 Blob 의 **원본 파일**까지 지워지고(`/api/photos/[id]` DELETE) 따로 남겨 둔
+          // 사본이 없다. 사진은 다시 만들 수 없는 것이다(DESIGN.md §8 "지우기 전에 묻는 기준").
+          asking.current = true;
+          const ok = await confirm({
+            title: "이 사진을 지울까요?",
+            description: "올려 둔 원본 사진까지 지워져서 되돌릴 수 없어요.",
+            confirmLabel: "지우기",
+          });
+          asking.current = false;
+          if (!ok) return;
           removePhoto(id);
           setLightbox(null);
         }}
@@ -317,6 +337,9 @@ export function AlbumDetailClient({
           )
         }
       />
+
+      {/* 사진 지우기 확인 — 사진 보기 위에 뜬다(둘 다 body 로 나간 판, 나중에 열린 것이 위). */}
+      {dialog}
     </div>
   );
 }
@@ -331,7 +354,7 @@ function AddPhotoModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (url: string) => Promise<Photo | null>;
+  onCreate: (url: string, takenAt?: string | null) => Promise<Photo | null>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -364,8 +387,11 @@ function AddPhotoModal({
       for (const [i, file] of images.entries()) {
         setProgress({ done: i, total: images.length });
         try {
+          // 찍은 날은 **올리기 전에, 원본에서** — `uploadImage` 가 HEIC 를 JPEG 로 바꾸면 EXIF 가 빠진다.
+          // 어느 길로 올라가든(로컬·Blob 직접) 같은 값이 앨범에 적힌다.
+          const takenAt = await readTakenDay(file);
           const url = await uploadImage(file, ORIGINAL);
-          if (await onCreate(url)) ok += 1;
+          if (await onCreate(url, takenAt)) ok += 1;
         } catch (e) {
           // 저장 공간이 찼으면 남은 장도 안 들어간다 — 멈추고 그 까닭을 알린다. 그 밖엔 이 장만 건너뛴다.
           if (isStorageFull(e)) {
@@ -663,6 +689,8 @@ function Lightbox({
   const photo = index !== null ? photos[index] : null;
   const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
+  // 밀어서 넘기기 — 누른 자리. 손가락이 떨어질 때 얼마나 움직였는지로 정한다(`lib/swipe.ts`).
+  const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
     // 다른 사진으로 넘어가면 캡션 칸도 그 사진 것으로 바꾼다.
@@ -717,7 +745,32 @@ function Lightbox({
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="relative flex items-center justify-center overflow-hidden rounded-md bg-sunken">
+        {/* 밀어서 넘기기 — 폰이 먼저인 사이트인데 넘기는 길이 작은 버튼 둘과 화살표 키뿐이었다.
+            손가락·펜만 받는다(마우스는 버튼·키가 있고, 끌면 사진 끌어 놓기가 시작된다).
+            `touch-pan-y` — 세로 움직임은 브라우저가 맡아 판을 굴리고(그때 pointercancel 이 온다),
+            가로 움직임만 여기로 온다. 두 손가락 확대는 그대로 둔다(`touch-pinch-zoom`).
+            이전·다음 버튼 위에서 시작한 손짓도 넘기기로 받는다 — 폰은 손가락 **근처의** 버튼을 대상으로
+            잡아서(터치 보정, 실측: 버튼 7px 바깥에서 시작한 밀기가 버튼에 떨어졌다) 버튼을 빼면 가장자리에서
+            시작한 밀기가 통째로 무시된다. 버튼을 톡 누르는 것은 움직임이 작아 여기서는 아무 일도 없고
+            버튼이 받는다(밀면 반대로 click 이 안 난다 — 한 번에 한 칸). 캡션 칸은 이 판 밖이라 닿지 않는다. */}
+        <div
+          className="relative flex touch-pan-y touch-pinch-zoom select-none items-center justify-center overflow-hidden rounded-md bg-sunken"
+          onPointerDown={(e) => {
+            if (e.pointerType === "mouse" || !e.isPrimary || photos.length < 2) return;
+            swipe.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          }}
+          onPointerUp={(e) => {
+            const start = swipe.current;
+            swipe.current = null;
+            if (!start || start.id !== e.pointerId) return;
+            const step = swipeStep(e.clientX - start.x, e.clientY - start.y);
+            if (step === 1) onNext();
+            else if (step === -1) onPrev();
+          }}
+          onPointerCancel={() => {
+            swipe.current = null;
+          }}
+        >
           <PhotoImg
             src={photo.url}
             alt={photo.caption ?? "사진"}
@@ -750,8 +803,14 @@ function Lightbox({
           </span>
         </div>
 
-        {/* 화면에는 줄인 사진이 뜬다. 저장된 원본(폰으로 찍은 그대로)은 여기서 연다. */}
-        <div className="-mt-2 flex justify-end">
+        {/* 화면에는 줄인 사진이 뜬다. 저장된 원본(폰으로 찍은 그대로)은 여기서 연다.
+            찍은 날은 그 옆에 작게 — 사진을 보는 자리라 사진보다 앞에 나서지 않는다. */}
+        <div className="-mt-2 flex items-center justify-between gap-3">
+          {photo.takenAt ? (
+            <p className="font-num text-xs text-ink-faint">{takenLabel(photo.takenAt)}</p>
+          ) : (
+            <span />
+          )}
           <Button
             href={photo.url}
             target="_blank"

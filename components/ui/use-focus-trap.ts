@@ -2,6 +2,24 @@
 
 import { useEffect, useRef } from "react";
 
+/**
+ * 이 판 위에 다른 떠 있는 판이 있는가.
+ *
+ * 판 위에 판이 뜬다 — 사진 보기 위의 "이 사진을 지울까요?". 둘 다 `document.body` 로 나간 포털이라
+ * **나중에 열린 것이 DOM 의 뒤**에 붙는다. 아래 판이 Tab 을 가두면 위 판의 버튼으로 못 가고,
+ * 아래 판이 Esc 를 받으면 묻는 판은 그대로 둔 채 **사진 보기가 닫힌다**(실제로 그랬다). 맨 위 판만 받는다.
+ */
+export function isCovered(node: HTMLElement): boolean {
+  const layers = document.querySelectorAll<HTMLElement>('[aria-modal="true"]');
+  const top = layers[layers.length - 1];
+  return (
+    !!top &&
+    top !== node &&
+    !node.contains(top) &&
+    !!(node.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING)
+  );
+}
+
 /** 탭으로 갈 수 있는 것들. 숨겨진 것·disabled 는 뺀다. */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -41,6 +59,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(open: boole
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
+      if (isCovered(node)) return; // 위에 뜬 판이 가둔다
       const list = items();
       if (list.length === 0) {
         e.preventDefault();

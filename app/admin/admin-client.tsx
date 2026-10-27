@@ -42,6 +42,7 @@ import { AgentConnectCard, type AgentConnection } from "./agent-connect-card";
 import { AccountsCard } from "./accounts-card";
 import { GoogleCalendarCard } from "./google-calendar-card";
 import { StorageCard } from "./storage-card";
+import { PhotoDatesCard } from "./photo-dates-card";
 import type { StorageStatus } from "@/lib/blob-budget";
 import type { GcalStatus } from "@/lib/gcal/contract";
 
@@ -79,6 +80,7 @@ export function AdminClient({
   agentConnection,
   gcal,
   storage,
+  photoDatesPending,
   currentUid,
 }: {
   decorations: Decoration[];
@@ -89,6 +91,8 @@ export function AdminClient({
   gcal: GcalStatus | null;
   /** 사진 저장 공간(서버가 기억한 값). 못 쟀으면 null. */
   storage: StorageStatus | null;
+  /** 찍은 날짜가 비어 있는 사진 수. 못 셌으면 null. */
+  photoDatesPending: number | null;
   /** 지금 로그인한 관리자 — 계정 목록에서 "(나)" 를 붙인다. */
   currentUid: string;
 }) {
@@ -104,6 +108,7 @@ export function AdminClient({
       <NavEditorCard nav={nav} onSaved={() => router.refresh()} />
       <DecorationManager decorations={decorations} />
       <StorageCard initial={storage} />
+      <PhotoDatesCard initialPending={photoDatesPending} />
       <FamilyCard />
       <AccountsCard currentUid={currentUid} />
       <AgentConnectCard initial={agentConnection} />

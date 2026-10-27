@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { removeUpload } from "@/lib/uploads";
+import { parseDateInput } from "@/lib/date";
 
 export async function PATCH(
   req: NextRequest,
@@ -12,6 +13,12 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if ("caption" in body) data.caption = body.caption?.trim() || null;
   if (typeof body.sortOrder === "number") data.sortOrder = body.sortOrder;
+  // 찍은 날 — "yyyy-MM-dd" 는 서버 로컬 자정(POST 와 같은 규칙), 빈 값·null 은 지우기.
+  // 못 읽는 글자는 지우기로 치지 않고 그대로 둔다.
+  if ("takenAt" in body) {
+    const takenAt = parseDateInput(body.takenAt);
+    if (takenAt || !body.takenAt) data.takenAt = takenAt;
+  }
 
   const photo = await prisma.photo.update({ where: { id }, data });
   return NextResponse.json(photo);

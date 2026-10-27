@@ -16,6 +16,7 @@ import {
 import { format } from "date-fns";
 import { kindMeta } from "@/app/baby/baby-meta";
 import { BabyHomeInvite } from "@/app/baby/baby-home-invite";
+import { AlbumsHomeYearsAgo } from "@/app/albums/albums-home-years-ago";
 // prepCountdown: 준비 단계 "다음 생리 예정" 글자. 아기 페이지 히어로·포동이 목차와 같은 하나다.
 import { journeyState, prepCountdown } from "@/lib/journey";
 import { getSiteConfig } from "@/lib/site";
@@ -677,6 +678,7 @@ export default async function HomePage() {
         )}
       </div>
 
+      <AlbumsHomeYearsAgo />
       {empty.length > 0 && <EmptyRow slots={empty} />}
     </div>
   );
